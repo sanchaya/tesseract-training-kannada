@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TrainOCR — Sanchaya</title>
+<link rel="icon" type="image/png" href="https://vachana.sanchaya.net/app-icon-light.png">
+<meta name="description" content="Tesseract training portal for historical Kannada OCR — Sanchaya">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+/* ── Reset & base ────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --brand:    #5b21b6;
+  --brand-d:  #4c1d95;
+  --brand-dd: #3b1279;
+  --brand-l:  #7c3aed;
+  --brand-xl: #ede9fe;
+  --brand-xxl:#f5f3ff;
+  --ink:      #1e1b4b;
+  --ink2:     #374151;
+  --mute:     #6b7280;
+  --border:   #e5e7eb;
+  --border2:  #d1d5db;
+  --bg:       #f8f7ff;
+  --card:     #ffffff;
+  --green:    #059669;
+  --amber:    #d97706;
+  --red:      #dc2626;
+  --radius:   10px;
+  --shadow:   0 1px 4px rgba(91,33,182,.08), 0 4px 16px rgba(91,33,182,.06);
+}
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+header {
+  background: linear-gradient(135deg, var(--brand-dd) 0%, var(--brand) 100%);
+  color: #fff;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 60px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(91,33,182,.25);
+}
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+  border-right: 1px solid rgba(255,255,255,.2);
+  padding-right: 18px;
+  margin-right: 18px;
+}
+.header-logo img {
+  height: 28px;
+  filter: brightness(0) invert(1);
+  opacity: .9;
+}
+.header-logo span {
+  font-size: .72rem;
+  opacity: .6;
+  font-weight: 400;
+}
+.header-title { flex: 1; }
+.header-title h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; }
+.header-title .sub {
+  font-size: .7rem;
+  opacity: .55;
+  font-family: "SFMono-Regular", "Consolas", monospace;
+  margin-top: 1px;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── Navigation ──────────────────────────────────────────────── */
+nav {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 0 8px;
+}
+nav::-webkit-scrollbar { display: none; }
+nav button {
+  padding: 13px 15px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--mute);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+nav button:hover { color: var(--brand); }
+nav button.act   { color: var(--brand); border-bottom-color: var(--brand); }
+
+/* ── Layout ──────────────────────────────────────────────────── */
+main { max-width: 1080px; margin: 0 auto; padding: 22px 16px; }
+.page { display: none; }
+.page.act { display: block; }
+
+/* ── Grids ───────────────────────────────────────────────────── */
+.g2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.g3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.g4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+
+/* ── Cards ───────────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+.card-label {
+  font-size: .68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--mute);
+  margin-bottom: 6px;
+}
+.card-big {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--brand);
+  line-height: 1;
+}
+.card-sub { font-size: .74rem; color: var(--mute); margin-top: 4px; }
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: none;
+  font-size: .8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .12s;
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary  { background: var(--brand); color: #fff; }
+.btn-primary:not(:disabled):hover  { background: var(--brand-d); }
+.btn-outline  { background: var(--card); border: 1px solid var(--border2); color: var(--ink2); }
+.btn-outline:not(:disabled):hover  { background: var(--bg); border-color: var(--brand-l); color: var(--brand); }
+.btn-success  { background: var(--green); color: #fff; }
+.btn-success:not(:disabled):hover  { background: #047857; }
+
+/* ── Pill / badge ────────────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+.pill-green  { background: #d1fae5; color: #065f46; }
+.pill-amber  { background: #fef3c7; color: #92400e; }
+.pill-red    { background: #fee2e2; color: #991b1b; }
+.pill-brand  { background: var(--brand-xl); color: var(--brand-d); }
+.pill-gray   { background: #f3f4f6; color: #374151; }
+
+/* ── Step items ──────────────────────────────────────────────── */
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  margin-bottom: 6px;
+  transition: border-color .15s;
+}
+.step.ok   { background: #f0fdf4; border-color: #bbf7d0; }
+.step.pend { background: #fffbeb; border-color: #fde68a; }
+.step-icon { font-size: 1.15rem; line-height: 1; margin-top: 1px; }
+.step-name { font-size: .86rem; font-weight: 600; }
+.step-detail { font-size: .74rem; color: var(--mute); margin-top: 2px; }
+
+/* ── Actions row ─────────────────────────────────────────────── */
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.hint { font-size: .74rem; color: var(--mute); margin-top: 4px; }
+
+/* ── Section header ──────────────────────────────────────────── */
+.sec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  margin-top: 24px;
+}
+.sec h2 { font-size: .95rem; font-weight: 700; }
+.sec:first-child { margin-top: 0; }
+
+/* ── Table ───────────────────────────────────────────────────── */
+.tbl { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.tbl th {
+  background: var(--brand-xxl);
+  padding: 9px 12px;
+  text-align: left;
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--brand-d);
+  border-bottom: 1px solid var(--border);
+}
+.tbl td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: var(--brand-xxl); }
+
+/* ── Drop zone ───────────────────────────────────────────────── */
+.drop {
+  border: 2px dashed var(--border2);
+  border-radius: var(--radius);
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .15s;
+  background: var(--bg);
+}
+.drop:hover, .drop.over {
+  border-color: var(--brand-l);
+  background: var(--brand-xxl);
+}
+.drop-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+.drop p    { font-size: .84rem; color: var(--mute); margin-top: 4px; }
+.drop small{ font-size: .72rem; color: var(--border2); }
+
+/* ── OCR ─────────────────────────────────────────────────────── */
+.ocr-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.ocr-result {
+  background: #0f172a;
+  color: #94a3b8;
+  font-family: "SFMono-Regular", "Consolas", monospace;
+  font-size: .78rem;
+  padding: 14px;
+  border-radius: 8px;
+  min-height: 150px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.55;
+}
+.metric-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.metric {
+  background: var(--brand-xxl);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: .78rem;
+  color: var(--ink2);
+}
+.metric .val { font-size: 1.05rem; font-weight: 800; color: var(--brand-d); display: block; }
+
+/* ── Progress bar ────────────────────────────────────────────── */
+.prog { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+.prog-bar { height: 100%; background: var(--brand); border-radius: 3px; transition: width .3s; }
+
+/* ── Log ─────────────────────────────────────────────────────── */
+#log-box {
+  background: #0f172a;
+  color: #94a3b8;
+  font-family: "SFMono-Regular", "Consolas", monospace;
+  font-size: .76rem;
+  padding: 16px;
+  border-radius: 10px;
+  height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.55;
+}
+.log-error   { color: #f87171; }
+.log-bcer    { color: #34d399; }
+.log-portal  { color: #a78bfa; }
+
+/* ── Image gallery ───────────────────────────────────────────── */
+.imgs-g { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.img-card { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--card); box-shadow: var(--shadow); }
+.img-card img { width: 100%; display: block; }
+.img-gt { font-size: .68rem; color: var(--mute); padding: 5px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Checkpoint best ─────────────────────────────────────────── */
+.cp-best td { background: #f0fdf4 !important; }
+
+/* ── Textarea / inputs ───────────────────────────────────────── */
+textarea, select, input[type="text"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: .84rem;
+  background: var(--card);
+  color: var(--ink);
+  transition: border-color .15s;
+}
+textarea:focus, select:focus, input:focus {
+  outline: none;
+  border-color: var(--brand-l);
+  box-shadow: 0 0 0 3px rgba(124,58,237,.1);
+}
+textarea { resize: vertical; font-family: "SFMono-Regular", "Consolas", monospace; font-size: .78rem; }
+label { font-size: .82rem; font-weight: 600; display: block; margin-bottom: 5px; color: var(--ink2); }
+
+/* ── Preview image ───────────────────────────────────────────── */
+.img-preview {
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  display: block;
+  margin-top: 10px;
+  max-height: 220px;
+  object-fit: contain;
+}
+
+/* ── Toast ───────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 22px;
+  right: 22px;
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: .84rem;
+  opacity: 0;
+  transition: opacity .25s;
+  z-index: 999;
+  max-width: 320px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.25);
+}
+.toast.show { opacity: 1; }
+
+/* ── Footer ──────────────────────────────────────────────────── */
+footer {
+  text-align: center;
+  padding: 20px;
+  font-size: .72rem;
+  color: var(--mute);
+  border-top: 1px solid var(--border);
+  margin-top: 40px;
+}
+footer a { color: var(--brand-l); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* ── Glossary ─────────────────────────────────────────────────── */
+.gloss-item { border-bottom: 1px solid var(--border); }
+.gloss-item:last-child { border-bottom: none; }
+.gloss-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  gap: 10px;
+}
+.gloss-term { font-size: .86rem; font-weight: 600; color: var(--ink); }
+.gloss-arrow { font-size: .74rem; color: var(--mute); transition: transform .2s; flex-shrink: 0; }
+.gloss-btn.open .gloss-arrow { transform: rotate(90deg); }
+.gloss-body { display: none; font-size: .82rem; color: var(--mute); line-height: 1.65; padding-bottom: 12px; padding-right: 24px; }
+.gloss-body.open { display: block; }
+
+@media (max-width: 640px) {
+  header { padding: 0 14px; height: 54px; }
+  .header-logo span { display: none; }
+  main { padding: 14px 10px; }
+  .ocr-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <a class="header-logo" href="https://sanchaya.net" target="_blank" rel="noopener">
+    <img src="https://pada.sanchaya.net/images/sanchaya-logo.png" alt="Sanchaya logo">
+    <span>Sanchaya</span>
+  </a>
+  <div class="header-title">
+    <h1>TrainOCR</h1>
+    <div class="sub">kan_hist · historical Kannada Tesseract model</div>
+  </div>
+  <div class="header-right">
+    <span id="proc-badge" class="pill pill-amber" style="display:none">⚙ Training</span>
+    <span id="last-ref" style="font-size:.72rem;opacity:.55"></span>
+    <a href="/report" class="btn btn-success" target="_blank" style="text-decoration:none; font-size:.78rem;">⬇ Report</a>
+  </div>
+</header>
+
+<nav>
+  <button class="act" onclick="tab('dash',this)">Dashboard</button>
+  <button onclick="tab('guide',this)">📖 Guide</button>
+  <button onclick="tab('ocr',this)">OCR test</button>
+  <button onclick="tab('scan',this)">Scan upload</button>
+  <button onclick="tab('fonts',this)">Fonts</button>
+  <button onclick="tab('train',this)">Training</button>
+  <button onclick="tab('log',this)">Live log</button>
+  <button onclick="tab('imgs',this)">Images</button>
+</nav>
+
+<main>
+
+<!-- ═══ DASHBOARD ════════════════════════════════════════════════ -->
+<div id="pg-dash" class="page act">
+  <div class="g4" style="margin-bottom:18px">
+    <div class="card">
+      <div class="card-label">Steps complete</div>
+      <div class="card-big" id="st-steps">—</div>
+      <div class="card-sub">of 6 pipeline steps</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Best BCER</div>
+      <div class="card-big" id="st-bcer">—</div>
+      <div class="card-sub">% character error</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Training images</div>
+      <div class="card-big" id="st-imgs">—</div>
+      <div class="card-sub">PNG + gt.txt pairs</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Corpus lines</div>
+      <div class="card-big" id="st-corp">—</div>
+      <div class="card-sub">training text lines</div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <h2>Pipeline status</h2>
+    <button class="btn btn-outline" onclick="loadAll()">↺ Refresh</button>
+  </div>
+  <div id="steps-list"></div>
+
+  <div class="sec" style="margin-top:22px"><h2>Run steps</h2></div>
+  <div class="actions">
+    <button class="btn btn-primary" onclick="run('prep')">① Prep base</button>
+    <button class="btn btn-primary" onclick="run('wiki')">② Download corpus</button>
+    <button class="btn btn-primary" onclick="run('clean')">③ Clean corpus</button>
+    <button class="btn btn-primary" onclick="run('render')">④ Render images</button>
+    <button class="btn btn-primary" onclick="run('lstmf')">⑤ Make lstmf</button>
+    <button class="btn btn-primary" onclick="run('train')">⑥ Train</button>
+    <button class="btn btn-primary" onclick="run('package')">⑦ Package</button>
+  </div>
+  <p class="hint">Each step runs in the background — watch output in the Live log tab.</p>
+</div>
+
+<!-- ═══ GUIDE ══════════════════════════════════════════════════ -->
+<div id="pg-guide" class="page">
+
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:24px;flex-wrap:wrap">
+    <div>
+      <h2 style="font-size:1.3rem;font-weight:800;color:var(--brand-d)">Learn how OCR training works</h2>
+      <p style="font-size:.9rem;color:var(--mute);margin-top:4px">A complete guide to building a Tesseract model for historical Kannada documents</p>
+    </div>
+    <button class="btn btn-primary" onclick="startTour()" style="margin-left:auto;padding:9px 18px;font-size:.86rem">
+      ▶ Take the interactive tour
+    </button>
+  </div>
+
+  <!-- What is OCR training -->
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start">
+      <div>
+        <h3 style="font-size:1rem;font-weight:700;color:var(--brand-d);margin-bottom:10px">What is Tesseract training?</h3>
+        <p style="font-size:.875rem;color:var(--ink2);line-height:1.7;margin-bottom:10px">
+          Tesseract is an open-source OCR (Optical Character Recognition) engine. At its core is an LSTM
+          (Long Short-Term Memory) neural network that learns to convert images of text into characters.
+        </p>
+        <p style="font-size:.875rem;color:var(--ink2);line-height:1.7;margin-bottom:10px">
+          The standard <code>kan</code> model was trained on modern digital Kannada fonts. When you scan
+          a 19th-century book printed with mission press letterpress type, the shapes are different enough
+          that the model makes many mistakes.
+        </p>
+        <p style="font-size:.875rem;color:var(--ink2);line-height:1.7">
+          <strong>Fine-tuning</strong> starts from the existing <code>kan</code> model (which already
+          understands Kannada grammar and conjuncts) and teaches it the new letterforms by showing it
+          thousands of examples. The result is <code>kan_hist</code> — a model that handles historical
+          typefaces without losing its understanding of modern Kannada.
+        </p>
+      </div>
+      <div style="background:var(--brand-xxl);border-radius:10px;padding:16px">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--brand-d);margin-bottom:12px">How a training image becomes a model</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px;font-size:.82rem">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">1</div>
+            <span><strong>Image</strong> of text (PNG at 150 DPI)</span>
+          </div>
+          <div style="margin-left:14px;border-left:2px dashed var(--border2);padding-left:14px;font-size:.74rem;color:var(--mute)">ground-truth .txt file alongside</div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:.82rem">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">2</div>
+            <span><strong>.lstmf</strong> binary training file</span>
+          </div>
+          <div style="margin-left:14px;border-left:2px dashed var(--border2);padding-left:14px;font-size:.74rem;color:var(--mute)">tesseract converts image+GT → binary</div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:.82rem">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">3</div>
+            <span><strong>lstmtraining</strong> learns character patterns</span>
+          </div>
+          <div style="margin-left:14px;border-left:2px dashed var(--border2);padding-left:14px;font-size:.74rem;color:var(--mute)">BCER drops as model improves</div>
+          <div style="display:flex;align-items:center;gap:10px;font-size:.82rem">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">✓</div>
+            <span><strong>kan_hist.traineddata</strong> — ready to use</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline steps -->
+  <div class="card" style="margin-bottom:16px">
+    <h3 style="font-size:1rem;font-weight:700;color:var(--brand-d);margin-bottom:14px">The 6-step pipeline</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px">
+      <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
+        <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 1</div>
+        <div style="font-weight:700;margin-bottom:5px">Prep base model</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Downloads <code>kan.traineddata</code> from Tesseract's official tessdata_best repository and extracts the raw LSTM weights (<code>kan.lstm</code>). Also clones the Karnata font repositories from GitHub.</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
+        <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 2</div>
+        <div style="font-weight:700;margin-bottom:5px">Build corpus</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Downloads Kannada Wikipedia text as a real-language corpus. Also generates one line per Unicode codepoint (U+0C80–U+0CFF) to guarantee every Kannada character appears in training — even rare ones.</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
+        <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 3</div>
+        <div style="font-weight:700;margin-bottom:5px">Render images</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Uses Python (Pillow) to render each corpus line in each Karnata font style. Historical/letterpress fonts get blur + noise + slight rotation to simulate real ink-on-paper. Outputs PNG + matching .gt.txt.</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
+        <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 4</div>
+        <div style="font-weight:700;margin-bottom:5px">Generate lstmf files</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Tesseract reads each PNG+GT pair and produces a binary <code>.lstmf</code> file containing the encoded training signal for the neural network. This step also picks up any real scans you've added via the Scan upload tab.</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
+        <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 5</div>
+        <div style="font-weight:700;margin-bottom:5px">Train</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Runs <code>lstmtraining</code> for up to 100,000 iterations. BCER (character error rate) should fall steadily. Safe to stop any time — re-running this step resumes from the last checkpoint automatically.</div>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
+        <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 6</div>
+        <div style="font-weight:700;margin-bottom:5px">Package</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Selects the best checkpoint, exports it, and combines it with Kannada language data to produce the final <code>kan_hist.traineddata</code> file — ready to drop into your Tesseract tessdata folder.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Understanding BCER -->
+  <div class="card" style="margin-bottom:16px">
+    <h3 style="font-size:1rem;font-weight:700;color:var(--brand-d);margin-bottom:12px">Reading the BCER chart</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div>
+        <p style="font-size:.875rem;color:var(--ink2);line-height:1.7;margin-bottom:10px">
+          <strong>BCER (Byte Character Error Rate)</strong> is the percentage of characters
+          the model gets wrong on its training data. Lower is better.
+        </p>
+        <p style="font-size:.875rem;color:var(--ink2);line-height:1.7;margin-bottom:10px">
+          A healthy training run looks like a steep curve that gradually flattens. Stop training when
+          BCER has stopped reaching new lows for around 10,000 iterations.
+        </p>
+        <p style="font-size:.875rem;color:var(--ink2);line-height:1.7">
+          <strong>Note:</strong> BCER on synthetic training data is not the same as accuracy on real
+          historical scans. A BCER of 1.5% might correspond to 5–8% on real documents — which is still
+          dramatically better than the ~25% you'd get from the base <code>kan</code> model on these
+          typefaces.
+        </p>
+      </div>
+      <div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:7px;background:var(--bg)">
+            <div style="width:14px;height:14px;border-radius:3px;background:#dc2626;flex-shrink:0"></div>
+            <div><div style="font-size:.8rem;font-weight:700">BCER &gt; 10%</div><div style="font-size:.74rem;color:var(--mute)">Early training. Normal — the model is still adjusting.</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:7px;background:var(--bg)">
+            <div style="width:14px;height:14px;border-radius:3px;background:#d97706;flex-shrink:0"></div>
+            <div><div style="font-size:.8rem;font-weight:700">BCER 3–10%</div><div style="font-size:.74rem;color:var(--mute)">Converging. Keep training, check for a plateau.</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:7px;background:#f0fdf4">
+            <div style="width:14px;height:14px;border-radius:3px;background:#059669;flex-shrink:0"></div>
+            <div><div style="font-size:.8rem;font-weight:700">BCER 1–3%</div><div style="font-size:.74rem;color:var(--mute)">Strong. Package and test on real scans.</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:7px;background:#f0fdf4">
+            <div style="width:14px;height:14px;border-radius:3px;background:#047857;flex-shrink:0"></div>
+            <div><div style="font-size:.8rem;font-weight:700">BCER &lt; 1%</div><div style="font-size:.74rem;color:var(--mute)">Excellent. Verify it generalises on held-out scans.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tips -->
+  <div class="card" style="margin-bottom:16px">
+    <h3 style="font-size:1rem;font-weight:700;color:var(--brand-d);margin-bottom:12px">Tips for historical documents</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+      <div style="padding:12px;background:var(--bg);border-radius:8px">
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">📷 Scanning</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Scan at 300 DPI or higher. Grayscale is fine — no need for colour. Avoid shadows; use a flat-bed scanner where possible. For bound books, a book scanner prevents warping.</div>
+      </div>
+      <div style="padding:12px;background:var(--bg);border-radius:8px">
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">✍️ Ground truth quality</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Transcribe exactly what you see — including archaic spelling, missing punctuation, and any unusual ligatures. Even 20 high-quality scan+GT pairs dramatically improve the model over synthetic data alone.</div>
+      </div>
+      <div style="padding:12px;background:var(--bg);border-radius:8px">
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">📐 Crop for training</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Crop scans to single text blocks or paragraphs. Avoid mixed-column pages or pages with decorative borders — those confuse the training signal. Simple, clean blocks of body text work best.</div>
+      </div>
+      <div style="padding:12px;background:var(--bg);border-radius:8px">
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">⏱ When to stop training</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Stop when BCER has not reached a new best for ~10,000 iterations. Beyond that, the model starts memorising training images and performs worse on real scans — this is overfitting. Use the checkpoint browser to package an earlier, better checkpoint.</div>
+      </div>
+      <div style="padding:12px;background:var(--bg);border-radius:8px">
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">🔍 OCR test best practice</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Always compare <code>kan</code> vs <code>kan_hist</code> on the same image. Use PSM 6 for blocks of text, PSM 7 for single-line images, PSM 3 for pages you're not sure about. Try the binarize preprocessing option on faded or yellowed pages.</div>
+      </div>
+      <div style="padding:12px;background:var(--bg);border-radius:8px">
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">➕ Adding a new font</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Edit <code>fonts.yml</code> with the font repo URL and file name. Set <code>degrade: true</code> for historical/letterpress fonts. Re-run Prep base → Render images → Make lstmf → Train. New fonts continue training from the last checkpoint.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Glossary -->
+  <div class="card">
+    <h3 style="font-size:1rem;font-weight:700;color:var(--brand-d);margin-bottom:12px">Glossary</h3>
+    <div id="glossary-list">
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">BCER — Byte Character Error Rate</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">The fraction of character bytes the model transcribes incorrectly on its training data, expressed as a percentage. Lower is better. 1% BCER means 1 wrong character per 100. Note that this is measured on synthetic training data; real-world CER on scanned documents is typically higher.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">LSTM — Long Short-Term Memory</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">A type of recurrent neural network used by Tesseract 5. Unlike older template-matching OCR, LSTM can remember context across a line of text — important for recognising Kannada conjuncts (stacked characters) and vowel marks that depend on nearby letters.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">traineddata — the model file</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">A <code>.traineddata</code> file contains everything Tesseract needs for one language/style: the LSTM weights, language model (word lists, n-grams), and Unicode normalisation tables. Copy it to your tessdata directory and Tesseract can use it immediately.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">PSM — Page Segmentation Mode</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">Tells Tesseract how to expect text to be laid out. PSM 3 (auto) tries to detect columns and paragraphs. PSM 6 assumes a single uniform block of text — best for cropped paragraphs. PSM 7 treats the whole image as a single text line — best for testing individual lines.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">gt.txt — ground truth file</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">A plain-text file containing the exact correct transcription of the corresponding image. The filename must match the image (e.g. <code>page01.gt.txt</code> for <code>page01.png</code>). Ground truth quality is the single biggest factor in model quality — errors in GT become errors in the model.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">lstmf — binary training file</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">An intermediate binary format produced by <code>tesseract … --psm 6 lstm.train</code>. It encodes both the image features and the ground truth in the format <code>lstmtraining</code> expects. Generated automatically by the make-lstmf step.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">Fine-tuning vs. training from scratch</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">Training from scratch requires millions of examples and days of compute. Fine-tuning starts from an existing model (here: <code>kan.lstm</code>) that already knows Kannada and just needs to learn new letterforms. It typically converges in hours with thousands of examples instead of millions.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">CER / WER — Character / Word Error Rate</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">CER measures the edit distance (insertions + deletions + substitutions) between OCR output and reference text, divided by reference length. WER does the same at the word level. Used in the OCR test tab to compare model outputs against ground truth you paste in.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">Degradation — simulating letterpress</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">Historical fonts (degrade: true in fonts.yml) are rendered with: Gaussian blur (simulates ink spreading into paper fibres), salt-and-pepper noise (paper grain, foxing), and a slight random rotation (print misalignment). This makes the synthetic images look more like real letterpress scans so the model generalises better.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tour overlay -->
+<div id="tour-overlay" style="display:none;position:fixed;inset:0;z-index:9000">
+  <div id="tour-bg" style="position:absolute;inset:0;background:rgba(15,23,42,.75)"></div>
+  <div id="tour-spotlight" style="position:absolute;border-radius:6px;box-shadow:0 0 0 9999px rgba(15,23,42,.75);transition:all .3s;z-index:9001;pointer-events:none"></div>
+  <div id="tour-card" style="position:absolute;background:#fff;border-radius:12px;padding:20px 22px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.25);z-index:9002">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+      <span id="tour-step-lbl" style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--brand)"></span>
+      <button onclick="endTour()" style="border:none;background:none;cursor:pointer;font-size:1rem;color:var(--mute);padding:0;line-height:1">✕</button>
+    </div>
+    <h4 id="tour-title" style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:8px"></h4>
+    <p id="tour-text" style="font-size:.84rem;color:var(--ink2);line-height:1.65;margin-bottom:14px"></p>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn btn-outline" id="tour-prev" onclick="tourNav(-1)" style="padding:6px 12px">← Prev</button>
+      <button class="btn btn-primary" id="tour-next" onclick="tourNav(1)" style="padding:6px 14px;flex:1;justify-content:center">Next →</button>
+      <button class="btn btn-outline" onclick="endTour()" style="padding:6px 10px;font-size:.76rem;color:var(--mute)">Skip</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ OCR TEST ═════════════════════════════════════════════════ -->
+<div id="pg-ocr" class="page">
+  <div class="sec"><h2>Test OCR — Tesseract.js in browser</h2></div>
+  <p style="font-size:.84rem;color:var(--mute);margin-bottom:14px">
+    Upload a historical Kannada scan. Runs entirely in your browser via Tesseract.js.
+    <code>kan_hist</code> requires the package step to be complete first.
+  </p>
+
+  <div class="g2">
+    <div>
+      <div class="drop" id="ocr-drop" onclick="document.getElementById('ocr-file').click()">
+        <span class="drop-icon">🖼</span>
+        <strong>Drop image here</strong>
+        <p>or click to browse</p>
+        <small>PNG, TIFF, JPG — historical Kannada scans</small>
+      </div>
+      <input type="file" id="ocr-file" accept="image/*" style="display:none" onchange="loadOcrImage(this)">
+      <img id="ocr-preview" class="img-preview" style="display:none">
+    </div>
+    <div>
+      <div style="margin-bottom:12px">
+        <label for="ocr-gt">Ground truth (optional — for CER/WER)</label>
+        <textarea id="ocr-gt" rows="5" placeholder="Paste the correct Kannada text here…"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <label for="ocr-psm" style="display:inline;margin:0">PSM</label>
+        <select id="ocr-psm" style="width:auto;padding:6px 10px">
+          <option value="3">3 — Auto</option>
+          <option value="6" selected>6 — Block</option>
+          <option value="7">7 — Single line</option>
+          <option value="11">11 — Sparse</option>
+        </select>
+        <button class="btn btn-primary" onclick="runOcr()" id="ocr-btn">Run OCR</button>
+      </div>
+      <div>
+        <label style="font-size:.8rem;font-weight:600;margin-bottom:6px">Preprocessing</label>
+        <div style="display:flex;gap:14px;flex-wrap:wrap">
+          <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
+            <input type="checkbox" id="pp-binarize"> Binarize
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
+            <input type="checkbox" id="pp-denoise"> Denoise
+          </label>
+          <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
+            <input type="checkbox" id="pp-contrast"> Enhance contrast
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="ocr-prog" style="display:none;margin-top:14px">
+    <div class="prog"><div class="prog-bar" id="ocr-prog-bar" style="width:0%"></div></div>
+    <p id="ocr-prog-txt" style="font-size:.78rem;color:var(--mute)">Initialising…</p>
+  </div>
+
+  <div class="ocr-grid" id="ocr-results" style="display:none">
+    <div>
+      <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
+        kan <span style="font-weight:400;color:var(--mute)">(base model)</span>
+        <span id="kan-time" style="font-size:.72rem;color:var(--mute);font-weight:400;margin-left:6px"></span>
+      </div>
+      <div class="ocr-result" id="kan-out">—</div>
+      <div class="metric-row" id="kan-metrics"></div>
+    </div>
+    <div>
+      <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
+        kan_hist
+        <span id="hist-badge" class="pill" style="margin-left:4px"></span>
+        <span id="hist-time" style="font-size:.72rem;color:var(--mute);font-weight:400;margin-left:6px"></span>
+      </div>
+      <div class="ocr-result" id="hist-out">—</div>
+      <div class="metric-row" id="hist-metrics"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCAN UPLOAD ══════════════════════════════════════════════ -->
+<div id="pg-scan" class="page">
+  <div class="sec"><h2>Add real scans for training</h2></div>
+  <p style="font-size:.84rem;color:var(--mute);margin-bottom:14px">
+    Upload scanned historical Kannada pages with ground-truth transcriptions.
+    Files are saved to <code>scan-input/</code> and included automatically in the next make-lstmf run.
+  </p>
+  <div class="g2">
+    <div>
+      <div class="drop" id="scan-drop" onclick="document.getElementById('scan-file').click()">
+        <span class="drop-icon">📄</span>
+        <strong>Drop scan image here</strong>
+        <p>or click to browse</p>
+        <small>PNG or TIFF · 300 DPI recommended</small>
+      </div>
+      <input type="file" id="scan-file" accept="image/png,image/tiff,image/tif" style="display:none" onchange="previewScan(this)">
+      <img id="scan-preview" class="img-preview" style="display:none">
+    </div>
+    <div>
+      <label for="scan-gt">Ground truth text</label>
+      <textarea id="scan-gt" rows="9" placeholder="Type the exact Kannada text that appears in the scan — required for training…"></textarea>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
+        <button class="btn btn-primary" onclick="uploadScan()" id="scan-btn">Upload scan</button>
+        <span class="hint">A <code>.gt.txt</code> file is saved alongside the image.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec" style="margin-top:24px">
+    <h2>Uploaded scans</h2>
+    <button class="btn btn-outline" onclick="loadScans()">↺ Refresh</button>
+    <span id="scan-count" class="hint"></span>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table class="tbl">
+      <thead><tr><th>File</th><th>Ground truth</th><th>Size</th><th></th></tr></thead>
+      <tbody id="scan-tbody"><tr><td colspan="4" style="color:var(--mute);padding:14px">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══ FONTS ════════════════════════════════════════════════════ -->
+<div id="pg-fonts" class="page">
+  <div class="sec">
+    <h2>Font registry</h2>
+    <span class="hint">from fonts.yml</span>
+    <button class="btn btn-outline" onclick="loadFonts()">↺ Refresh</button>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table class="tbl">
+      <thead><tr><th>Font name</th><th>Styles</th><th>Rendering</th><th>Repo cloned</th><th>Images</th></tr></thead>
+      <tbody id="font-tbody"><tr><td colspan="5" style="color:var(--mute);padding:14px">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <p class="hint" style="margin-top:8px">To add a font, edit <code>fonts.yml</code> then re-run ① Prep base + ④ Render images.</p>
+</div>
+
+<!-- ═══ TRAINING ═════════════════════════════════════════════════ -->
+<div id="pg-train" class="page">
+  <div class="sec">
+    <h2>BCER training curve</h2>
+    <button class="btn btn-outline" onclick="loadBcer()">↺ Refresh</button>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <canvas id="bcer-chart" height="80"></canvas>
+    <p id="bcer-summary" style="font-size:.76rem;color:var(--mute);margin-top:10px"></p>
+  </div>
+
+  <div class="sec">
+    <h2>Corpus statistics</h2>
+    <button class="btn btn-outline" onclick="loadCorpusStats()">↺ Refresh</button>
+  </div>
+  <div id="corpus-stats" class="card" style="margin-bottom:16px;font-size:.84rem;color:var(--mute)">Loading…</div>
+
+  <div class="sec">
+    <h2>Checkpoint browser</h2>
+    <button class="btn btn-outline" onclick="loadCheckpoints()">↺ Refresh</button>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table class="tbl">
+      <thead><tr><th>Checkpoint</th><th>Iteration</th><th>BCER</th><th>Size</th><th></th></tr></thead>
+      <tbody id="cp-tbody"><tr><td colspan="5" style="color:var(--mute);padding:14px">Loading…</td></tr></tbody>
+    </table>
+  </div>
+  <p class="hint" style="margin-top:6px">★ = best BCER. Click Package to export any checkpoint as <code>kan_hist.traineddata</code>.</p>
+</div>
+
+<!-- ═══ LIVE LOG ══════════════════════════════════════════════════ -->
+<div id="pg-log" class="page">
+  <div class="sec">
+    <h2>Live training log</h2>
+    <span id="log-stat" class="pill pill-amber">Connecting…</span>
+    <button class="btn btn-outline" onclick="toggleScroll()">Auto-scroll: <span id="asc-lbl">ON</span></button>
+    <button class="btn btn-outline" onclick="document.getElementById('log-box').innerHTML=''">Clear</button>
+  </div>
+  <div id="log-box"></div>
+</div>
+
+<!-- ═══ IMAGES ════════════════════════════════════════════════════ -->
+<div id="pg-imgs" class="page">
+  <div class="sec">
+    <h2>Training image gallery</h2>
+    <button class="btn btn-outline" onclick="loadImgs()">↺ Refresh</button>
+    <span id="img-count" class="hint"></span>
+  </div>
+  <div class="imgs-g" id="imgs-grid"><p style="color:var(--mute)">Loading…</p></div>
+</div>
+
+</main>
+
+<footer>
+  <a href="https://sanchaya.net" target="_blank" rel="noopener">Sanchaya</a>
+  &nbsp;·&nbsp;
+  <a href="https://fonts.sanchaya.net" target="_blank" rel="noopener">Karnata fonts</a>
+  &nbsp;·&nbsp; Apache 2.0
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+let bcrChart=null, autoScroll=true, logSrc=null, ocrImg=null, ocrImgB64=null, scanFile=null;
+
+// ── Tabs ─────────────────────────────────────────────────────────
+function tab(id, btn) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('act'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('act'));
+  document.getElementById('pg-'+id).classList.add('act');
+  btn.classList.add('act');
+  if (id==='log'   && !logSrc) startLog();
+  if (id==='train') { loadBcer(); loadCheckpoints(); loadCorpusStats(); }
+  if (id==='imgs')  loadImgs();
+  if (id==='fonts') loadFonts();
+  if (id==='scan')  loadScans();
+}
+
+// ── Toast ────────────────────────────────────────────────────────
+function toast(msg, ms=3200) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), ms);
+}
+
+// ── Offline detection ────────────────────────────────────────────
+let _serverAvailable = null;
+async function apiGet(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+function showOfflineBanner() {
+  if (document.getElementById('offline-banner')) return;
+  const b = document.createElement('div');
+  b.id = 'offline-banner';
+  b.style.cssText = 'background:#fef3c7;border-bottom:1px solid #f59e0b;color:#92400e;padding:8px 24px;font-size:.84rem;text-align:center;';
+  b.innerHTML = '⚡ <strong>Offline / static mode</strong> — OCR testing works fully in-browser. Training pipeline requires a running server (<a href="https://github.com/sanchaya/tesseract-training-kannada" target="_blank" style="color:#92400e">see README</a>).';
+  document.querySelector('header').after(b);
+}
+
+// ── Dashboard ────────────────────────────────────────────────────
+async function loadStatus() {
+  let d;
+  try {
+    d = await apiGet('/api/status');
+  } catch(e) {
+    showOfflineBanner();
+    document.getElementById('steps-list').innerHTML =
+      '<div style="color:var(--mute);padding:12px">Server not running — training steps unavailable.</div>';
+    return;
+  }
+  const steps = Object.values(d).filter(s => s.label);
+  const done  = steps.filter(s => s.done).length;
+  document.getElementById('st-steps').textContent = done;
+
+  const badge = document.getElementById('proc-badge');
+  badge.style.display = d._training ? 'inline-flex' : 'none';
+  document.getElementById('last-ref').textContent =
+    'Updated ' + new Date().toLocaleTimeString();
+
+  document.getElementById('steps-list').innerHTML = steps.map(s => `
+    <div class="step ${s.done ? 'ok' : 'pend'}">
+      <div class="step-icon">${s.done ? '✅' : '⏳'}</div>
+      <div>
+        <div class="step-name">${s.label}</div>
+        <div class="step-detail">${s.detail}</div>
+      </div>
+    </div>`).join('');
+}
+
+async function loadBcer() {
+  let d;
+  try { d = await apiGet('/api/bcer'); } catch(e) {
+    document.getElementById('bcer-summary').textContent = 'Server not running.';
+    return;
+  }
+  const ctx = document.getElementById('bcer-chart').getContext('2d');
+  if (!d.length) {
+    document.getElementById('bcer-summary').textContent = 'No checkpoints yet.';
+    return;
+  }
+  const best = Math.min(...d.map(p=>p.bcer));
+  const last = d[d.length-1];
+  document.getElementById('st-bcer').textContent = best.toFixed(2) + '%';
+  document.getElementById('bcer-summary').textContent =
+    `Best: ${best.toFixed(3)}%  ·  Latest: ${last.bcer.toFixed(3)}% @ iter ${last.iter.toLocaleString()}  ·  ${d.length} checkpoints`;
+  if (bcrChart) bcrChart.destroy();
+  bcrChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: d.map(p=>p.iter),
+      datasets: [{
+        label: 'BCER %',
+        data:  d.map(p=>p.bcer),
+        borderColor: '#7c3aed',
+        backgroundColor: 'rgba(124,58,237,.08)',
+        tension: .3,
+        pointRadius: d.length > 60 ? 0 : 3,
+        fill: true,
+      }],
+    },
+    options: {
+      scales: {
+        x: { title: { display: true, text: 'Iteration' } },
+        y: { title: { display: true, text: 'BCER %' }, beginAtZero: false },
+      },
+      plugins: { legend: { display: false } },
+      animation: false,
+    },
+  });
+}
+
+async function loadFonts() {
+  let d;
+  try { d = await apiGet('/api/fonts'); } catch(e) {
+    document.getElementById('font-tbody').innerHTML =
+      '<tr><td colspan="5" style="color:var(--mute);padding:12px">Server not running.</td></tr>';
+    return;
+  }
+  document.getElementById('st-imgs').textContent =
+    d.reduce((s,f)=>s+f.rendered,0).toLocaleString();
+  document.getElementById('font-tbody').innerHTML = d.map(f => `
+    <tr>
+      <td><strong>${f.name}</strong></td>
+      <td>${f.styles}</td>
+      <td><span class="pill ${f.degrade ? 'pill-amber' : 'pill-brand'}">${f.degrade ? 'Degraded' : 'Clean'}</span></td>
+      <td>${f.cloned
+        ? '<span class="pill pill-green">✓ Cloned</span>'
+        : '<span class="pill pill-gray">Not cloned</span>'}</td>
+      <td>${f.rendered > 0
+        ? `<span class="pill pill-green">${f.rendered.toLocaleString()}</span>`
+        : '—'}</td>
+    </tr>`).join('');
+}
+
+async function loadCheckpoints() {
+  let d;
+  try { d = await apiGet('/api/checkpoints'); } catch(e) {
+    document.getElementById('cp-tbody').innerHTML =
+      '<tr><td colspan="5" style="color:var(--mute);padding:12px">Server not running.</td></tr>';
+    return;
+  }
+  const best = d.best?.file;
+  if (!d.checkpoints.length) {
+    document.getElementById('cp-tbody').innerHTML =
+      '<tr><td colspan="5" style="color:var(--mute);padding:14px">No checkpoints yet.</td></tr>';
+    return;
+  }
+  document.getElementById('cp-tbody').innerHTML = d.checkpoints.slice().reverse().map(cp => `
+    <tr class="${cp.file===best ? 'cp-best' : ''}">
+      <td style="font-family:monospace;font-size:.78rem">
+        ${cp.file===best ? '★ ' : ''}${cp.file.length>42 ? cp.file.slice(0,42)+'…' : cp.file}
+      </td>
+      <td>${cp.iter.toLocaleString()}</td>
+      <td style="color:${cp.bcer<3?'var(--green)':cp.bcer<6?'var(--amber)':'var(--red)'};font-weight:700">
+        ${cp.bcer.toFixed(3)}%
+      </td>
+      <td style="color:var(--mute)">${(cp.size/1024/1024).toFixed(1)} MB</td>
+      <td>
+        <button class="btn btn-outline" style="padding:4px 10px;font-size:.74rem"
+          onclick="packageCp('${cp.file}')">Package</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function packageCp(name) {
+  if (!confirm(`Package checkpoint:\n${name}\n\nThis writes kan_hist.traineddata to best/.`)) return;
+  try {
+    const r = await (await fetch('/api/checkpoints/package', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ checkpoint: name }),
+    })).json();
+    r.ok ? toast('Packaging started — watch Live log') : toast('Error: ' + r.error);
+  } catch(e) { toast('Server not running'); }
+}
+
+async function loadCorpusStats() {
+  let d;
+  try { d = await apiGet('/api/corpus/stats'); } catch(e) {
+    document.getElementById('corpus-stats').innerHTML =
+      '<span style="color:var(--mute)">Server not running.</span>';
+    return;
+  }
+  const el = document.getElementById('corpus-stats');
+  if (!d) {
+    el.innerHTML = '<span>Corpus not built yet.</span>';
+    document.getElementById('st-corp').textContent = '—';
+    return;
+  }
+  document.getElementById('st-corp').textContent = d.total_lines.toLocaleString();
+  const w = Math.round(d.coverage_pct);
+  const barColor = w > 80 ? 'var(--green)' : w > 50 ? 'var(--amber)' : 'var(--red)';
+  el.innerHTML = `
+    <div class="g3" style="margin-bottom:14px">
+      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Lines</div>
+        <strong>${d.total_lines.toLocaleString()}</strong></div>
+      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Kannada characters</div>
+        <strong>${d.kan_chars.toLocaleString()}</strong></div>
+      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Unicode block coverage</div>
+        <strong>${d.coverage_pct}%</strong></div>
+    </div>
+    <div style="font-size:.76rem;color:var(--mute);margin-bottom:4px">
+      Coverage (${d.unique_kan} / 128 Kannada codepoints)
+    </div>
+    <div class="prog"><div class="prog-bar" style="width:${w}%;background:${barColor}"></div></div>
+    <div style="font-size:.73rem;color:var(--mute);margin-top:8px">
+      Most frequent: ${d.top_chars.map(c => `<span title="${c.count.toLocaleString()}">${c.ch}</span>`).join(' ')}
+    </div>`;
+}
+
+// ── Run step ─────────────────────────────────────────────────────
+async function run(step) {
+  const names = { prep:'Prep base', wiki:'Download corpus', clean:'Clean corpus',
+                  render:'Render images', lstmf:'Make lstmf', train:'Train', package:'Package' };
+  if (!confirm(`Run "${names[step]}"?\n\nOutput will stream to the Live log tab.`)) return;
+  try {
+    const r = await (await fetch('/api/run/'+step, { method: 'POST' })).json();
+    if (r.ok) {
+      toast(`▶ ${names[step]} started`);
+      document.querySelectorAll('nav button')[5].click();
+    } else {
+      toast('Error: ' + (r.error || 'unknown'));
+    }
+  } catch(e) { toast('Server not running — training unavailable in static mode'); }
+}
+
+// ── OCR test ─────────────────────────────────────────────────────
+function setupDrop(id, onFile) {
+  const el = document.getElementById(id);
+  el.addEventListener('dragover',  e => { e.preventDefault(); el.classList.add('over'); });
+  el.addEventListener('dragleave', () => el.classList.remove('over'));
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('over');
+    const f = e.dataTransfer.files[0]; if (f) onFile(f);
+  });
+}
+
+function readAsDataURL(file) {
+  return new Promise(res => { const r = new FileReader(); r.onload=e=>res(e.target.result); r.readAsDataURL(file); });
+}
+
+function loadOcrImage(input) {
+  const f = input.files[0]; if (!f) return;
+  ocrImg = f;
+  readAsDataURL(f).then(b64 => {
+    ocrImgB64 = b64;
+    const p = document.getElementById('ocr-preview');
+    p.src = b64; p.style.display = 'block';
+  });
+}
+
+function editDist(a, b) {
+  const m=a.length, n=b.length;
+  const d=Array.from({length:m+1},(_,i)=>Array.from({length:n+1},(_,j)=>i||j));
+  for(let i=1;i<=m;i++) for(let j=1;j<=n;j++)
+    d[i][j]=a[i-1]===b[j-1]?d[i-1][j-1]:1+Math.min(d[i-1][j],d[i][j-1],d[i-1][j-1]);
+  return d[m][n];
+}
+function cer(h,r){ return r.length ? (editDist(h,r)/r.length*100).toFixed(1) : null; }
+function wer(h,r){ const hw=h.trim().split(/\s+/),rw=r.trim().split(/\s+/); return rw.length ? (editDist(hw,rw)/rw.length*100).toFixed(1) : null; }
+
+function metricsHtml(text, gt) {
+  if (!gt.trim()) return '';
+  const c=cer(text,gt), w=wer(text,gt);
+  const col = v => parseFloat(v)<5 ? 'var(--green)' : parseFloat(v)<15 ? 'var(--amber)' : 'var(--red)';
+  return `<div class="metric"><span class="val" style="color:${col(c)}">${c}%</span>CER</div>
+          <div class="metric"><span class="val" style="color:${col(w)}">${w}%</span>WER</div>`;
+}
+
+async function runOcr() {
+  if (!ocrImg) { toast('Upload an image first'); return; }
+  const btn = document.getElementById('ocr-btn');
+  btn.disabled = true;
+  document.getElementById('ocr-prog').style.display = 'block';
+  document.getElementById('ocr-results').style.display = 'none';
+
+  const setP = (pct, msg) => {
+    document.getElementById('ocr-prog-bar').style.width = pct + '%';
+    document.getElementById('ocr-prog-txt').textContent  = msg;
+  };
+
+  // Preprocessing
+  let imgSrc = ocrImgB64;
+  const ops = [];
+  if (document.getElementById('pp-binarize').checked)  ops.push('binarize');
+  if (document.getElementById('pp-denoise').checked)   ops.push('denoise');
+  if (document.getElementById('pp-contrast').checked)  ops.push('enhance_contrast');
+  if (ops.length) {
+    setP(5, 'Preprocessing image…');
+    try {
+      const r = await (await fetch('/api/preprocess', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_b64: imgSrc, ops }),
+      })).json();
+      if (r.image_b64) {
+        imgSrc = r.image_b64;
+        document.getElementById('ocr-preview').src = imgSrc;
+      }
+    } catch(e) { console.warn('Preprocess failed', e); }
+  }
+
+  const psm  = document.getElementById('ocr-psm').value;
+  const gt   = document.getElementById('ocr-gt').value;
+  const LANG = window.location.origin + '/tessdata';
+
+  // Run kan
+  setP(10, 'Loading kan model…');
+  const t0 = Date.now(); let kanText = '(error)';
+  try {
+    const w = await Tesseract.createWorker('kan', 1, {
+      langPath: LANG,
+      logger: m => { if (m.status==='recognizing text') setP(10+m.progress*40, 'Running kan…'); },
+    });
+    await w.setParameters({ tessedit_pageseg_mode: parseInt(psm) });
+    const { data: { text } } = await w.recognize(imgSrc);
+    kanText = text.trim(); await w.terminate();
+  } catch(e) { kanText = 'Error: ' + e.message; }
+  const t1 = Date.now();
+  document.getElementById('kan-out').textContent    = kanText || '(no text)';
+  document.getElementById('kan-time').textContent   = `${((t1-t0)/1000).toFixed(1)}s`;
+  document.getElementById('kan-metrics').innerHTML  = metricsHtml(kanText, gt);
+  setP(55, 'kan done — running kan_hist…');
+
+  // Run kan_hist
+  let histText = '', histOk = false;
+  try {
+    const w2 = await Tesseract.createWorker('kan_hist', 1, {
+      langPath: LANG,
+      logger: m => { if (m.status==='recognizing text') setP(55+m.progress*40, 'Running kan_hist…'); },
+    });
+    await w2.setParameters({ tessedit_pageseg_mode: parseInt(psm) });
+    const { data: { text } } = await w2.recognize(imgSrc);
+    histText = text.trim(); histOk = true; await w2.terminate();
+  } catch(e) {
+    histText = 'Model not available yet.\nComplete the Package step (⑦) to create kan_hist.traineddata.';
+  }
+  const t2 = Date.now();
+  document.getElementById('hist-out').textContent    = histText || '(no text)';
+  document.getElementById('hist-time').textContent   = histOk ? `${((t2-t1)/1000).toFixed(1)}s` : '';
+  const hb = document.getElementById('hist-badge');
+  hb.textContent = histOk ? '✓ Ready' : 'Not packaged yet';
+  hb.className   = 'pill ' + (histOk ? 'pill-green' : 'pill-amber');
+  document.getElementById('hist-metrics').innerHTML  = histOk ? metricsHtml(histText, gt) : '';
+
+  setP(100, 'Done');
+  setTimeout(() => { document.getElementById('ocr-prog').style.display='none'; }, 700);
+  document.getElementById('ocr-results').style.display = 'grid';
+  btn.disabled = false;
+}
+
+// ── Scan upload ──────────────────────────────────────────────────
+function previewScan(input) {
+  scanFile = input.files[0]; if (!scanFile) return;
+  readAsDataURL(scanFile).then(b64 => {
+    const p = document.getElementById('scan-preview');
+    p.src = b64; p.style.display = 'block';
+  });
+}
+
+async function uploadScan() {
+  if (!scanFile) { toast('Select a scan image first'); return; }
+  const gt = document.getElementById('scan-gt').value.trim();
+  if (!gt) { toast('Ground truth text is required'); return; }
+  const fd = new FormData();
+  fd.append('image', scanFile);
+  fd.append('gt', gt);
+  try {
+    const r = await (await fetch('/api/scans/upload', { method: 'POST', body: fd })).json();
+    if (r.ok) {
+      toast(`Saved: ${r.saved}`);
+      scanFile = null;
+      document.getElementById('scan-preview').style.display = 'none';
+      document.getElementById('scan-gt').value = '';
+      document.getElementById('scan-file').value = '';
+      loadScans();
+    } else { toast('Error: ' + r.error); }
+  } catch(e) { toast('Server not running — scan upload unavailable'); }
+}
+
+async function loadScans() {
+  let d;
+  try { d = await apiGet('/api/scans'); } catch(e) {
+    document.getElementById('scan-tbody').innerHTML =
+      '<tr><td colspan="4" style="color:var(--mute);padding:12px">Server not running.</td></tr>';
+    return;
+  }
+  document.getElementById('scan-count').textContent = d.length ? `${d.length} scan(s) uploaded` : 'No scans yet';
+  document.getElementById('scan-tbody').innerHTML = d.length
+    ? d.map(s => `
+      <tr>
+        <td style="font-family:monospace;font-size:.78rem">${s.name}</td>
+        <td style="font-size:.78rem">
+          ${s.has_gt
+            ? `<span class="pill pill-green">✓</span> ${s.gt_preview}`
+            : '<span class="pill pill-red">Missing</span>'}
+        </td>
+        <td style="font-size:.78rem;color:var(--mute)">${(s.size/1024).toFixed(0)} KB</td>
+        <td>
+          <button class="btn btn-outline" style="padding:3px 8px;font-size:.74rem"
+            onclick="deleteScan('${s.name}')">Delete</button>
+        </td>
+      </tr>`).join('')
+    : '<tr><td colspan="4" style="color:var(--mute);padding:14px">No scans uploaded yet.</td></tr>';
+}
+
+async function deleteScan(name) {
+  if (!confirm(`Delete ${name}?`)) return;
+  try {
+    await fetch('/api/scans/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    loadScans();
+  } catch(e) { toast('Server not running'); }
+}
+
+// ── Live log ─────────────────────────────────────────────────────
+function startLog() {
+  const box  = document.getElementById('log-box');
+  const stat = document.getElementById('log-stat');
+  // Load recent history
+  fetch('/api/log/tail?lines=80').then(r=>r.json()).then(d => {
+    if (d.exists) d.lines.forEach(l => appendLog(l));
+  }).catch(() => {
+    appendLog('Server not running — live log unavailable in static mode.');
+    stat.textContent='Offline'; stat.className='pill pill-amber';
+  });
+  // Open SSE
+  logSrc = new EventSource('/api/log/stream');
+  logSrc.onopen  = () => { stat.textContent='Live'; stat.className='pill pill-green'; };
+  logSrc.onerror = () => { stat.textContent='Offline'; stat.className='pill pill-amber'; };
+  logSrc.onmessage = e => appendLog(JSON.parse(e.data));
+}
+
+function appendLog(line) {
+  const box = document.getElementById('log-box');
+  const d   = document.createElement('div');
+  d.textContent = line;
+  if (/error|fail/i.test(line))         d.className = 'log-error';
+  else if (/BCER|bcer/i.test(line))      d.className = 'log-bcer';
+  else if (/\[trainocr\]/i.test(line))   d.className = 'log-portal';
+  box.appendChild(d);
+  if (autoScroll) box.scrollTop = box.scrollHeight;
+}
+
+function toggleScroll() {
+  autoScroll = !autoScroll;
+  document.getElementById('asc-lbl').textContent = autoScroll ? 'ON' : 'OFF';
+}
+
+// ── Images ───────────────────────────────────────────────────────
+async function loadImgs() {
+  let d;
+  try { d = await apiGet('/api/images?n=20'); } catch(e) {
+    document.getElementById('imgs-grid').innerHTML =
+      '<p style="color:var(--mute)">Server not running.</p>';
+    return;
+  }
+  document.getElementById('img-count').textContent =
+    d.length ? `Showing ${d.length} samples` : 'No images yet';
+  const g = document.getElementById('imgs-grid');
+  if (!d.length) { g.innerHTML='<p style="color:var(--mute)">No rendered images yet.</p>'; return; }
+  g.innerHTML = d.map(i => `
+    <div class="img-card">
+      <img src="data:image/png;base64,${i.b64}" loading="lazy" alt="${i.name}">
+      <div class="img-gt" title="${i.gt}">${i.gt || '(no gt)'}</div>
+    </div>`).join('');
+}
+
+// ── Glossary ─────────────────────────────────────────────────────
+function toggleGloss(btn) {
+  const body = btn.nextElementSibling;
+  const open  = body.classList.toggle('open');
+  btn.classList.toggle('open', open);
+}
+
+// ── Interactive tour ──────────────────────────────────────────────
+const TOUR_STEPS = [
+  { tab: 'dash', sel: '#steps-list',
+    title: 'Your training pipeline',
+    text: 'Each card shows one step. Green = done, amber = pending. Complete them in order — every step feeds the next.' },
+  { tab: 'dash', sel: '.actions',
+    title: 'Run a step',
+    text: 'Click any button to start that step in the background. Output streams to the Live log tab so you can watch progress in real time.' },
+  { tab: 'ocr', sel: '#ocr-drop',
+    title: 'Test your model',
+    text: 'Drop a historical Kannada scan here. Tesseract.js runs entirely in your browser — nothing is uploaded. You\'ll see both kan (base) and kan_hist results side by side.' },
+  { tab: 'ocr', sel: '#ocr-results',
+    title: 'Compare models',
+    text: 'CER (character error rate) and WER (word error rate) tell you exactly how much better kan_hist is on your specific documents. Lower numbers = fewer corrections for your transcribers.' },
+  { tab: 'scan', sel: '#scan-drop',
+    title: 'Add real training data',
+    text: 'Synthetic training (rendered fonts) is a starting point. Uploading real scans with accurate transcriptions is the fastest way to improve accuracy on your specific collection.' },
+  { tab: 'train', sel: '#bcer-chart',
+    title: 'Watch BCER fall',
+    text: 'A healthy training run looks like a steadily decreasing curve. Stop training when BCER has not reached a new low for ~10,000 iterations — that\'s the plateau signal.' },
+  { tab: 'train', sel: '#cp-tbody',
+    title: 'Package any checkpoint',
+    text: 'Every 100 iterations saves a checkpoint. The star (★) marks the best BCER. You can package any checkpoint as kan_hist.traineddata — useful if the model overfit later.' },
+  { tab: 'log', sel: '#log-box',
+    title: 'Live training log',
+    text: 'Green lines = BCER updates. Red = errors. Purple = portal events. If you see many red lines in a row, check that lstmtraining is installed and lstmf/list.txt is not empty.' },
+];
+
+let tourIdx = 0;
+function startTour() {
+  tourIdx = 0;
+  document.getElementById('tour-overlay').style.display = 'block';
+  showTourStep(tourIdx);
+}
+function endTour() {
+  document.getElementById('tour-overlay').style.display = 'none';
+  document.getElementById('tour-spotlight').style.cssText = '';
+}
+function tourNav(dir) {
+  tourIdx = Math.max(0, Math.min(TOUR_STEPS.length - 1, tourIdx + dir));
+  showTourStep(tourIdx);
+}
+function showTourStep(i) {
+  const step = TOUR_STEPS[i];
+  // Switch tab
+  const tabBtn = [...document.querySelectorAll('nav button')]
+    .find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes(`'${step.tab}'`));
+  if (tabBtn) tabBtn.click();
+
+  requestAnimationFrame(() => {
+    const el = document.querySelector(step.sel);
+    const card = document.getElementById('tour-card');
+    const spot = document.getElementById('tour-spotlight');
+
+    document.getElementById('tour-step-lbl').textContent = `Step ${i+1} of ${TOUR_STEPS.length}`;
+    document.getElementById('tour-title').textContent = step.title;
+    document.getElementById('tour-text').textContent  = step.text;
+    document.getElementById('tour-prev').disabled = i === 0;
+    document.getElementById('tour-next').textContent = i === TOUR_STEPS.length-1 ? 'Finish ✓' : 'Next →';
+    if (i === TOUR_STEPS.length-1)
+      document.getElementById('tour-next').onclick = endTour;
+    else
+      document.getElementById('tour-next').onclick = () => tourNav(1);
+
+    if (el) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setTimeout(() => {
+        const r = el.getBoundingClientRect();
+        const pad = 6;
+        spot.style.cssText = `position:absolute;top:${r.top+window.scrollY-pad}px;left:${r.left-pad}px;width:${r.width+pad*2}px;height:${r.height+pad*2}px;border-radius:8px;box-shadow:0 0 0 9999px rgba(15,23,42,.75);z-index:9001;pointer-events:none`;
+        // Position card
+        const vw = window.innerWidth, vh = window.innerHeight;
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        let top  = r.bottom + window.scrollY + 16;
+        let left = Math.max(12, Math.min(vw - 340, cx - 160));
+        if (r.bottom + 220 > vh) top = r.top + window.scrollY - 230;
+        card.style.top  = top + 'px';
+        card.style.left = left + 'px';
+      }, 320);
+    }
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+setupDrop('ocr-drop', f => {
+  ocrImg = f;
+  readAsDataURL(f).then(b64 => {
+    ocrImgB64 = b64;
+    const p = document.getElementById('ocr-preview');
+    p.src = b64; p.style.display = 'block';
+  });
+});
+setupDrop('scan-drop', f => {
+  scanFile = f;
+  readAsDataURL(f).then(b64 => {
+    const p = document.getElementById('scan-preview');
+    p.src = b64; p.style.display = 'block';
+  });
+});
+
+async function loadAll() {
+  await Promise.all([loadStatus(), loadFonts(), loadBcer()]);
+}
+loadAll();
+setInterval(loadStatus, 20000);
+</script>
+</body>
+</html>

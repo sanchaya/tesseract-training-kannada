@@ -1,0 +1,82 @@
+# ════════════════════════════════════════════════════════════════
+# fonts.yml — Karnata Font Registry for kan_hist Tesseract training
+# ════════════════════════════════════════════════════════════════
+#
+# Each entry here produces rendered training images that are combined
+# into a single kan_hist.traineddata model.
+#
+# To add a new font:
+#   1. Append an entry below
+#   2. Run: python3 corpus/render-corpus.py
+#   3. Run: ./scripts/02-make-lstmf.sh  (re-generates list.txt)
+#   4. Run: ./scripts/03-train.sh       (continues from last checkpoint)
+#
+# Fields:
+#   id          - Short identifier (used for file naming in rendered/)
+#   name        - Human-readable font family name
+#   repo        - GitHub URL; fonts are cloned into fonts/<id>/
+#   font_dir    - Subdirectory inside repo containing .ttf files
+#   font_files  - .ttf filenames to render with
+#   degrade     - true = add ink-spread simulation (historical/letterpress)
+#                 false = clean rendering (modern digital fonts)
+#   max_pages   - Training image count per font style
+# ════════════════════════════════════════════════════════════════
+
+fonts:
+
+  # ── KarnataGTN ───────────────────────────────────────────────
+  # Modern variable font, G.T. Narayana Rao handwriting style.
+  # 6 static weights. Clean rendering (no degradation).
+  - id: kan_gtn
+    name: "Karnata GTN"
+    description: "Kannada typeface in G.T. Narayana Rao style (Sanchaya)"
+    repo: https://github.com/sanchaya/karnata-gtn-typeface
+    font_dir: fonts/ttf
+    font_files:
+      - KarnataGTN-Regular.ttf
+      - KarnataGTN-Medium.ttf
+      - KarnataGTN-Bold.ttf
+      - KarnataGTN-Black.ttf
+    degrade: false
+    max_pages: 800
+
+  # ── Karnata German Mission Press ─────────────────────────────
+  # Historical letterpress revival, German Mission Press, Mangaluru.
+  - id: kan_gmp
+    name: "Karnata German Mission Press"
+    description: "Revival of German Mission Press Kannada typeface, Mangaluru"
+    repo: https://github.com/sanchaya/karnata-german-mission-press-typeface
+    font_dir: fonts
+    font_files:
+      - KarnataGermanMissionPressTypeface.ttf
+    degrade: true
+    max_pages: 600
+
+  # ── Karnata Wesleyan Mission Press ───────────────────────────
+  # Historical letterpress revival, Wesleyan Mission Press.
+  - id: kan_wmp
+    name: "Karnata Wesleyan Mission Press"
+    description: "Revival of Wesleyan Mission Press Kannada typeface, Bengaluru/Mangaluru"
+    repo: https://github.com/sanchaya/karnata-wesleyan-mission-press-typeface
+    font_dir: fonts
+    font_files:
+      - KarnataWesleyanMissionPress.ttf
+    degrade: true
+    max_pages: 600
+
+  # ── Karnata F Kittel ─────────────────────────────────────────
+  # Basel Mission Press, Mangalore (1830-1900). Named after F. Kittel.
+  # Designed specifically for OCR training.
+  - id: kan_kittel
+    name: "Karnata F Kittel"
+    description: "Revival of Basel Mission Press Mangalore typeface (1830-1900)"
+    repo: https://github.com/sanchaya/karnata-f-kittel-font
+    font_dir: fonts
+    font_files:
+      - KarnataFKittel.ttf
+    degrade: true
+    max_pages: 600
+
+  # ── ADD NEW FONTS BELOW ───────────────────────────────────────
+  # Copy any entry above and fill in the fields.
+  # After adding, re-run render-corpus.py → 02-make-lstmf.sh → 03-train.sh
