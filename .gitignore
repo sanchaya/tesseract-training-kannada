@@ -1,0 +1,59 @@
+# ── Node.js ────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+.env
+.env.*
+
+# ── Python ─────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+*.egg
+pip-wheel-metadata/
+
+# ── Generated training data (large; reproducible) ──────────────────
+rendered/
+lstmf/
+output/
+best/
+scan-input/
+tessdata_best/*.traineddata   # downloaded at runtime; checked-in .gitkeep only
+fonts/*.ttf                   # downloaded at runtime
+fonts/*.otf
+
+# ── Logs ───────────────────────────────────────────────────────────
+logs/
+*.log
+training.log
+
+# ── Private / internal documents ───────────────────────────────────
+_private/
+
+# ── OS / editor ────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+Thumbs.db
+.Spotlight-V100
+.Trashes
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Docker (runtime state) ─────────────────────────────────────────
+.docker/
+
+# ── Corpus (downloaded at runtime; build_corpus.py regenerates) ────
+corpus/kan_corpus.txt
+
+# ── Test artefacts ────────────────────────────────────────────────
+test-images/*.png
+test-images/*.tif
+test-images/*.jpg
