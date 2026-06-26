@@ -1,0 +1,8 @@
+# Python dependencies for TrainOCR
+# Used by: corpus/render-corpus.py, corpus/build_corpus.py, portal.py (python-portal branch)
+
+Pillow>=10.0.0
+PyYAML>=6.0
+requests>=2.31.0
+# Flask is only needed on the python-portal branch
+# Flask>=3.0.0

@@ -1,0 +1,38 @@
+# Never copy these into the Docker image
+node_modules
+npm-debug.log*
+.git
+.gitignore
+_private
+
+# Large generated data — provided via volumes at runtime
+rendered
+lstmf
+output
+best
+scan-input
+tessdata_best/*.traineddata
+fonts/*.ttf
+fonts/*.otf
+logs
+training.log
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+.venv
+venv
+
+# Editor / OS
+.DS_Store
+.idea
+.vscode
+*.swp
+*~
+
+# Docs (optional — include if you want them in the image)
+# docs/
+
+# Docker compose overrides
+docker-compose.prod.yml

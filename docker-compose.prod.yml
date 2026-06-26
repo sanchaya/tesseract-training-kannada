@@ -1,0 +1,27 @@
+version: "3.9"
+
+# ══════════════════════════════════════════════════════════════════
+#  Production overrides — use with:
+#    docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ══════════════════════════════════════════════════════════════════
+
+services:
+  trainocr:
+    environment:
+      NODE_ENV: production
+    # No source volume mounts in production — use baked image
+    volumes:
+      - tessdata_best:/app/tessdata_best
+      - fonts:/app/fonts
+      - rendered:/app/rendered
+      - lstmf:/app/lstmf
+      - output:/app/output
+      - best:/app/best
+      - scan_input:/app/scan-input
+      - logs:/app/logs
+    # Bind logs to host for easy access
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"

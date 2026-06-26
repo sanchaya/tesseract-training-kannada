@@ -1,0 +1,59 @@
+version: "3.9"
+
+# ══════════════════════════════════════════════════════════════════
+#  TrainOCR — docker compose
+#
+#  Development:  docker compose up --build
+#  Production:   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+#  Training data is stored in named volumes so it persists across
+#  container restarts. Override with bind-mounts for direct access:
+#
+#    docker compose up -v rendered:/local/path/rendered
+# ══════════════════════════════════════════════════════════════════
+
+services:
+  trainocr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: trainocr:latest
+    container_name: trainocr
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+    volumes:
+      # ── Persistent training data ────────────────────────────────
+      - tessdata_best:/app/tessdata_best
+      - fonts:/app/fonts
+      - rendered:/app/rendered
+      - lstmf:/app/lstmf
+      - output:/app/output
+      - best:/app/best
+      - scan_input:/app/scan-input
+      - logs:/app/logs
+      # ── Hot-reload source in development ───────────────────────
+      # Comment out the next three lines for production builds
+      - ./server.js:/app/server.js:ro
+      - ./public:/app/public:ro
+      - ./fonts.yml:/app/fonts.yml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+# ── Named volumes ─────────────────────────────────────────────────
+volumes:
+  tessdata_best:
+  fonts:
+  rendered:
+  lstmf:
+  output:
+  best:
+  scan_input:
+  logs:
