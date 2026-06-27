@@ -164,6 +164,82 @@ function runBg(cmd, args, stepId) {
   });
 }
 
+/// ── API: corpus sources ──────────────────────────────────────────────────────
+app.get("/api/corpus/sources", (req, res) => {
+  const cacheDir   = path.join(__dirname, "corpus", "cache");
+  const corpusFile = path.join(__dirname, "corpus", "kan_corpus.txt");
+  const rawFile    = path.join(__dirname, "corpus", "raw_kannada.txt");
+
+  const dumpSizes = {
+    wikisource: path.join(cacheDir, "knwikisource-latest.xml.bz2"),
+    wikipedia:  path.join(cacheDir, "knwiki-latest.xml.bz2"),
+  };
+
+  function fileInfo(p) {
+    try { const s = fs.statSync(p); return { exists: true, size: s.size, mtime: s.mtimeMs }; }
+    catch { return { exists: false }; }
+  }
+  function countLines(p) {
+    try {
+      const txt = fs.readFileSync(p, "utf8");
+      return txt.split("\n").filter(l => l.trim()).length;
+    } catch { return 0; }
+  }
+
+  const ws  = fileInfo(dumpSizes.wikisource);
+  const wk  = fileInfo(dumpSizes.wikipedia);
+  const raw = fileInfo(rawFile);
+  const rawLines = raw.exists ? countLines(rawFile) : 0;
+
+  res.json({
+    sources: [
+      {
+        key:    "wikisource",
+        name:   "Kannada Wikisource (preferred)",
+        detail: ws.exists
+          ? `Dump cached — ${(ws.size/1e6).toFixed(1)} MB — last updated ${new Date(ws.mtime).toLocaleDateString()}`
+          : "Not downloaded yet — proofread historical Kannada pages",
+        ready:       ws.exists,
+        downloading: false,
+        lines:       ws.exists ? rawLines : 0,
+        cmd: "python3 corpus/download-wikisource.py --pages 3000",
+      },
+      {
+        key:    "wikipedia",
+        name:   "Kannada Wikipedia (supplement)",
+        detail: wk.exists
+          ? `Dump cached — ${(wk.size/1e6).toFixed(1)} MB — last updated ${new Date(wk.mtime).toLocaleDateString()}`
+          : "Not downloaded yet — modern Kannada prose + glyph coverage",
+        ready:       wk.exists,
+        downloading: false,
+        lines:       0,
+        cmd: "python3 corpus/download-wiki.py --lines 5000",
+      },
+    ],
+    corpus_lines: countLines(corpusFile),
+  });
+});
+
+app.post("/api/corpus/download/:key", (req, res) => {
+  const key = req.params.key;
+  const scripts = {
+    wikisource: "python3 corpus/download-wikisource.py --pages 3000",
+    wikipedia:  "python3 corpus/download-wiki.py --lines 5000",
+  };
+  const cmd = scripts[key];
+  if (!cmd) return res.status(400).json({ error: "unknown key" });
+  const logFile = path.join(__dirname, "logs", `download-${key}.log`);
+  fs.mkdirSync(path.join(__dirname, "logs"), { recursive: true });
+  const { spawn } = require("child_process");
+  const child = spawn("bash", ["-c", cmd], {
+    cwd: __dirname,
+    detached: true,
+    stdio: ["ignore", fs.openSync(logFile, "a"), fs.openSync(logFile, "a")],
+  });
+  child.unref();
+  res.json({ started: true, log: logFile });
+});
+
 // ── API: system check ─────────────────────────────────────────────────────
 app.get("/api/syscheck", async (req, res) => {
   const { execFile } = require("child_process");

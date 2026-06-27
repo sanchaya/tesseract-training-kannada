@@ -482,6 +482,15 @@ footer a:hover { text-decoration: underline; }
     <div id="syscheck-data"></div>
   </div>
 
+  <!-- ── Corpus sources ── -->
+  <div class="sec" style="margin-top:22px">
+    <h2>Corpus sources</h2>
+    <button class="btn btn-outline" onclick="loadCorpusSources()" id="corpus-src-btn">Check</button>
+  </div>
+  <div id="corpus-src-panel" style="display:none;margin-bottom:18px">
+    <div id="corpus-src-list"></div>
+  </div>
+
   <div class="sec" style="margin-top:22px"><h2>Run steps</h2></div>
   <div class="actions">
     <button class="btn btn-primary" onclick="run('prep')">① Prep base</button>
@@ -998,6 +1007,87 @@ async function apiGet(url) {
   const r = await fetch(url);
   if (!r.ok) throw new Error(r.status);
   return r.json();
+}
+
+// ── Corpus sources ───────────────────────────────────────────────
+async function loadCorpusSources() {
+  const panel = document.getElementById('corpus-src-panel');
+  const btn   = document.getElementById('corpus-src-btn');
+  panel.style.display = 'block';
+  btn.textContent = 'Checking…';
+
+  if (STATIC_MODE) {
+    document.getElementById('corpus-src-list').innerHTML = `
+      <div class="chk-section">Corpus sources</div>
+      <div class="chk-grid">
+        <div class="chk-item warn">
+          <div class="chk-icon">📖</div>
+          <div>
+            <div class="chk-name">Kannada Wikisource (preferred)</div>
+            <div class="chk-ver">kn.wikisource.org — proofread historical pages</div>
+            <div class="chk-need">Run: python3 corpus/download-wikisource.py --pages 3000</div>
+          </div>
+        </div>
+        <div class="chk-item warn">
+          <div class="chk-icon">📰</div>
+          <div>
+            <div class="chk-name">Kannada Wikipedia (supplement)</div>
+            <div class="chk-ver">knwiki — modern Kannada prose + glyph coverage</div>
+            <div class="chk-need">Run: python3 corpus/download-wiki.py --lines 5000</div>
+          </div>
+        </div>
+      </div>`;
+    btn.textContent = 'Check';
+    return;
+  }
+
+  try {
+    const d = await apiGet('/api/corpus/sources');
+    const el = document.getElementById('corpus-src-list');
+
+    const card = (src) => {
+      const cls  = src.ready ? 'ok' : src.downloading ? 'warn' : 'bad';
+      const icon = src.ready ? '✅' : src.downloading ? '⏳' : '❌';
+      const dlBtn = (!src.ready && !src.downloading)
+        ? `<button class="btn btn-outline" style="margin-top:6px;font-size:.75rem;padding:3px 10px"
+             onclick="downloadCorpus('${src.key}')">Download now</button>`
+        : '';
+      return `
+        <div class="chk-item ${cls}" id="corpus-src-${src.key}">
+          <div class="chk-icon">${icon}</div>
+          <div style="flex:1">
+            <div class="chk-name">${src.name}</div>
+            <div class="chk-ver">${src.detail}</div>
+            ${src.lines ? `<div class="chk-ver" style="color:var(--green,#059669)">${src.lines.toLocaleString()} lines in raw_kannada.txt</div>` : ''}
+            ${!src.ready ? `<div class="chk-need">${src.cmd}</div>` : ''}
+            ${dlBtn}
+          </div>
+        </div>`;
+    };
+
+    el.innerHTML =
+      '<div class="chk-section">Corpus sources</div>' +
+      '<div class="chk-grid">' + d.sources.map(card).join('') + '</div>' +
+      (d.corpus_lines
+        ? `<div style="margin-top:10px;font-size:.82rem;color:var(--mute)">
+             📄 <strong>kan_corpus.txt</strong> — ${d.corpus_lines.toLocaleString()} lines ready for rendering</div>`
+        : `<div style="margin-top:10px;font-size:.82rem;color:var(--red)">
+             ⚠ kan_corpus.txt not built yet — run Clean corpus after downloading</div>`);
+  } catch(e) {
+    document.getElementById('corpus-src-list').innerHTML =
+      '<span style="color:var(--mute);font-size:.84rem">Server not available.</span>';
+  }
+  btn.textContent = 'Check';
+}
+
+async function downloadCorpus(key) {
+  const card = document.getElementById(`corpus-src-${key}`);
+  if (card) card.querySelector('.chk-icon').textContent = '⏳';
+  try {
+    await fetch(`/api/corpus/download/${key}`, { method: 'POST' });
+    toast(`Downloading ${key} corpus — check Live log`);
+    setTimeout(loadCorpusSources, 3000);
+  } catch(e) { toast('Download failed — check server'); }
 }
 
 // ── System checklist ─────────────────────────────────────────────

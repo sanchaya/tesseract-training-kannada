@@ -79,9 +79,11 @@ kan_hist/
 │   └── kan_hist.traineddata      ← finished model (output of step 6)
 │
 ├── corpus/
-│   ├── download-wiki.py          download Kannada Wikipedia corpus
+│   ├── download-wikisource.py    ← PREFERRED: proofread pages from kn.wikisource.org
+│   ├── download-wiki.py          supplement: Kannada Wikipedia prose
 │   ├── clean-corpus.py           clean raw text → kan_corpus.txt
 │   ├── render-corpus.py          render corpus → PNG+gt.txt pairs
+│   ├── cache/                    downloaded dumps (gitignored — large files)
 │   └── kan_corpus.txt            cleaned training text (generated)
 │
 ├── fonts/                        font repos cloned by 01-prep-base.sh
@@ -135,17 +137,50 @@ Downloads `kan.traineddata` from tessdata_best, extracts `kan.lstm`, and clones 
 
 ### Step 2 — Build the corpus
 
-```bash
-# Download Kannada Wikipedia text (~150 MB, cached locally)
-python3 corpus/download-wiki.py --lines 5000
+The corpus is Kannada GT text that is rendered into training images. Two sources are available; Wikisource is strongly preferred for `kan_hist`.
 
-# Clean and filter the text
-python3 corpus/clean-corpus.py
+#### Preferred: Kannada Wikisource (proofread pages)
+
+[kn.wikisource.org](https://kn.wikisource.org) contains human-proofread transcriptions of scanned Kannada books — many of them 19th-century texts typeset in the same letterpress fonts (German Mission Press, Wesleyan Mission Press, Basel Mission Press) that `kan_hist` is trained on. This is the highest-quality GT source for historical Kannada OCR.
+
+Wikisource pages carry a quality rating:
+| Level | Meaning |
+|---|---|
+| 1 | Not proofread |
+| 2 | Problematic |
+| **3** | **Proofread** — reviewed by one human ✓ |
+| **4** | **Validated** — reviewed by two humans ✓✓ |
+
+```bash
+# Download proofread + validated pages (quality ≥ 3, dumps ~80 MB, cached)
+python3 corpus/download-wikisource.py --pages 3000
+
+# For validated-only (highest quality):
+python3 corpus/download-wikisource.py --pages 3000 --quality 4
+```
+
+The script downloads the knwikisource XML dump (~80 MB, cached in `corpus/cache/`), extracts `Page:` namespace entries, strips all Wikisource templates and wiki markup, and appends clean lines to `corpus/raw_kannada.txt`.
+
+#### Supplement: Kannada Wikipedia (modern prose)
+
+Wikipedia provides modern Kannada prose — useful for Unicode coverage but less relevant to historical typography. Use it to supplement, not replace, Wikisource.
+
+```bash
+# Download modern Kannada text (~150 MB dump, cached)
+python3 corpus/download-wiki.py --lines 5000
 ```
 
 `download-wiki.py` also generates character coverage lines — one line per Kannada Unicode codepoint (U+0C80–U+0CFF) — to guarantee complete glyph coverage regardless of corpus content.
 
-To supply your own corpus (Kannada Wikisource, historical books), write it to `corpus/raw_kannada.txt` and run `clean-corpus.py`. The cleaner keeps lines with at least 8 Kannada characters, drops lines with >80 characters, and strips non-Kannada content.
+#### Clean and prepare
+
+```bash
+python3 corpus/clean-corpus.py
+```
+
+The cleaner keeps lines with ≥ 8 Kannada characters, strips markdown/wiki artifacts (`*`, `#`, `==`), and drops lines longer than 80 characters. Output is `corpus/kan_corpus.txt`.
+
+You can also supply your own corpus — write lines to `corpus/raw_kannada.txt` and run `clean-corpus.py`.
 
 **Output:** `corpus/kan_corpus.txt` (~5,000+ lines)
 
