@@ -58,6 +58,8 @@ fs.mkdirSync(P.testImages,  { recursive: true });
 app.use(express.json({ limit: "50mb" }));
 app.use(express.static(P.public));
 app.use("/test-images", express.static(path.join(ROOT, "test-images")));
+app.use("/fonts",       express.static(path.join(ROOT, "fonts"),
+  { setHeaders: (res) => res.setHeader("Access-Control-Allow-Origin", "*") }));
 
 const upload = multer({ dest: path.join(ROOT, "tmp") });
 
@@ -481,6 +483,124 @@ app.post("/api/run/:step", (req, res) => {
   res.json({ ok: true, step });
 });
 
+// ── Font registry: scans actual files + merges manifest data ──────────────
+function scanFontDir(fontId) {
+  // Mirror of Python scan_font_dir — finds all TTF+OTF, both formats when both exist
+  const fontRoot = path.join(ROOT, "fonts", fontId);
+  if (!fs.existsSync(fontRoot)) return {};
+  const SKIP_DIRS  = new Set(["webfonts", "Source", "source"]);
+  const byStem     = {};
+
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!SKIP_DIRS.has(entry.name)) walk(fullPath);
+      } else {
+        if (/\[|\]/.test(entry.name)) continue;
+        const ext = path.extname(entry.name).toLowerCase();
+        if (ext !== ".ttf" && ext !== ".otf") continue;
+        const stem = path.basename(entry.name, ext);
+        const fmt  = ext.slice(1); // 'ttf' or 'otf'
+        if (!byStem[stem]) byStem[stem] = {};
+        if (!byStem[stem][fmt]) byStem[stem][fmt] = fullPath; // first found wins
+      }
+    }
+  }
+  walk(fontRoot);
+
+  const result = {};
+  for (const [stem, fmts] of Object.entries(byStem).sort()) {
+    if (fmts.ttf && fmts.otf) {
+      result[`${stem}-ttf`] = { path: fmts.ttf, url: "/" + fmts.ttf.replace(ROOT + "/", ""), fmt: "TTF" };
+      result[`${stem}-otf`] = { path: fmts.otf, url: "/" + fmts.otf.replace(ROOT + "/", ""), fmt: "OTF" };
+    } else if (fmts.ttf) {
+      result[stem] = { path: fmts.ttf, url: "/" + fmts.ttf.replace(ROOT + "/", ""), fmt: "TTF" };
+    } else {
+      result[stem] = { path: fmts.otf, url: "/" + fmts.otf.replace(ROOT + "/", ""), fmt: "OTF" };
+    }
+  }
+  return result;
+}
+
+app.get("/api/fonts-registry", (req, res) => {
+  const yaml = require("js-yaml");
+  let fonts = [];
+  try {
+    const doc  = yaml.load(fs.readFileSync(P.fontsYml, "utf8"));
+    const tiDir = path.join(ROOT, "test-images");
+
+    fonts = (doc.fonts || []).map(f => {
+      const scanned  = scanFontDir(f.id);
+      const seenNames = new Set();
+      const variants  = [];
+
+      // Follow font_files order then add extras from scan
+      for (const filename of (f.font_files || [])) {
+        const stem = filename.replace(/\.[^.]+$/, "");
+        for (const suffix of [`${stem}-ttf`, `${stem}-otf`, stem]) {
+          if (scanned[suffix] && !seenNames.has(suffix)) {
+            const imagesDir = path.join(tiDir, f.id, suffix);
+            variants.push({
+              name:        suffix,
+              displayName: suffix.replace(/^Karnata(GTN|GermanMissionPressTypeface|WesleyanMissionPress|FKittel)?-?/,"") || suffix,
+              fmt:         scanned[suffix].fmt,
+              fontUrl:     scanned[suffix].url,
+              hasImages:   fs.existsSync(imagesDir),
+              imagesUrl:   `/test-images/${f.id}/${encodeURIComponent(suffix)}`,
+            });
+            seenNames.add(suffix);
+          }
+        }
+      }
+      // Append remaining scanned (extra weights etc.)
+      for (const [name, info] of Object.entries(scanned).sort()) {
+        if (!seenNames.has(name)) {
+          const imagesDir = path.join(tiDir, f.id, name);
+          variants.push({
+            name,
+            displayName: name,
+            fmt:         info.fmt,
+            fontUrl:     info.url,
+            hasImages:   fs.existsSync(imagesDir),
+            imagesUrl:   `/test-images/${f.id}/${encodeURIComponent(name)}`,
+          });
+          seenNames.add(name);
+        }
+      }
+      return { id: f.id, name: f.name, description: f.description, degrade: !!f.degrade, variants };
+    });
+  } catch(e) {
+    return res.status(500).json({ error: e.message });
+  }
+  res.json({ fonts });
+});
+
+// ── List PNGs for a specific font/variant ─────────────────────────────────
+app.get("/api/test-images/:fontId/:variant", (req, res) => {
+  const dir = path.join(ROOT, "test-images", req.params.fontId,
+                        decodeURIComponent(req.params.variant));
+  if (!fs.existsSync(dir)) return res.json({ files: [] });
+  const manifest = path.join(dir, "manifest.json");
+  if (fs.existsSync(manifest)) {
+    try {
+      const m = JSON.parse(fs.readFileSync(manifest, "utf8"));
+      return res.json({
+        files: (m.characters || []).map(c => ({
+          ...c,
+          url: `/test-images/${req.params.fontId}/${req.params.variant}/${c.file}`,
+        }))
+      });
+    } catch(_) {}
+  }
+  // Fallback: raw directory listing
+  const files = fs.readdirSync(dir)
+    .filter(f => f.endsWith(".png"))
+    .sort()
+    .map(f => ({ file: f, url: `/test-images/${req.params.fontId}/${req.params.variant}/${f}` }));
+  res.json({ files });
+});
+
 // ── Serve tessdata for Tesseract.js ────────────────────────────────────────
 app.get("/tessdata/:file", (req, res) => {
   const { file } = req.params;
@@ -547,7 +667,7 @@ ${bcer.length ? `<h2>BCER chart</h2><canvas id="c" height="60"></canvas>
   res.send(html);
 });
 
-// ── Generate Kannada test images ──────────────────────────────────────────
+// ── Generate Kannada test images (per-font or all) ────────────────────────
 app.post("/api/generate-test-images", async (req, res) => {
   const script = path.join(ROOT, "scripts", "gen-char-images.py");
   const outDir = path.join(ROOT, "test-images");
@@ -555,9 +675,10 @@ app.post("/api/generate-test-images", async (req, res) => {
     return res.status(404).json({ error: "gen-char-images.py not found" });
   }
   const { spawn } = require("child_process");
-  const proc = spawn("python3", [script, "--outdir", outDir, "--dpi", "150"], {
-    cwd: ROOT,
-  });
+  const fontId = req.body && req.body.fontId;
+  const args   = ["python3", script, "--outdir", outDir, "--dpi", "150"];
+  if (fontId) { args.push("--font-id"); args.push(fontId); }
+  const proc = spawn(args[0], args.slice(1), { cwd: ROOT });
   let stdout = "", stderr = "";
   proc.stdout.on("data", d => { stdout += d; });
   proc.stderr.on("data", d => { stderr += d; });

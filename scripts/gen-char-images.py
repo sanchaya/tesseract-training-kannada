@@ -2,37 +2,36 @@
 """
 gen-char-images.py
 ──────────────────
-Generates PNG test images of Kannada characters and conjuncts.
-These images are used for OCR testing in the TrainOCR portal.
+Renders Kannada Unicode characters to PNG test images using each registered
+font from fonts.yml.  Output is grouped by font+variant:
 
-Output:  test-images/char_<name>.png   — single characters
-         test-images/line_<group>.png  — full group lines
-         test-images/conjunct_<name>.png — complex conjuncts
+    test-images/
+      <font_id>/
+        <variant_name>/
+          char_A.png        — single character, white background
+          char_A.gt.txt     — ground-truth text (the Unicode character)
+          line_vowels.png   — full vowel row as one line image
+          line_vowels.gt.txt
+          …
+          conjunct_ksha.png
+          sentence_01.png
+          manifest.json
 
 Usage:
-    python3 scripts/gen-char-images.py
-    python3 scripts/gen-char-images.py --outdir test-images --dpi 150
+    python3 scripts/gen-char-images.py                   # all fonts
+    python3 scripts/gen-char-images.py --font-id kan_gmp # one font
+    python3 scripts/gen-char-images.py --dpi 150 --size 48
 
-Requires: Pillow  (pip install Pillow --break-system-packages)
+Requires: Pillow, pyyaml
+    pip install Pillow pyyaml --break-system-packages
 """
 
-import sys
-import os
-import argparse
-import json
+import sys, os, json, argparse, re
 from pathlib import Path
 
-def parse_args():
-    p = argparse.ArgumentParser()
-    p.add_argument('--outdir', default='test-images')
-    p.add_argument('--dpi',    type=int, default=150)
-    p.add_argument('--font',   default=None,
-                   help='Path to .ttf/.otf Kannada font. Auto-detected if not given.')
-    p.add_argument('--size',   type=int, default=48, help='Font size in points')
-    return p.parse_args()
+ROOT = Path(__file__).parent.parent
 
-
-# ── Kannada character sets ────────────────────────────────────────────────────
+# ── Kannada character sets ─────────────────────────────────────────────────
 
 VOWELS = [
     ('ಅ', '0C85', 'A'),   ('ಆ', '0C86', 'AA'),  ('ಇ', '0C87', 'I'),
@@ -57,6 +56,7 @@ CONSONANTS = [
     ('ಸ', '0CB8', 'SA'),  ('ಹ', '0CB9', 'HA'),
 ]
 
+# Conjuncts: (rendered cluster, safe filename stem)
 CONJUNCTS = [
     ('ಕ್ಷ',  'ksha'),  ('ಜ್ಞ',  'jnya'),  ('ತ್ತ',  'tt'),
     ('ದ್ದ',  'dd'),   ('ನ್ನ',  'nn'),   ('ಮ್ಮ',  'mm'),
@@ -64,17 +64,17 @@ CONJUNCTS = [
     ('ಗ್ರ',  'gr'),   ('ತ್ರ',  'tr'),   ('ಶ್ರ',  'shr'),
     ('ಸ್ವ',  'sv'),   ('ನ್ತ',  'nt'),   ('ರ್ಕ',  'rk'),
     ('ಕ್ಕ',  'kk'),   ('ಬ್ಬ',  'bb'),   ('ಷ್ಟ',  'sht'),
-    ('ಕ್ತ',  'kt'),   ('ನ್ಮ',  'nm'),
+    ('ಕ್ತ',  'kt'),   ('ನ್ಮ',  'nm'),   ('ಧ್ವ',  'dhv'),
+    ('ಸ್ಪ',  'sp'),   ('ನ್ದ',  'nd'),   ('ರ್ಥ',  'rth'),
 ]
 
 DIGITS = [
     ('೦', '0CE6', '0'), ('೧', '0CE7', '1'), ('೨', '0CE8', '2'),
     ('೩', '0CE9', '3'), ('೪', '0CEA', '4'), ('೫', '0CEB', '5'),
     ('೬', '0CEC', '6'), ('೭', '0CED', '7'), ('೮', '0CEE', '8'),
-    ('೯', '0CEF', '9'), ('।', '0964', 'danda'), ('॥', '0965', 'ddanda'),
+    ('೯', '0CEF', '9'), ('।',  '0964', 'danda'), ('॥', '0965', 'ddanda'),
 ]
 
-# Sample sentences using historical Kannada words (virama-heavy)
 SAMPLE_SENTENCES = [
     "ಕರ್ನಾಟಕ ರಾಜ್ಯದ ಪ್ರಾಚೀನ ಶಾಸನಗಳು",
     "ಶ್ರೀ ಕೃಷ್ಣನ ಭಕ್ತಿಯಿಂದ ಮೋಕ್ಷ ಸಿದ್ಧಿಸುವುದು",
@@ -82,218 +82,407 @@ SAMPLE_SENTENCES = [
     "ಕನ್ನಡ ಸಾಹಿತ್ಯದ ಪರಂಪರೆ ಅತ್ಯಂತ ಶ್ರೀಮಂತ",
     "ಪ್ರಕೃತಿಯ ಸೌಂದರ್ಯವನ್ನು ಕಾಪಾಡಬೇಕು",
     "ರಾಷ್ಟ್ರ ಸೇವೆ ದೈವ ಸೇವೆ ಎಂದು ತಿಳಿಯಬೇಕು",
-    "ಶ್ರದ್ಧೆ ಭಕ್ತಿ ಜ್ಞಾನ ವೈರಾಗ್ಯ",
     "ಅಷ್ಟಾದಶ ಪುರಾಣಗಳ ಸಂಕ್ಷಿಪ್ತ ವಿವರ",
+    "ಶ್ರದ್ಧೆ ಭಕ್ತಿ ಜ್ಞಾನ ವೈರಾಗ್ಯ ಮೋಕ್ಷ",
 ]
 
+# ── Font discovery ─────────────────────────────────────────────────────────
 
-def find_kannada_font():
-    """Find a usable Kannada font on the system."""
-    candidates = [
-        # Homebrew
-        '/opt/homebrew/share/fonts/NotoSansKannada-Regular.ttf',
-        '/usr/local/share/fonts/NotoSansKannada-Regular.ttf',
-        # macOS system
-        '/System/Library/Fonts/Supplemental/Kohinoor Kannada.ttc',
-        '/Library/Fonts/NotoSansKannada-Regular.ttf',
-        # Project fonts dir (populated by 01-prep-base.sh)
-        'fonts/kan_gmp/KarnatakaText-Regular.ttf',
-        'fonts/kan_gmp/Kedage-n.ttf',
-        'fonts/kan_gmp/Mallige.ttf',
-        'fonts/Tunga Regular.ttf',
+def load_fonts_yml():
+    """Load fonts.yml and return list of font dicts."""
+    import yaml
+    fpath = ROOT / 'fonts.yml'
+    if not fpath.exists():
+        return []
+    with open(fpath, encoding='utf-8') as f:
+        doc = yaml.safe_load(f)
+    return doc.get('fonts', [])
+
+
+def scan_font_dir(font_id):
+    """
+    Scan fonts/<id>/ for ALL TTF and OTF files.
+    - If a stem has BOTH TTF and OTF: include both as '<Stem>-ttf' and '<Stem>-otf'
+      (they may rasterise slightly differently → more training diversity)
+    - If a stem has only one format: use '<Stem>' (no suffix)
+    - Skips: variable fonts ([wght]), webfonts/, Source/ dirs, duplicate files
+    Returns dict: variant_name → Path
+    """
+    font_root = ROOT / 'fonts' / font_id
+    if not font_root.exists():
+        return {}
+
+    SKIP_DIRS = {'webfonts', 'Source', 'source'}
+
+    # Group by stem → {ttf: Path, otf: Path}
+    by_stem = {}
+
+    for p in sorted(font_root.rglob('*')):
+        if not p.is_file():
+            continue
+        if any(part in SKIP_DIRS for part in p.parts):
+            continue
+        if '[' in p.name or ']' in p.name:
+            continue
+
+        suffix = p.suffix.lower()
+        if suffix not in ('.ttf', '.otf'):
+            continue
+
+        stem = p.stem
+        fmt  = suffix[1:]   # 'ttf' or 'otf'
+
+        if stem not in by_stem:
+            by_stem[stem] = {}
+        # Don't overwrite with a duplicate in a different subdir
+        if fmt not in by_stem[stem]:
+            by_stem[stem][fmt] = p
+
+    # Build variant name → path mapping
+    result = {}
+    for stem, fmts in sorted(by_stem.items()):
+        if 'ttf' in fmts and 'otf' in fmts:
+            result[f'{stem}-ttf'] = fmts['ttf']
+            result[f'{stem}-otf'] = fmts['otf']
+        elif 'ttf' in fmts:
+            result[stem] = fmts['ttf']
+        else:
+            result[stem] = fmts['otf']
+
+    return result
+
+
+def resolve_font_path(font_entry, filename):
+    """
+    Resolve actual path for a specific filename listed in fonts.yml.
+    Tries TTF subdirs first, falls back to OTF counterpart.
+    """
+    fid     = font_entry['id']
+    fontdir = font_entry.get('font_dir', 'fonts')
+    base    = ROOT / 'fonts' / fid
+
+    stem    = re.sub(r'\.[^.]+$', '', filename)
+    suffix  = Path(filename).suffix.lower()
+
+    # Priority order: exact path, ttf/ subdir, otf/ subdir, root
+    search_roots = [
+        base / fontdir,
+        base / fontdir / 'ttf',
+        base / fontdir / 'otf',
+        base,
     ]
-    # Also search project fonts/
-    for p in Path('fonts').rglob('*.ttf') if Path('fonts').exists() else []:
-        candidates.append(str(p))
+    for root in search_roots:
+        p = root / filename
+        if p.exists():
+            return p
 
-    for c in candidates:
-        if Path(c).exists():
-            return c
+    # Try OTF counterpart if TTF requested but missing
+    if suffix == '.ttf':
+        otf = filename[:-4] + '.otf'
+        for root in search_roots:
+            p = root / otf
+            if p.exists():
+                return p
 
-    # Try fc-list
-    import subprocess
-    try:
-        out = subprocess.check_output(
-            ['fc-list', ':lang=kn', '--format=%{file}\n'], text=True
-        ).strip().split('\n')
-        for f in out:
-            if f and Path(f).exists():
-                return f
-    except Exception:
-        pass
-    return None
+    # Fall back to directory scan
+    scanned = scan_font_dir(fid)
+    return scanned.get(stem)
 
 
-def render_text(draw, font, text, x, y, fill=(30, 27, 75)):
-    """Draw text with a label."""
-    draw.text((x, y), text, font=font, fill=fill)
+def get_font_variants(font_entry):
+    """
+    Return list of (variant_name, path) for a font entry, covering ALL TTF+OTF.
+
+    Strategy:
+      • For each stem in font_files:
+          – if both TTF and OTF exist → add '<Stem>-ttf' and '<Stem>-otf'
+          – if only one format exists → add '<Stem>' (no suffix)
+      • Then add any extra stems found on disk that aren't already covered.
+    """
+    fid        = font_entry['id']
+    scanned    = scan_font_dir(fid)   # variant_name → path (already suffixed when both exist)
+    seen_names = set()
+    variants   = []
+
+    # 1. Walk font_files in declared order to set the primary ordering
+    for filename in font_entry.get('font_files', []):
+        stem = re.sub(r'\.[^.]+$', '', filename)
+        added = False
+        for suffix in (f'{stem}-ttf', f'{stem}-otf', stem):
+            if suffix in scanned and suffix not in seen_names:
+                variants.append((suffix, scanned[suffix]))
+                seen_names.add(suffix)
+                added = True
+        if not added:
+            # Last resort: resolve directly
+            p = resolve_font_path(font_entry, filename)
+            if p and stem not in seen_names:
+                variants.append((stem, p))
+                seen_names.add(stem)
+
+    # 2. Append any remaining scanned variants (extra weights, OTF-only, etc.)
+    for name in sorted(scanned):
+        if name not in seen_names:
+            variants.append((name, scanned[name]))
+            seen_names.add(name)
+
+    return variants
 
 
-def make_char_image(char, name, font, out_dir, size, dpi):
-    """Render a single character + its label to PNG."""
+# ── Image rendering ────────────────────────────────────────────────────────
+
+BG    = (255, 255, 255)
+INK   = (20,  20,  60)
+MUTED = (120, 130, 150)
+
+
+def render_char_image(ch, label, font, size, dpi, out_path, write_gt=True):
+    """Render a single character (+ small label) to a PNG."""
     from PIL import Image, ImageDraw, ImageFont
-    pad = size // 2
-    # Measure the character
-    img_tmp = Image.new('RGB', (1, 1))
-    d_tmp   = ImageDraw.Draw(img_tmp)
-    bb = d_tmp.textbbox((0, 0), char, font=font)
-    cw, ch = bb[2] - bb[0] + 1, bb[3] - bb[1] + 1
 
-    # Label font (small, system)
+    pad = max(size // 3, 16)
+    tmp = Image.new('RGB', (1, 1))
+    dtmp = ImageDraw.Draw(tmp)
+
+    bb = dtmp.textbbox((0, 0), ch, font=font)
+    cw, ch_h = bb[2] - bb[0], bb[3] - bb[1]
+
+    # Label font
+    lbl_size = max(size // 4, 9)
     try:
-        lbl_font = ImageFont.truetype(font.path, size=size // 3)
+        lbl_font = ImageFont.truetype(str(font.path), size=lbl_size)
     except Exception:
         lbl_font = ImageFont.load_default()
+    lbl_bb = dtmp.textbbox((0, 0), label, font=lbl_font)
+    lw = lbl_bb[2] - lbl_bb[0]
 
-    lbl = name
-    lbl_bb = d_tmp.textbbox((0, 0), lbl, font=lbl_font)
-    lbl_w = lbl_bb[2] - lbl_bb[0]
+    W = max(cw + pad * 2, lw + pad * 2, size + pad)
+    H = ch_h + pad * 3 + (lbl_bb[3] - lbl_bb[1]) + 4
 
-    W = max(cw + pad * 2, lbl_w + pad * 2, size * 2)
-    H = ch + pad * 3 + (lbl_bb[3] - lbl_bb[1]) + 4
-
-    img = Image.new('RGB', (W, H), (255, 255, 255))
+    img = Image.new('RGB', (W, H), BG)
     d   = ImageDraw.Draw(img)
 
     cx = (W - cw) // 2 - bb[0]
     cy = pad - bb[1]
-    d.text((cx, cy), char, font=font, fill=(30, 27, 75))
+    d.text((cx, cy), ch, font=font, fill=INK)
 
-    lx = (W - lbl_w) // 2
-    ly = cy + ch + pad // 2
-    d.text((lx, ly), lbl, font=lbl_font, fill=(107, 114, 128))
+    lx = (W - lw) // 2
+    ly = cy + ch_h + pad // 2
+    d.text((lx, ly), label, font=lbl_font, fill=MUTED)
 
-    fname = out_dir / f"char_{name.lower().replace(' ','_')}.png"
-    img.save(str(fname), dpi=(dpi, dpi))
-    return fname
-
-
-def make_line_image(items, group_name, font, out_dir, size, dpi):
-    """Render a row of characters as a single PNG (good for OCR line testing)."""
-    from PIL import Image, ImageDraw, ImageFont
-    pad = size // 3
-    chars = [x[0] for x in items]
-    line  = '  '.join(chars)
-
-    img_tmp = Image.new('RGB', (1, 1))
-    d_tmp   = ImageDraw.Draw(img_tmp)
-    bb = d_tmp.textbbox((0, 0), line, font=font)
-    lw = bb[2] - bb[0]
-    lh = bb[3] - bb[1]
-
-    W = lw + pad * 4
-    H = lh + pad * 2
-    img = Image.new('RGB', (W, H), (255, 255, 255))
-    d   = ImageDraw.Draw(img)
-    d.text((pad * 2 - bb[0], pad - bb[1]), line, font=font, fill=(30, 27, 75))
-
-    fname = out_dir / f"line_{group_name}.png"
-    img.save(str(fname), dpi=(dpi, dpi))
-    # Also write .gt.txt for lstmf generation
-    (out_dir / f"line_{group_name}.gt.txt").write_text(line, encoding='utf-8')
-    return fname
+    img.save(str(out_path), dpi=(dpi, dpi))
+    if write_gt:
+        out_path.with_suffix('.gt.txt').write_text(ch, encoding='utf-8')
+    return out_path
 
 
-def make_sentence_image(text, idx, font, out_dir, size, dpi):
-    """Render a full sample sentence."""
+def render_line_image(items, font, dpi, out_path, text_override=None):
+    """Render a row of characters as a single line image."""
     from PIL import Image, ImageDraw
-    pad = size // 2
 
-    img_tmp = Image.new('RGB', (1, 1))
-    d_tmp   = ImageDraw.Draw(img_tmp)
-    bb = d_tmp.textbbox((0, 0), text, font=font)
+    text = text_override or '  '.join(x[0] for x in items)
+    pad  = 20
+    tmp  = Image.new('RGB', (1, 1))
+    dtmp = ImageDraw.Draw(tmp)
+    bb   = dtmp.textbbox((0, 0), text, font=font)
     lw, lh = bb[2] - bb[0], bb[3] - bb[1]
 
     W = lw + pad * 4
     H = lh + pad * 2
-    img = Image.new('RGB', (W, H), (255, 255, 255))
-    d   = ImageDraw.Draw(img)
-    d.text((pad * 2 - bb[0], pad - bb[1]), text, font=font, fill=(30, 27, 75))
-
-    fname = out_dir / f"sentence_{idx:02d}.png"
-    img.save(str(fname), dpi=(dpi, dpi))
-    (out_dir / f"sentence_{idx:02d}.gt.txt").write_text(text, encoding='utf-8')
-    return fname
+    img = Image.new('RGB', (W, H), BG)
+    ImageDraw.Draw(img).text((pad * 2 - bb[0], pad - bb[1]), text, font=font, fill=INK)
+    img.save(str(out_path), dpi=(dpi, dpi))
+    out_path.with_suffix('.gt.txt').write_text(text, encoding='utf-8')
+    return out_path
 
 
-def main():
-    args = parse_args()
+# ── Per-font generation ────────────────────────────────────────────────────
+
+def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
+    """Generate all character images for one font variant."""
+    from PIL import ImageFont
+
+    out_dir = out_base / font_id / variant_name
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        from PIL import Image, ImageDraw, ImageFont
+        font = ImageFont.truetype(str(font_path), size=size)
+    except Exception as e:
+        print(f"    ✗ Cannot load font {font_path}: {e}")
+        return 0
+
+    generated = []
+    errors    = []
+
+    # ── Individual characters ──────────────────────────────────
+    for ch, cp, name in VOWELS:
+        fname = out_dir / f"vowel_{name.lower()}.png"
+        try:
+            render_char_image(ch, f"U+{cp}", font, size, dpi, fname)
+            generated.append({'type':'vowel','ch':ch,'cp':cp,'name':name,'file':fname.name})
+        except Exception as e:
+            errors.append(f"vowel {name}: {e}")
+
+    for ch, cp, name in CONSONANTS:
+        fname = out_dir / f"consonant_{name.lower()}.png"
+        try:
+            render_char_image(ch, f"U+{cp}", font, size, dpi, fname)
+            generated.append({'type':'consonant','ch':ch,'cp':cp,'name':name,'file':fname.name})
+        except Exception as e:
+            errors.append(f"consonant {name}: {e}")
+
+    for ch, stem in CONJUNCTS:
+        fname = out_dir / f"conjunct_{stem}.png"
+        try:
+            render_char_image(ch, stem, font, size, dpi, fname)
+            generated.append({'type':'conjunct','ch':ch,'name':stem,'file':fname.name})
+        except Exception as e:
+            errors.append(f"conjunct {stem}: {e}")
+
+    for ch, cp, name in DIGITS:
+        fname = out_dir / f"digit_{name}.png"
+        try:
+            render_char_image(ch, f"U+{cp}", font, size, dpi, fname)
+            generated.append({'type':'digit','ch':ch,'cp':cp,'name':name,'file':fname.name})
+        except Exception as e:
+            errors.append(f"digit {name}: {e}")
+
+    # ── Line images ────────────────────────────────────────────
+    for group_name, items in [
+        ('vowels',     [(ch,cp,name) for ch,cp,name in VOWELS]),
+        ('consonants', [(ch,cp,name) for ch,cp,name in CONSONANTS]),
+        ('digits',     [(ch,cp,name) for ch,cp,name in DIGITS]),
+    ]:
+        fname = out_dir / f"line_{group_name}.png"
+        try:
+            render_line_image([(ch,) for ch,*_ in items], font, dpi, fname)
+            generated.append({'type':'line','name':group_name,'file':fname.name})
+        except Exception as e:
+            errors.append(f"line {group_name}: {e}")
+
+    # Conjuncts line
+    fname = out_dir / 'line_conjuncts.png'
+    try:
+        render_line_image(CONJUNCTS, font, dpi, fname)
+        generated.append({'type':'line','name':'conjuncts','file':fname.name})
+    except Exception as e:
+        errors.append(f"line conjuncts: {e}")
+
+    # ── Sample sentences ───────────────────────────────────────
+    for i, sent in enumerate(SAMPLE_SENTENCES, 1):
+        fname = out_dir / f"sentence_{i:02d}.png"
+        try:
+            render_line_image([], font, dpi, fname, text_override=sent)
+            generated.append({'type':'sentence','name':f'sentence_{i:02d}','file':fname.name})
+        except Exception as e:
+            errors.append(f"sentence {i}: {e}")
+
+    if errors:
+        print(f"    ⚠ {len(errors)} errors:")
+        for err in errors[:5]:
+            print(f"      {err}")
+
+    # ── Manifest ───────────────────────────────────────────────
+    manifest = {
+        'font_id':      font_id,
+        'variant':      variant_name,
+        'font_path':    str(font_path),
+        'size':         size,
+        'dpi':          dpi,
+        'count':        len(generated),
+        'errors':       len(errors),
+        'characters':   generated,
+    }
+    (out_dir / 'manifest.json').write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
+
+    return len(generated)
+
+
+# ── Main ───────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--outdir',   default=str(ROOT / 'test-images'))
+    parser.add_argument('--dpi',      type=int, default=150)
+    parser.add_argument('--size',     type=int, default=48)
+    parser.add_argument('--font-id',  default=None,
+                        help='Generate for one font only (e.g. kan_gmp)')
+    args = parser.parse_args()
+
+    try:
+        from PIL import Image
     except ImportError:
         print("ERROR: Pillow not installed.")
         print("  pip install Pillow --break-system-packages")
         sys.exit(1)
 
-    out_dir = Path(args.outdir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    font_path = args.font or find_kannada_font()
-    if not font_path:
-        print("ERROR: No Kannada font found.")
-        print("  Run  ./scripts/01-prep-base.sh  first to clone fonts,")
-        print("  or specify --font /path/to/KannadaFont.ttf")
+    try:
+        import yaml
+    except ImportError:
+        print("ERROR: PyYAML not installed.")
+        print("  pip install pyyaml --break-system-packages")
         sys.exit(1)
 
-    print(f"  Font:   {font_path}")
-    print(f"  Size:   {args.size}pt @ {args.dpi}dpi")
-    print(f"  Output: {out_dir}/")
+    out_base = Path(args.outdir)
+    fonts    = load_fonts_yml()
 
-    font = ImageFont.truetype(font_path, size=args.size)
+    if not fonts:
+        print("ERROR: No fonts found in fonts.yml")
+        sys.exit(1)
 
-    generated = []
+    if args.font_id:
+        fonts = [f for f in fonts if f['id'] == args.font_id]
+        if not fonts:
+            print(f"ERROR: font-id '{args.font_id}' not found in fonts.yml")
+            sys.exit(1)
 
-    # Individual characters
-    print("\n→ Vowels…")
-    for ch, cp, name in VOWELS:
-        f = make_char_image(ch, name, font, out_dir, args.size, args.dpi)
-        generated.append(str(f))
+    total_images = 0
+    summary = []
 
-    print("→ Consonants…")
-    for ch, cp, name in CONSONANTS:
-        f = make_char_image(ch, name, font, out_dir, args.size, args.dpi)
-        generated.append(str(f))
+    print(f"\n{'━'*60}")
+    print(f"  Generating Kannada Unicode test images")
+    print(f"  Size {args.size}pt @ {args.dpi}dpi  →  {out_base}/")
+    print(f"{'━'*60}")
 
-    print("→ Conjuncts…")
-    for ch, name in CONJUNCTS:
-        f = make_char_image(ch, name, font, out_dir, args.size, args.dpi)
-        generated.append(str(f))
+    for font_entry in fonts:
+        fid      = font_entry['id']
+        fname    = font_entry['name']
+        variants = get_font_variants(font_entry)
 
-    print("→ Digits…")
-    for ch, cp, name in DIGITS:
-        f = make_char_image(ch, f"digit_{name}", font, out_dir, args.size, args.dpi)
-        generated.append(str(f))
+        if not variants:
+            print(f"\n  [{fid}] {fname}: ⚠ no font files found, skipping")
+            continue
 
-    # Line images (better for OCR)
-    print("→ Line images…")
-    f = make_line_image(VOWELS,      'vowels',      font, out_dir, args.size, args.dpi)
-    generated.append(str(f))
-    f = make_line_image(CONSONANTS,  'consonants',  font, out_dir, args.size, args.dpi)
-    generated.append(str(f))
-    f = make_line_image(CONJUNCTS,   'conjuncts',   font, out_dir, args.size, args.dpi)
-    generated.append(str(f))
-    f = make_line_image(DIGITS,      'digits',      font, out_dir, args.size, args.dpi)
-    generated.append(str(f))
+        print(f"\n  [{fid}] {fname}")
+        for variant_name, font_path in variants:
+            print(f"    {variant_name}  ({font_path.name})")
+            n = generate_for_variant(fid, variant_name, font_path,
+                                     out_base, args.size, args.dpi)
+            print(f"    → {n} images")
+            total_images += n
+            summary.append({'font_id': fid, 'font_name': fname,
+                             'variant': variant_name, 'count': n,
+                             'dir': str(out_base / fid / variant_name)})
 
-    # Sample sentences
-    print("→ Sample sentences…")
-    for i, sent in enumerate(SAMPLE_SENTENCES):
-        f = make_sentence_image(sent, i + 1, font, out_dir, args.size, args.dpi)
-        generated.append(str(f))
+    # Top-level manifest
+    top_manifest = {
+        'total':   total_images,
+        'dpi':     args.dpi,
+        'size':    args.size,
+        'fonts':   summary,
+    }
+    (out_base / 'manifest.json').write_text(
+        json.dumps(top_manifest, ensure_ascii=False, indent=2), encoding='utf-8')
 
-    print(f"\n✓ {len(generated)} images written to {out_dir}/")
+    print(f"\n{'━'*60}")
+    print(f"  ✓ {total_images} images across {len(summary)} variants")
+    print(f"  Manifest: {out_base}/manifest.json")
+    print(f"{'━'*60}\n")
 
-    # Write manifest
-    manifest = out_dir / 'manifest.json'
-    manifest.write_text(json.dumps({
-        'count': len(generated),
-        'font':  font_path,
-        'files': generated,
-    }, ensure_ascii=False, indent=2))
-
-    print(f"  Manifest: {manifest}")
-    return len(generated)
+    # Output JSON for server to parse
+    print(json.dumps({'ok': True, 'total': total_images, 'fonts': summary}))
+    return total_images
 
 
 if __name__ == '__main__':
