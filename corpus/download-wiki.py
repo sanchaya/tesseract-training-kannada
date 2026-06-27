@@ -5,6 +5,13 @@ download-wiki.py
 Downloads the Kannada Wikipedia text dump and extracts clean Kannada prose
 into corpus/raw_kannada.txt, ready for clean-corpus.py.
 
+NOTE: For training kan_hist (historical Kannada), prefer Wikisource over
+Wikipedia — Wikisource has human-proofread transcriptions of 19th-century
+Kannada books typeset in the same letterpress fonts we are fine-tuning on.
+
+    python3 corpus/download-wikisource.py   ← preferred for kan_hist
+    python3 corpus/download-wiki.py         ← supplement with modern Kannada
+
 Also prepends character-coverage lines so every Kannada Unicode codepoint
 appears in training at least once.
 
