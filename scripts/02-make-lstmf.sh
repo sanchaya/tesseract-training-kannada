@@ -28,6 +28,45 @@ LSTMF_DIR="$ROOT/lstmf"
 RENDERED_DIR="$ROOT/rendered"
 SCAN_DIR="$ROOT/scan-input"
 
+# ── Tesseract 5 check ─────────────────────────────────────────────
+TESS_VER=$(tesseract --version 2>&1 | head -1)
+if echo "$TESS_VER" | grep -qE "^tesseract [45]\."; then
+    echo "  Tesseract: $TESS_VER"
+    if echo "$TESS_VER" | grep -q "^tesseract 4\."; then
+        echo ""
+        echo "  ⚠  WARNING: Tesseract 4 detected."
+        echo "     Tesseract 4 cannot encode the Kannada virama (U+0CCD / ್)"
+        echo "     in LSTM training — causes 'Encoding of string failed' errors."
+        echo ""
+        echo "     Upgrade to Tesseract 5 first:"
+        echo "       macOS:  brew install tesseract"
+        echo "       Ubuntu: sudo add-apt-repository ppa:alex-p/tesseract-ocr5"
+        echo "               sudo apt update && sudo apt install tesseract-ocr"
+        echo ""
+        read -r -p "  Continue anyway? [y/N] " reply
+        [[ "${reply,,}" == "y" ]] || exit 1
+    fi
+else
+    echo "ERROR: Tesseract not found. Install Tesseract 5 first."
+    echo "  macOS:  brew install tesseract"
+    exit 1
+fi
+
+# ── Ensure tessdata configs dir exists (needed for lstm.train) ────
+if [ ! -d "$TESSDATA_BEST/configs" ]; then
+    echo "  Setting up tessdata configs..."
+    SYS_CONFIGS=$(find /usr/local/share /opt/homebrew/share /usr/share \
+        -name "configs" -path "*/tessdata/*" 2>/dev/null | head -1)
+    if [ -n "$SYS_CONFIGS" ]; then
+        ln -sf "$SYS_CONFIGS" "$TESSDATA_BEST/configs"
+        echo "  ✓ Linked configs from $SYS_CONFIGS"
+    else
+        echo "ERROR: Cannot find tessdata configs dir."
+        echo "  Locate it with: find / -name 'lstm.train' 2>/dev/null | head -5"
+        exit 1
+    fi
+fi
+
 [ -f "$TESSDATA_BEST/kan.traineddata" ] || {
     echo "ERROR: tessdata_best/kan.traineddata not found."
     echo "  Run ./scripts/01-prep-base.sh first."
@@ -80,25 +119,37 @@ def make_lstmf(img_path, out_dir, list_file, tessdata):
     out_dir  = Path(out_dir)
     stem     = img_path.stem
     dst_img  = out_dir / (stem + img_path.suffix)
+    dst_box  = out_dir / (stem + '.box')
     lstmf    = out_dir / (stem + '.lstmf')
 
     shutil.copy2(img_path, dst_img)
 
-    # Try PSM 7 (single text line) first, fall back to PSM 6
-    for psm in ("7", "6"):
-        result = subprocess.run(
-            ["tesseract", str(dst_img), str(out_dir / stem),
-             "--tessdata-dir", tessdata,
-             "--dpi", "150", "--psm", psm,
-             "-l", "kan", "lstm.train"],
-            capture_output=True, text=True
-        )
-        if lstmf.exists():
-            with open(list_file, 'a', encoding='utf-8') as lf:
-                lf.write(str(lstmf.resolve()) + '\n')
-            return True
+    # Get image dimensions for the WordStr box
+    from PIL import Image as PILImage
+    with PILImage.open(dst_img) as im:
+        w, h = im.size
 
+    # Create WordStr box file (Tesseract 4/5 line-level training format)
+    gt_text = gt_path.read_text(encoding='utf-8').strip()
+    with open(dst_box, 'w', encoding='utf-8') as bf:
+        bf.write(f"WordStr 0 0 {w} {h} 0 #{gt_text}\n\n")
+
+    # Generate lstmf
+    result = subprocess.run(
+        ["tesseract", str(dst_img), str(out_dir / stem),
+         "--tessdata-dir", tessdata,
+         "--dpi", "150", "--psm", "6",
+         "-l", "kan", "lstm.train"],
+        capture_output=True, text=True
+    )
+    if lstmf.exists():
+        with open(list_file, 'a', encoding='utf-8') as lf:
+            lf.write(str(lstmf.resolve()) + '\n')
+        return True
+
+    # Clean up on failure
     dst_img.unlink(missing_ok=True)
+    dst_box.unlink(missing_ok=True)
     return False
 
 imgs = sorted(
@@ -110,7 +161,7 @@ for img in imgs:
     if not img.with_suffix('.gt.txt').exists():
         skip += 1
         continue
-    if make_lstmf(img, out_dir, list_txt, tessdata):
+    if make_lstmf(img, out_dir, list_txt, tdata):
         ok += 1
     else:
         fail += 1
