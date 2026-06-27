@@ -47,14 +47,17 @@ const P = {
   scripts:     path.join(ROOT, "scripts"),
   corpus:      path.join(ROOT, "corpus"),
   public:      path.join(ROOT, "public"),
+  testImages:  path.join(ROOT, "test-images"),
 };
 
-fs.mkdirSync(P.scanDir, { recursive: true });
-fs.mkdirSync(P.public,  { recursive: true });
+fs.mkdirSync(P.scanDir,     { recursive: true });
+fs.mkdirSync(P.public,      { recursive: true });
+fs.mkdirSync(P.testImages,  { recursive: true });
 
 // ── Middleware ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "50mb" }));
 app.use(express.static(P.public));
+app.use("/test-images", express.static(path.join(ROOT, "test-images")));
 
 const upload = multer({ dest: path.join(ROOT, "tmp") });
 
@@ -85,11 +88,19 @@ function lineCount(file) {
 function getCheckpoints() {
   if (!fs.existsSync(P.outputDir)) return [];
   return fs.readdirSync(P.outputDir)
-    .filter(f => /^kan_hist_[\d.]+_\d+\.checkpoint$/.test(f))
+    // format: kan_hist_<BCER>_<ITER>_<SAMPLES>.checkpoint
+    .filter(f => /^kan_hist_[\d.]+_\d+_\d+\.checkpoint$/.test(f))
     .map(f => {
       const parts = f.replace(".checkpoint", "").split("_");
+      // parts: ["kan","hist",<bcer>,<iter>,<samples>]
       const stat  = fs.statSync(path.join(P.outputDir, f));
-      return { file: f, bcer: parseFloat(parts[2]), iter: parseInt(parts[3]), size: stat.size };
+      return {
+        file:    f,
+        bcer:    parseFloat(parts[2]),
+        iter:    parseInt(parts[3]),
+        samples: parseInt(parts[4]),
+        size:    stat.size,
+      };
     })
     .sort((a, b) => a.iter - b.iter);
 }
@@ -534,6 +545,51 @@ ${bcer.length ? `<h2>BCER chart</h2><canvas id="c" height="60"></canvas>
   res.setHeader("Content-Disposition", `attachment; filename="trainocr_report_${now.slice(0,10)}.html"`);
   res.setHeader("Content-Type", "text/html");
   res.send(html);
+});
+
+// ── Generate Kannada test images ──────────────────────────────────────────
+app.post("/api/generate-test-images", async (req, res) => {
+  const script = path.join(ROOT, "scripts", "gen-char-images.py");
+  const outDir = path.join(ROOT, "test-images");
+  if (!fs.existsSync(script)) {
+    return res.status(404).json({ error: "gen-char-images.py not found" });
+  }
+  const { spawn } = require("child_process");
+  const proc = spawn("python3", [script, "--outdir", outDir, "--dpi", "150"], {
+    cwd: ROOT,
+  });
+  let stdout = "", stderr = "";
+  proc.stdout.on("data", d => { stdout += d; });
+  proc.stderr.on("data", d => { stderr += d; });
+  proc.on("close", code => {
+    if (code !== 0) {
+      return res.status(500).json({ error: stderr || "Script failed", code });
+    }
+    // Count generated files
+    let count = 0;
+    let manifest = {};
+    const manifestPath = path.join(outDir, "manifest.json");
+    if (fs.existsSync(manifestPath)) {
+      try { manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")); count = manifest.count || 0; }
+      catch (_) {}
+    } else {
+      count = fs.existsSync(outDir)
+        ? fs.readdirSync(outDir).filter(f => f.endsWith(".png")).length
+        : 0;
+    }
+    res.json({ ok: true, count, outDir });
+  });
+});
+
+// ── List test images ──────────────────────────────────────────────────────
+app.get("/api/test-images", (req, res) => {
+  const outDir = path.join(ROOT, "test-images");
+  if (!fs.existsSync(outDir)) return res.json({ files: [] });
+  const files = fs.readdirSync(outDir)
+    .filter(f => f.endsWith(".png"))
+    .sort()
+    .map(f => ({ name: f, url: `/test-images/${f}` }));
+  res.json({ files });
 });
 
 // ── SPA fallback ───────────────────────────────────────────────────────────

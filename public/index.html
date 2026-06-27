@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TrainOCR — Sanchaya</title>
-<link rel="icon" type="image/png" href="https://vachana.sanchaya.net/app-icon-light.png">
+<link rel="icon" type="image/svg+xml" href="/sanchaya-logo.svg">
 <meta name="description" content="Tesseract training portal for historical Kannada OCR — Sanchaya">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -71,7 +71,7 @@ header {
 }
 .header-logo span {
   font-size: .72rem;
-  opacity: .6;
+  opacity: .75;
   font-weight: 400;
 }
 .header-title { flex: 1; }
@@ -408,13 +408,55 @@ footer a:hover { text-decoration: underline; }
   main { padding: 14px 10px; }
   .ocr-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Kannada Unicode Reference ─────────────────────────── */
+.unicode-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.unicode-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px 4px;
+  min-width: 54px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.unicode-cell:hover { border-color: var(--brand-l); background: var(--brand-xxl); }
+.unicode-cell .uc-char {
+  font-size: 1.6rem;
+  line-height: 1.3;
+  font-family: 'Noto Sans Kannada', 'Kannada Sangam MN', serif;
+  color: var(--ink);
+}
+.unicode-cell .uc-code {
+  font-size: .6rem;
+  color: var(--mute);
+  font-family: monospace;
+  margin-top: 2px;
+}
+.unicode-cell .uc-name {
+  font-size: .58rem;
+  color: var(--mute);
+  text-align: center;
+  max-width: 54px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 </style>
 </head>
 <body>
 
 <header>
   <a class="header-logo" href="https://sanchaya.net" target="_blank" rel="noopener">
-    <img src="https://pada.sanchaya.net/images/sanchaya-logo.png" alt="Sanchaya logo">
+    <img src="/sanchaya-logo.svg" alt="Sanchaya" height="28"
+         onerror="this.style.display='none';this.nextElementSibling.style.opacity='1'">
     <span>Sanchaya</span>
   </a>
   <div class="header-title">
@@ -737,8 +779,15 @@ footer a:hover { text-decoration: underline; }
         <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Stop when BCER has not reached a new best for ~10,000 iterations. Beyond that, the model starts memorising training images and performs worse on real scans — this is overfitting. Use the checkpoint browser to package an earlier, better checkpoint.</div>
       </div>
       <div style="padding:12px;background:var(--bg);border-radius:8px">
-        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">🔍 OCR test best practice</div>
-        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Always compare <code>kan</code> vs <code>kan_hist</code> on the same image. Use PSM 6 for blocks of text, PSM 7 for single-line images, PSM 3 for pages you're not sure about. Try the binarize preprocessing option on faded or yellowed pages.</div>
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">🔍 OCR test — three modes</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">
+          The <strong>OCR test</strong> tab has three modes:<br>
+          • <strong>Single image</strong> — drop one image, compare <code>kan</code> vs <code>kan_hist</code>, export result as .txt.<br>
+          • <strong>Batch</strong> — load multiple images, run OCR on all, export results as CSV.<br>
+          • <strong>Wikisource</strong> — fetch a proofread page from kn.wikisource.org and compare OCR output to the human-verified text side-by-side.<br><br>
+          <strong>Kannada Unicode Reference</strong> (bottom of OCR tab):<br>
+          Shows all vowels, consonants, conjuncts and digits with Unicode codepoints. Click <em>Generate test images</em> to render each character to a PNG via Pillow, then <em>Run 1:1 OCR test</em> to verify Tesseract can recognise every character — each cell turns green (✓) or red (✗) with what Tesseract actually returned. Results export as CSV.
+        </div>
       </div>
       <div style="padding:12px;background:var(--bg);border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">➕ Adding a new font</div>
@@ -855,76 +904,244 @@ footer a:hover { text-decoration: underline; }
 <div id="pg-ocr" class="page">
   <div class="sec"><h2>Test OCR — Tesseract.js in browser</h2></div>
   <p style="font-size:.84rem;color:var(--mute);margin-bottom:14px">
-    Upload a historical Kannada scan. Runs entirely in your browser via Tesseract.js.
-    <code>kan_hist</code> requires the package step to be complete first.
+    Runs entirely in your browser via Tesseract.js — no upload to any server.
+    <code>kan_hist</code> requires the Package step (⑦) to be complete.
   </p>
 
-  <div class="g2">
-    <div>
-      <div class="drop" id="ocr-drop" onclick="document.getElementById('ocr-file').click()">
-        <span class="drop-icon">🖼</span>
-        <strong>Drop image here</strong>
-        <p>or click to browse</p>
-        <small>PNG, TIFF, JPG — historical Kannada scans</small>
-      </div>
-      <input type="file" id="ocr-file" accept="image/*" style="display:none" onchange="loadOcrImage(this)">
-      <img id="ocr-preview" class="img-preview" style="display:none">
-    </div>
-    <div>
-      <div style="margin-bottom:12px">
-        <label for="ocr-gt">Ground truth (optional — for CER/WER)</label>
-        <textarea id="ocr-gt" rows="5" placeholder="Paste the correct Kannada text here…"></textarea>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-        <label for="ocr-psm" style="display:inline;margin:0">PSM</label>
-        <select id="ocr-psm" style="width:auto;padding:6px 10px">
-          <option value="3">3 — Auto</option>
-          <option value="6" selected>6 — Block</option>
-          <option value="7">7 — Single line</option>
-          <option value="11">11 — Sparse</option>
-        </select>
-        <button class="btn btn-primary" onclick="runOcr()" id="ocr-btn">Run OCR</button>
+  <!-- ── Mode tabs ── -->
+  <div style="display:flex;gap:6px;margin-bottom:18px;border-bottom:2px solid var(--border);padding-bottom:0">
+    <button class="ocr-mode-btn active" id="mode-single" onclick="setOcrMode('single')"
+      style="padding:7px 16px;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid var(--brand);margin-bottom:-2px;color:var(--brand)">
+      Single image
+    </button>
+    <button class="ocr-mode-btn" id="mode-batch" onclick="setOcrMode('batch')"
+      style="padding:7px 16px;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--mute)">
+      Batch test
+    </button>
+    <button class="ocr-mode-btn" id="mode-wikisource" onclick="setOcrMode('wikisource')"
+      style="padding:7px 16px;font-size:.82rem;font-weight:600;border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--mute)">
+      Wikisource compare
+    </button>
+  </div>
+
+  <!-- ══ SINGLE IMAGE MODE ══ -->
+  <div id="ocr-single">
+    <div class="g2">
+      <div>
+        <div class="drop" id="ocr-drop" onclick="document.getElementById('ocr-file').click()">
+          <span class="drop-icon">🖼</span>
+          <strong>Drop image here</strong>
+          <p>or click to browse</p>
+          <small>PNG, TIFF, JPG — historical Kannada scans</small>
+        </div>
+        <input type="file" id="ocr-file" accept="image/*" style="display:none" onchange="loadOcrImage(this)">
+        <img id="ocr-preview" class="img-preview" style="display:none">
       </div>
       <div>
-        <label style="font-size:.8rem;font-weight:600;margin-bottom:6px">Preprocessing</label>
-        <div style="display:flex;gap:14px;flex-wrap:wrap">
-          <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
-            <input type="checkbox" id="pp-binarize"> Binarize
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
-            <input type="checkbox" id="pp-denoise"> Denoise
-          </label>
-          <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
-            <input type="checkbox" id="pp-contrast"> Enhance contrast
-          </label>
+        <div style="margin-bottom:12px">
+          <label for="ocr-gt">Ground truth (optional — for CER/WER)</label>
+          <textarea id="ocr-gt" rows="5" placeholder="Paste the correct Kannada text here…"></textarea>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+          <label for="ocr-psm" style="display:inline;margin:0">PSM</label>
+          <select id="ocr-psm" style="width:auto;padding:6px 10px">
+            <option value="3">3 — Auto</option>
+            <option value="6" selected>6 — Block</option>
+            <option value="7">7 — Single line</option>
+            <option value="11">11 — Sparse</option>
+          </select>
+          <button class="btn btn-primary" onclick="runOcr()" id="ocr-btn">Run OCR</button>
+          <button class="btn btn-outline" onclick="exportSingleResult()" id="export-single-btn" style="display:none">⬇ Export</button>
+        </div>
+        <div>
+          <label style="font-size:.8rem;font-weight:600;margin-bottom:6px">Preprocessing</label>
+          <div style="display:flex;gap:14px;flex-wrap:wrap">
+            <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
+              <input type="checkbox" id="pp-binarize"> Binarize
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
+              <input type="checkbox" id="pp-denoise"> Denoise
+            </label>
+            <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
+              <input type="checkbox" id="pp-contrast"> Enhance contrast
+            </label>
+          </div>
         </div>
       </div>
     </div>
+
+    <div id="ocr-prog" style="display:none;margin-top:14px">
+      <div class="prog"><div class="prog-bar" id="ocr-prog-bar" style="width:0%"></div></div>
+      <p id="ocr-prog-txt" style="font-size:.78rem;color:var(--mute)">Initialising…</p>
+    </div>
+
+    <div class="ocr-grid" id="ocr-results" style="display:none">
+      <div>
+        <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
+          kan <span style="font-weight:400;color:var(--mute)">(base model)</span>
+          <span id="kan-time" style="font-size:.72rem;color:var(--mute);font-weight:400;margin-left:6px"></span>
+        </div>
+        <div class="ocr-result" id="kan-out">—</div>
+        <div class="metric-row" id="kan-metrics"></div>
+      </div>
+      <div>
+        <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
+          kan_hist
+          <span id="hist-badge" class="pill" style="margin-left:4px"></span>
+          <span id="hist-time" style="font-size:.72rem;color:var(--mute);font-weight:400;margin-left:6px"></span>
+        </div>
+        <div class="ocr-result" id="hist-out">—</div>
+        <div class="metric-row" id="hist-metrics"></div>
+      </div>
+    </div>
   </div>
 
-  <div id="ocr-prog" style="display:none;margin-top:14px">
-    <div class="prog"><div class="prog-bar" id="ocr-prog-bar" style="width:0%"></div></div>
-    <p id="ocr-prog-txt" style="font-size:.78rem;color:var(--mute)">Initialising…</p>
+  <!-- ══ BATCH TEST MODE ══ -->
+  <div id="ocr-batch" style="display:none">
+    <p style="font-size:.84rem;color:var(--mute);margin-bottom:12px">
+      Drop multiple images (with matching <code>.gt.txt</code> files or paste GT below). Each is run through both models and results are summarised.
+    </p>
+    <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap;margin-bottom:14px">
+      <div class="drop" id="batch-drop" onclick="document.getElementById('batch-file').click()"
+           style="flex:1;min-width:220px;padding:18px">
+        <span class="drop-icon">📂</span>
+        <strong>Drop images here</strong>
+        <p>PNG, TIFF, JPG · multiple files OK</p>
+      </div>
+      <input type="file" id="batch-file" accept="image/*" multiple style="display:none" onchange="loadBatchFiles(this)">
+      <div style="flex:1;min-width:220px">
+        <label style="font-size:.8rem;font-weight:600">PSM for batch</label>
+        <select id="batch-psm" style="width:100%;padding:6px 10px;margin-bottom:8px">
+          <option value="3">3 — Auto</option>
+          <option value="6" selected>6 — Block</option>
+          <option value="7">7 — Single line</option>
+        </select>
+        <button class="btn btn-primary" onclick="runBatch()" id="batch-btn" style="width:100%">Run batch OCR</button>
+        <button class="btn btn-outline" onclick="exportBatchResults()" id="batch-export-btn"
+                style="width:100%;margin-top:6px;display:none">⬇ Export CSV</button>
+      </div>
+    </div>
+    <div id="batch-queue" style="margin-bottom:12px;font-size:.82rem;color:var(--mute)"></div>
+    <div id="batch-prog" style="display:none;margin-bottom:10px">
+      <div class="prog"><div class="prog-bar" id="batch-prog-bar" style="width:0%"></div></div>
+      <p id="batch-prog-txt" style="font-size:.78rem;color:var(--mute)">Starting…</p>
+    </div>
+    <div id="batch-results" style="display:none">
+      <div id="batch-summary" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px"></div>
+      <div class="card" style="padding:0;overflow:hidden">
+        <table class="tbl" id="batch-tbl">
+          <thead><tr>
+            <th>Image</th>
+            <th>kan CER</th><th>kan_hist CER</th>
+            <th>kan WER</th><th>kan_hist WER</th>
+            <th>Improvement</th>
+          </tr></thead>
+          <tbody id="batch-tbody"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
-  <div class="ocr-grid" id="ocr-results" style="display:none">
-    <div>
-      <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
-        kan <span style="font-weight:400;color:var(--mute)">(base model)</span>
-        <span id="kan-time" style="font-size:.72rem;color:var(--mute);font-weight:400;margin-left:6px"></span>
-      </div>
-      <div class="ocr-result" id="kan-out">—</div>
-      <div class="metric-row" id="kan-metrics"></div>
+  <!-- ══ WIKISOURCE COMPARE MODE ══ -->
+  <div id="ocr-wikisource" style="display:none">
+    <p style="font-size:.84rem;color:var(--mute);margin-bottom:12px">
+      Fetch a page from Kannada Wikisource and test OCR against its proofread transcription.
+      The page image is fetched via the Wikisource API; the GT text is the validated transcription.
+    </p>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input type="text" id="ws-page-input" placeholder="e.g. Page:ಕನ್ನಡ_ಪುಸ್ತಕ.pdf/5  or paste Wikisource page URL"
+             style="flex:1;min-width:240px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:.84rem">
+      <button class="btn btn-outline" onclick="fetchWsPage()" id="ws-fetch-btn">Fetch page</button>
+      <button class="btn btn-primary" onclick="runWsOcr()" id="ws-ocr-btn" style="display:none">Run OCR</button>
+      <button class="btn btn-outline" onclick="exportWsResult()" id="ws-export-btn" style="display:none">⬇ Export</button>
     </div>
-    <div>
-      <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
-        kan_hist
-        <span id="hist-badge" class="pill" style="margin-left:4px"></span>
-        <span id="hist-time" style="font-size:.72rem;color:var(--mute);font-weight:400;margin-left:6px"></span>
-      </div>
-      <div class="ocr-result" id="hist-out">—</div>
-      <div class="metric-row" id="hist-metrics"></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <button class="btn btn-outline" onclick="loadWsRandomPage()" style="font-size:.78rem">🎲 Random validated page</button>
+      <button class="btn btn-outline" onclick="loadWsBookList()" style="font-size:.78rem">📚 Browse books</button>
     </div>
+    <div id="ws-book-list" style="display:none;margin-bottom:12px"></div>
+    <div id="ws-prog" style="display:none;margin-bottom:10px">
+      <div class="prog"><div class="prog-bar" id="ws-prog-bar" style="width:0%"></div></div>
+      <p id="ws-prog-txt" style="font-size:.78rem;color:var(--mute)">Fetching…</p>
+    </div>
+    <div id="ws-page-info" style="display:none;margin-bottom:12px;padding:10px 14px;background:var(--bg);border-radius:8px;font-size:.82rem">
+      <strong id="ws-page-title"></strong>
+      <span id="ws-page-quality" class="pill" style="margin-left:8px"></span>
+    </div>
+    <div id="ws-preview-area" style="display:none;margin-bottom:14px">
+      <div class="g2">
+        <div>
+          <div style="font-size:.76rem;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Page image</div>
+          <img id="ws-img" style="max-width:100%;border:1px solid var(--border);border-radius:6px">
+        </div>
+        <div>
+          <div style="font-size:.76rem;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Proofread transcription (GT)</div>
+          <div id="ws-gt-display" class="ocr-result" style="min-height:120px;white-space:pre-wrap"></div>
+        </div>
+      </div>
+    </div>
+    <div class="ocr-grid" id="ws-results" style="display:none">
+      <div>
+        <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
+          kan <span style="font-weight:400;color:var(--mute)">(base model)</span>
+          <span id="ws-kan-time" style="font-size:.72rem;color:var(--mute);margin-left:6px"></span>
+        </div>
+        <div class="ocr-result" id="ws-kan-out">—</div>
+        <div class="metric-row" id="ws-kan-metrics"></div>
+      </div>
+      <div>
+        <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
+          kan_hist
+          <span id="ws-hist-badge" class="pill" style="margin-left:4px"></span>
+          <span id="ws-hist-time" style="font-size:.72rem;color:var(--mute);margin-left:6px"></span>
+        </div>
+        <div class="ocr-result" id="ws-hist-out">—</div>
+        <div class="metric-row" id="ws-hist-metrics"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Kannada Unicode Reference ─────────────────────────────── -->
+  <div class="card" style="margin-top:18px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 style="font-size:.95rem;color:var(--ink)">ಕನ್ನಡ Unicode Reference</h3>
+      <div style="display:flex;gap:8px">
+        <button onclick="genTestImages()" class="btn-sm"
+          style="font-size:.78rem;padding:4px 12px;background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer">
+          ⬇ Generate test images
+        </button>
+        <button onclick="runCharOcrTest()" id="run-char-test-btn"
+          style="display:none;font-size:.78rem;padding:4px 12px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer">
+          ▶ Run 1:1 OCR test
+        </button>
+        <button onclick="toggleUnicodeRef()" class="btn-sm"
+          style="font-size:.78rem;padding:4px 12px;background:var(--brand-xl);color:var(--brand-d);border:none;border-radius:6px;cursor:pointer"
+          id="unicode-toggle-btn">Show chart</button>
+      </div>
+    </div>
+    <div id="unicode-ref-panel" style="display:none">
+      <!-- Vowels -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--mute);letter-spacing:.04em;margin-bottom:6px">Vowels (ಸ್ವರಗಳು)</div>
+        <div id="unicode-vowels" class="unicode-grid"></div>
+      </div>
+      <!-- Consonants -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--mute);letter-spacing:.04em;margin-bottom:6px">Consonants (ವ್ಯಂಜನಗಳು)</div>
+        <div id="unicode-consonants" class="unicode-grid"></div>
+      </div>
+      <!-- Conjuncts -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--mute);letter-spacing:.04em;margin-bottom:6px">Conjuncts with Virama ್ (U+0CCD)</div>
+        <div id="unicode-conjuncts" class="unicode-grid"></div>
+      </div>
+      <!-- Digits & Numerals -->
+      <div>
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--mute);letter-spacing:.04em;margin-bottom:6px">Digits (ಅಂಕಿಗಳು)</div>
+        <div id="unicode-digits" class="unicode-grid"></div>
+      </div>
+    </div>
+    <div id="gen-images-status" style="font-size:.8rem;color:var(--mute);margin-top:8px"></div>
   </div>
 </div>
 
@@ -1561,7 +1778,392 @@ async function runOcr() {
   setP(100, 'Done');
   setTimeout(() => { document.getElementById('ocr-prog').style.display='none'; }, 700);
   document.getElementById('ocr-results').style.display = 'grid';
+  document.getElementById('export-single-btn').style.display = '';
   btn.disabled = false;
+}
+
+// ── OCR mode switching ───────────────────────────────────────────
+function setOcrMode(mode) {
+  ['single','batch','wikisource'].forEach(m => {
+    document.getElementById('ocr-'+m).style.display = m===mode ? '' : 'none';
+    const btn = document.getElementById('mode-'+m);
+    const on  = m===mode;
+    btn.style.borderBottomColor = on ? 'var(--brand)' : 'transparent';
+    btn.style.color = on ? 'var(--brand)' : 'var(--mute)';
+  });
+}
+
+// ── Export single result ─────────────────────────────────────────
+function exportSingleResult() {
+  const kanText  = document.getElementById('kan-out').textContent;
+  const histText = document.getElementById('hist-out').textContent;
+  const gt       = document.getElementById('ocr-gt').value;
+  const fname    = ocrImg ? ocrImg.name.replace(/\.[^.]+$/,'') : 'result';
+  const lines = [
+    '# TrainOCR — OCR Test Result',
+    `# Image: ${ocrImg?.name || 'unknown'}`,
+    `# Date: ${new Date().toISOString()}`,
+    '',
+    '## kan (base model)',
+    kanText,
+    '',
+    '## kan_hist',
+    histText,
+  ];
+  if (gt.trim()) {
+    const c1=cer(kanText,gt), w1=wer(kanText,gt);
+    const c2=cer(histText,gt), w2=wer(histText,gt);
+    lines.push('', '## Ground truth', gt,
+      '', '## Metrics',
+      `kan   CER: ${c1}%  WER: ${w1}%`,
+      `kan_hist CER: ${c2}%  WER: ${w2}%`,
+      `Improvement: CER ${(c1-c2).toFixed(1)}pp  WER ${(w1-w2).toFixed(1)}pp`);
+  }
+  downloadText(lines.join('\n'), fname+'_ocr_result.txt');
+}
+
+// ── Batch OCR ────────────────────────────────────────────────────
+let batchFiles = [];
+let batchResults = [];
+
+function loadBatchFiles(input) {
+  batchFiles = Array.from(input.files);
+  document.getElementById('batch-queue').textContent =
+    `${batchFiles.length} image${batchFiles.length===1?'':'s'} selected: ` +
+    batchFiles.map(f=>f.name).join(', ');
+  document.getElementById('batch-results').style.display = 'none';
+  document.getElementById('batch-export-btn').style.display = 'none';
+}
+
+async function runBatch() {
+  if (!batchFiles.length) { toast('Select images first'); return; }
+  const btn = document.getElementById('batch-btn');
+  btn.disabled = true;
+  document.getElementById('batch-results').style.display = 'none';
+  document.getElementById('batch-prog').style.display = '';
+  document.getElementById('batch-export-btn').style.display = 'none';
+  batchResults = [];
+
+  const psm  = parseInt(document.getElementById('batch-psm').value);
+  const LANG = window.location.origin + '/tessdata';
+  const total = batchFiles.length;
+
+  const setBP = (pct, msg) => {
+    document.getElementById('batch-prog-bar').style.width = pct+'%';
+    document.getElementById('batch-prog-txt').textContent = msg;
+  };
+
+  // Pre-load both workers once and reuse
+  setBP(5, 'Loading kan model…');
+  let kanW, histW, histOk = false;
+  try {
+    kanW = await Tesseract.createWorker('kan', 1, { langPath: LANG });
+    await kanW.setParameters({ tessedit_pageseg_mode: psm });
+  } catch(e) { toast('Failed to load kan model'); btn.disabled=false; return; }
+  setBP(15, 'Loading kan_hist model…');
+  try {
+    histW = await Tesseract.createWorker('kan_hist', 1, { langPath: LANG });
+    await histW.setParameters({ tessedit_pageseg_mode: psm });
+    histOk = true;
+  } catch(e) { /* kan_hist not packaged yet — run kan only */ }
+
+  for (let i=0; i<total; i++) {
+    const f   = batchFiles[i];
+    const b64 = await readAsDataURL(f);
+    const pct = 20 + (i/total)*75;
+    setBP(pct, `[${i+1}/${total}] ${f.name}`);
+
+    // Try to load a matching .gt.txt from the same file object list
+    // (browsers won't give directory access, so GT must come from a
+    //  sibling file with .gt.txt extension if user drops it too)
+    const gtFile = batchFiles.find(x => x.name === f.name.replace(/\.[^.]+$/,'.gt.txt'));
+    const gt     = gtFile ? await gtFile.text() : '';
+
+    let kanText='', histText='', kanMs=0, histMs=0;
+    try {
+      const t0 = Date.now();
+      const { data: { text } } = await kanW.recognize(b64);
+      kanMs = Date.now()-t0; kanText = text.trim();
+    } catch(e) { kanText = '(error)'; }
+    if (histOk) {
+      try {
+        const t0 = Date.now();
+        const { data: { text } } = await histW.recognize(b64);
+        histMs = Date.now()-t0; histText = text.trim();
+      } catch(e) { histText = '(error)'; }
+    }
+
+    batchResults.push({
+      name: f.name, gt,
+      kanText, histText, kanMs, histMs,
+      kanCer:  gt ? cer(kanText,gt)  : null,
+      histCer: gt ? cer(histText,gt) : null,
+      kanWer:  gt ? wer(kanText,gt)  : null,
+      histWer: gt ? wer(histText,gt) : null,
+    });
+  }
+
+  await kanW.terminate();
+  if (histOk) await histW.terminate();
+  setBP(100, 'Done');
+  setTimeout(()=>{ document.getElementById('batch-prog').style.display='none'; }, 600);
+  renderBatchResults(histOk);
+  btn.disabled = false;
+}
+
+function renderBatchResults(histOk) {
+  const withGt = batchResults.filter(r => r.gt);
+  const avgKanCer  = withGt.length ? (withGt.reduce((s,r)=>s+parseFloat(r.kanCer),0)/withGt.length).toFixed(1) : null;
+  const avgHistCer = withGt.length && histOk ? (withGt.reduce((s,r)=>s+parseFloat(r.histCer),0)/withGt.length).toFixed(1) : null;
+  const col = v => parseFloat(v)<5?'var(--green)':parseFloat(v)<15?'var(--amber)':'var(--red)';
+
+  document.getElementById('batch-summary').innerHTML = [
+    `<div class="card" style="text-align:center"><div style="font-size:1.4rem;font-weight:800">${batchResults.length}</div><div style="font-size:.78rem;color:var(--mute)">Images tested</div></div>`,
+    withGt.length ? `<div class="card" style="text-align:center"><div style="font-size:1.4rem;font-weight:800;color:${col(avgKanCer)}">${avgKanCer}%</div><div style="font-size:.78rem;color:var(--mute)">Avg kan CER</div></div>` : '',
+    withGt.length && histOk ? `<div class="card" style="text-align:center"><div style="font-size:1.4rem;font-weight:800;color:${col(avgHistCer)}">${avgHistCer}%</div><div style="font-size:.78rem;color:var(--mute)">Avg kan_hist CER</div></div>` : '',
+    withGt.length && histOk ? `<div class="card" style="text-align:center"><div style="font-size:1.4rem;font-weight:800;color:var(--green)">▼${(avgKanCer-avgHistCer).toFixed(1)}pp</div><div style="font-size:.78rem;color:var(--mute)">CER improvement</div></div>` : '',
+  ].join('');
+
+  const tbody = document.getElementById('batch-tbody');
+  tbody.innerHTML = batchResults.map(r => `
+    <tr>
+      <td style="font-family:monospace;font-size:.78rem">${r.name}</td>
+      <td style="color:${r.kanCer ? col(r.kanCer) : 'var(--mute)'}">${r.kanCer ? r.kanCer+'%' : '—'}</td>
+      <td style="color:${r.histCer ? col(r.histCer) : 'var(--mute)'}">${r.histCer ? r.histCer+'%' : (histOk?'—':'N/A')}</td>
+      <td>${r.kanWer ? r.kanWer+'%' : '—'}</td>
+      <td>${r.histWer ? r.histWer+'%' : (histOk?'—':'N/A')}</td>
+      <td style="color:var(--green);font-weight:600">${r.kanCer && r.histCer ? '▼'+(parseFloat(r.kanCer)-parseFloat(r.histCer)).toFixed(1)+'pp' : '—'}</td>
+    </tr>`).join('');
+
+  document.getElementById('batch-results').style.display = '';
+  document.getElementById('batch-export-btn').style.display = '';
+}
+
+function exportBatchResults() {
+  const header = 'image,kan_CER,kan_hist_CER,kan_WER,kan_hist_WER,improvement_CER_pp,kan_text,kan_hist_text,ground_truth';
+  const rows = batchResults.map(r =>
+    [r.name, r.kanCer||'', r.histCer||'', r.kanWer||'', r.histWer||'',
+     (r.kanCer&&r.histCer) ? (parseFloat(r.kanCer)-parseFloat(r.histCer)).toFixed(1) : '',
+     JSON.stringify(r.kanText), JSON.stringify(r.histText), JSON.stringify(r.gt)
+    ].join(','));
+  downloadText([header,...rows].join('\n'), 'batch_ocr_results.csv');
+}
+
+// ── Wikisource compare ───────────────────────────────────────────
+let wsGtText = '', wsImgUrl = '', wsImgB64 = '';
+
+async function fetchWsPage() {
+  let input = document.getElementById('ws-page-input').value.trim();
+  if (!input) { toast('Enter a page title or URL'); return; }
+
+  // Accept full URLs like https://kn.wikisource.org/wiki/Page:...
+  if (input.includes('wikisource.org/wiki/')) {
+    input = decodeURIComponent(input.split('/wiki/')[1]);
+  }
+  if (!input.startsWith('Page:') && !input.startsWith('ಪುಟ:')) {
+    input = 'Page:' + input;
+  }
+
+  const setWP = (pct, msg) => {
+    document.getElementById('ws-prog-bar').style.width = pct+'%';
+    document.getElementById('ws-prog-txt').textContent = msg;
+  };
+  document.getElementById('ws-prog').style.display = '';
+  document.getElementById('ws-preview-area').style.display = 'none';
+  document.getElementById('ws-results').style.display = 'none';
+  document.getElementById('ws-ocr-btn').style.display = 'none';
+  document.getElementById('ws-export-btn').style.display = 'none';
+  setWP(20, 'Fetching page text…');
+
+  try {
+    // Get wikitext via Wikisource API
+    const apiUrl = `https://kn.wikisource.org/w/api.php?action=query&titles=${encodeURIComponent(input)}&prop=revisions|pageprops&rvprop=content&rvslots=main&ppprop=proofread-quality&format=json&origin=*`;
+    const resp   = await fetch(apiUrl);
+    const data   = await resp.json();
+    const pages  = data.query.pages;
+    const page   = Object.values(pages)[0];
+
+    if (page.missing !== undefined) { toast('Page not found on Wikisource'); document.getElementById('ws-prog').style.display='none'; return; }
+
+    const wikitext = page.revisions?.[0]?.slots?.main?.['*'] || '';
+    const quality  = parseInt(page.pageprops?.['proofread-quality'] || 0);
+
+    // Extract GT text — strip Wikisource templates
+    wsGtText = wikitext
+      .replace(/\{\{[Rr](?:unning)?[Hh](?:eader)?[^}]*\}\}/g, '')
+      .replace(/\{\{[^{}]*\}\}/g, '').replace(/\{\{[^{}]*\}\}/g, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\[\[(?:[^|\]]*\|)?([^\]]*)\]\]/g, '$1')
+      .replace(/'{2,3}/g, '')
+      .replace(/={2,}[^=]+=+/g, '')
+      .replace(/\s+/g, ' ').trim();
+
+    setWP(50, 'Fetching page image…');
+
+    // Try to get the scan image via Wikisource File API
+    // Page: titles correspond to File: scans in the Index namespace
+    const fileTitle = input.replace(/^Page:/, 'File:').replace(/\/\d+$/, '');
+    const pgNum     = (input.match(/\/(\d+)$/) || [])[1] || '1';
+    const imgApi    = `https://kn.wikisource.org/w/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&iiurlwidth=800&format=json&origin=*`;
+    let imgUrl = '';
+    try {
+      const ir   = await fetch(imgApi);
+      const id   = await ir.json();
+      const ip   = Object.values(id.query.pages)[0];
+      imgUrl     = ip.imageinfo?.[0]?.thumburl || ip.imageinfo?.[0]?.url || '';
+    } catch(e) {}
+
+    wsImgUrl = imgUrl;
+    wsImgB64 = '';
+
+    // Fetch image as blob → base64 for Tesseract.js
+    if (imgUrl) {
+      try {
+        const imgResp = await fetch(imgUrl);
+        const blob    = await imgResp.blob();
+        wsImgB64 = await new Promise(res => { const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsDataURL(blob); });
+      } catch(e) {}
+    }
+
+    setWP(90, 'Rendering preview…');
+
+    // Show page info
+    const qLabels = {0:'Unrated',1:'Without text',2:'Problematic',3:'Proofread ⭐',4:'Validated ⭐⭐'};
+    const qCls    = {3:'pill-green',4:'pill-green',2:'pill-amber',1:'pill-amber',0:''};
+    document.getElementById('ws-page-title').textContent = input;
+    const qBadge = document.getElementById('ws-page-quality');
+    qBadge.textContent = qLabels[quality] || 'Unknown';
+    qBadge.className   = 'pill ' + (qCls[quality]||'pill-amber');
+    document.getElementById('ws-page-info').style.display = '';
+
+    // Preview
+    if (wsImgB64) {
+      document.getElementById('ws-img').src = wsImgB64;
+    } else if (imgUrl) {
+      document.getElementById('ws-img').src = imgUrl;
+    } else {
+      document.getElementById('ws-img').src = '';
+      document.getElementById('ws-img').alt = '(image not available — run OCR on GT text only)';
+    }
+    document.getElementById('ws-gt-display').textContent = wsGtText || '(no text extracted)';
+    document.getElementById('ws-preview-area').style.display = '';
+    document.getElementById('ws-prog').style.display = 'none';
+    document.getElementById('ws-ocr-btn').style.display = wsImgB64 || imgUrl ? '' : 'none';
+    if (quality < 3) toast('⚠ This page has not been proofread — GT may be unreliable');
+
+  } catch(e) {
+    document.getElementById('ws-prog').style.display = 'none';
+    toast('Failed to fetch page: ' + e.message);
+  }
+}
+
+async function loadWsRandomPage() {
+  document.getElementById('ws-fetch-btn').disabled = true;
+  try {
+    const api = `https://kn.wikisource.org/w/api.php?action=query&list=allpages&apnamespace=104&aplimit=50&format=json&origin=*`;
+    const d   = await (await fetch(api)).json();
+    const pages = d.query.allpages.filter(p => p.title.includes('/'));
+    if (!pages.length) { toast('No pages found'); return; }
+    const pick = pages[Math.floor(Math.random()*pages.length)];
+    document.getElementById('ws-page-input').value = pick.title;
+    fetchWsPage();
+  } catch(e) { toast('Could not load random page'); }
+  document.getElementById('ws-fetch-btn').disabled = false;
+}
+
+async function loadWsBookList() {
+  const panel = document.getElementById('ws-book-list');
+  if (panel.style.display !== 'none') { panel.style.display='none'; return; }
+  panel.innerHTML = '<span style="color:var(--mute);font-size:.82rem">Loading index list…</span>';
+  panel.style.display = '';
+  try {
+    const api = `https://kn.wikisource.org/w/api.php?action=query&list=allpages&apnamespace=106&aplimit=50&format=json&origin=*`;
+    const d   = await (await fetch(api)).json();
+    const books = d.query.allpages;
+    panel.innerHTML = `<div style="font-size:.78rem;font-weight:700;color:var(--mute);margin-bottom:6px">Books on Kannada Wikisource (Index namespace)</div>` +
+      books.map(b => `<button class="btn btn-outline" style="margin:2px 4px 2px 0;font-size:.76rem;padding:3px 10px"
+        onclick="document.getElementById('ws-page-input').value='Page:${b.title.replace(/^Index:/,'')}/1';fetchWsPage()"
+        >${b.title.replace(/^Index:/,'')}</button>`).join('');
+  } catch(e) { panel.innerHTML = '<span style="color:var(--red);font-size:.82rem">Could not load book list</span>'; }
+}
+
+async function runWsOcr() {
+  const src = wsImgB64 || wsImgUrl;
+  if (!src) { toast('No image available for this page'); return; }
+  const btn = document.getElementById('ws-ocr-btn');
+  btn.disabled = true;
+  document.getElementById('ws-prog').style.display = '';
+  const setWP = (pct, msg) => {
+    document.getElementById('ws-prog-bar').style.width = pct+'%';
+    document.getElementById('ws-prog-txt').textContent = msg;
+  };
+  const LANG = window.location.origin + '/tessdata';
+
+  setWP(10, 'Loading kan…');
+  let kanText='', histText='', histOk=false;
+  const t0 = Date.now();
+  try {
+    const w = await Tesseract.createWorker('kan', 1, { langPath: LANG,
+      logger: m => { if(m.status==='recognizing text') setWP(10+m.progress*40,'Running kan…'); }});
+    const { data: { text } } = await w.recognize(src);
+    kanText = text.trim(); await w.terminate();
+  } catch(e) { kanText = 'Error: '+e.message; }
+  const t1 = Date.now();
+
+  setWP(55, 'Running kan_hist…');
+  try {
+    const w2 = await Tesseract.createWorker('kan_hist', 1, { langPath: LANG,
+      logger: m => { if(m.status==='recognizing text') setWP(55+m.progress*40,'Running kan_hist…'); }});
+    const { data: { text } } = await w2.recognize(src);
+    histText = text.trim(); histOk=true; await w2.terminate();
+  } catch(e) { histText = 'Not packaged yet — complete step ⑦'; }
+  const t2 = Date.now();
+
+  document.getElementById('ws-kan-out').textContent   = kanText || '(no text)';
+  document.getElementById('ws-kan-time').textContent  = ((t1-t0)/1000).toFixed(1)+'s';
+  document.getElementById('ws-kan-metrics').innerHTML = wsGtText ? metricsHtml(kanText,wsGtText) : '';
+  document.getElementById('ws-hist-out').textContent  = histText || '(no text)';
+  document.getElementById('ws-hist-time').textContent = histOk ? ((t2-t1)/1000).toFixed(1)+'s' : '';
+  const hb = document.getElementById('ws-hist-badge');
+  hb.textContent = histOk ? '✓ Ready' : 'Not packaged';
+  hb.className   = 'pill '+(histOk?'pill-green':'pill-amber');
+  document.getElementById('ws-hist-metrics').innerHTML = histOk && wsGtText ? metricsHtml(histText,wsGtText) : '';
+
+  setWP(100,'Done');
+  setTimeout(()=>{ document.getElementById('ws-prog').style.display='none'; },600);
+  document.getElementById('ws-results').style.display = 'grid';
+  document.getElementById('ws-export-btn').style.display = '';
+  btn.disabled = false;
+}
+
+function exportWsResult() {
+  const title  = document.getElementById('ws-page-title').textContent;
+  const kanOut = document.getElementById('ws-kan-out').textContent;
+  const histOut= document.getElementById('ws-hist-out').textContent;
+  const lines = [
+    '# TrainOCR — Wikisource OCR Comparison',
+    `# Page: ${title}`,
+    `# Date: ${new Date().toISOString()}`,
+    `# GT source: kn.wikisource.org (proofread transcription)`,
+    '', '## Ground truth (Wikisource)', wsGtText,
+    '', '## kan (base model)', kanOut,
+    '', '## kan_hist', histOut,
+  ];
+  if (wsGtText) {
+    lines.push('', '## Metrics',
+      `kan    CER: ${cer(kanOut,wsGtText)}%  WER: ${wer(kanOut,wsGtText)}%`,
+      `kan_hist CER: ${cer(histOut,wsGtText)}%  WER: ${wer(histOut,wsGtText)}%`);
+  }
+  downloadText(lines.join('\n'), 'wikisource_ocr_comparison.txt');
+}
+
+// ── Shared download helper ───────────────────────────────────────
+function downloadText(content, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // ── Scan upload ──────────────────────────────────────────────────
@@ -1804,6 +2406,246 @@ async function loadAll() {
 }
 loadAll();
 setInterval(loadStatus, 20000);
+
+// ══════════════════════════════════════════════════════════════
+// Kannada Unicode Reference Chart
+// ══════════════════════════════════════════════════════════════
+const KANNADA_VOWELS = [
+  {ch:'ಅ', cp:'0C85', name:'A'},   {ch:'ಆ', cp:'0C86', name:'AA'},
+  {ch:'ಇ', cp:'0C87', name:'I'},   {ch:'ಈ', cp:'0C88', name:'II'},
+  {ch:'ಉ', cp:'0C89', name:'U'},   {ch:'ಊ', cp:'0C8A', name:'UU'},
+  {ch:'ಋ', cp:'0C8B', name:'RR'},  {ch:'ಌ', cp:'0C8C', name:'LI'},
+  {ch:'ಎ', cp:'0C8E', name:'E'},   {ch:'ಏ', cp:'0C8F', name:'EE'},
+  {ch:'ಐ', cp:'0C90', name:'AI'},  {ch:'ಒ', cp:'0C92', name:'O'},
+  {ch:'ಓ', cp:'0C93', name:'OO'},  {ch:'ಔ', cp:'0C94', name:'AU'},
+  {ch:'ಂ', cp:'0C82', name:'Anusvara'}, {ch:'ಃ', cp:'0C83', name:'Visarga'},
+];
+
+const KANNADA_CONSONANTS = [
+  {ch:'ಕ', cp:'0C95', name:'KA'},  {ch:'ಖ', cp:'0C96', name:'KHA'},
+  {ch:'ಗ', cp:'0C97', name:'GA'},  {ch:'ಘ', cp:'0C98', name:'GHA'},
+  {ch:'ಙ', cp:'0C99', name:'NGA'}, {ch:'ಚ', cp:'0C9A', name:'CA'},
+  {ch:'ಛ', cp:'0C9B', name:'CHA'}, {ch:'ಜ', cp:'0C9C', name:'JA'},
+  {ch:'ಝ', cp:'0C9D', name:'JHA'}, {ch:'ಞ', cp:'0C9E', name:'NYA'},
+  {ch:'ಟ', cp:'0C9F', name:'TTA'}, {ch:'ಠ', cp:'0CA0', name:'TTHA'},
+  {ch:'ಡ', cp:'0CA1', name:'DDA'}, {ch:'ಢ', cp:'0CA2', name:'DDHA'},
+  {ch:'ಣ', cp:'0CA3', name:'NNA'}, {ch:'ತ', cp:'0CA4', name:'TA'},
+  {ch:'ಥ', cp:'0CA5', name:'THA'}, {ch:'ದ', cp:'0CA6', name:'DA'},
+  {ch:'ಧ', cp:'0CA7', name:'DHA'}, {ch:'ನ', cp:'0CA8', name:'NA'},
+  {ch:'ಪ', cp:'0CAA', name:'PA'},  {ch:'ಫ', cp:'0CAB', name:'PHA'},
+  {ch:'ಬ', cp:'0CAC', name:'BA'},  {ch:'ಭ', cp:'0CAD', name:'BHA'},
+  {ch:'ಮ', cp:'0CAE', name:'MA'},  {ch:'ಯ', cp:'0CAF', name:'YA'},
+  {ch:'ರ', cp:'0CB0', name:'RA'},  {ch:'ಱ', cp:'0CB1', name:'RRA'},
+  {ch:'ಲ', cp:'0CB2', name:'LA'},  {ch:'ಳ', cp:'0CB3', name:'LLA'},
+  {ch:'ವ', cp:'0CB5', name:'VA'},  {ch:'ಶ', cp:'0CB6', name:'SHA'},
+  {ch:'ಷ', cp:'0CB7', name:'SSA'}, {ch:'ಸ', cp:'0CB8', name:'SA'},
+  {ch:'ಹ', cp:'0CB9', name:'HA'},
+];
+
+// Common conjuncts — consonant + ್ (virama U+0CCD) + next consonant
+const KANNADA_CONJUNCTS = [
+  {ch:'ಕ್ತ', cp:'0C95+0CCD+0CA4', name:'k+t'},
+  {ch:'ಕ್ಷ', cp:'0C95+0CCD+0CB7', name:'kṣa'},
+  {ch:'ಜ್ಞ', cp:'0C9C+0CCD+0C9E', name:'jña'},
+  {ch:'ತ್ತ', cp:'0CA4+0CCD+0CA4', name:'tt'},
+  {ch:'ದ್ದ', cp:'0CA6+0CCD+0CA6', name:'dd'},
+  {ch:'ನ್ನ', cp:'0CA8+0CCD+0CA8', name:'nn'},
+  {ch:'ಮ್ಮ', cp:'0CAE+0CCD+0CAE', name:'mm'},
+  {ch:'ಲ್ಲ', cp:'0CB2+0CCD+0CB2', name:'ll'},
+  {ch:'ಸ್ತ', cp:'0CB8+0CCD+0CA4', name:'st'},
+  {ch:'ಪ್ರ', cp:'0CAA+0CCD+0CB0', name:'pr'},
+  {ch:'ಗ್ರ', cp:'0C97+0CCD+0CB0', name:'gr'},
+  {ch:'ತ್ರ', cp:'0CA4+0CCD+0CB0', name:'tr'},
+  {ch:'ಶ್ರ', cp:'0CB6+0CCD+0CB0', name:'śr'},
+  {ch:'ಸ್ವ', cp:'0CB8+0CCD+0CB5', name:'sv'},
+  {ch:'ನ್ತ', cp:'0CA8+0CCD+0CA4', name:'nt'},
+  {ch:'ರ್ಕ', cp:'0CB0+0CCD+0C95', name:'rk'},
+  {ch:'ಂಚ', cp:'0C82+0C9A',       name:'anca'},
+  {ch:'ಂಗ', cp:'0C82+0C97',       name:'anga'},
+  {ch:'ಕ್ಕ', cp:'0C95+0CCD+0C95', name:'kk'},
+  {ch:'ಬ್ಬ', cp:'0CAC+0CCD+0CAC', name:'bb'},
+  {ch:'ಯ್ಯ', cp:'0CAF+0CCD+0CAF', name:'yy'},
+  {ch:'ರ್ರ', cp:'0CB0+0CCD+0CB0', name:'rr'},
+  {ch:'ಡ್ಡ', cp:'0CA1+0CCD+0CA1', name:'ḍḍ'},
+  {ch:'ಷ್ಟ', cp:'0CB7+0CCD+0C9F', name:'ṣṭ'},
+];
+
+const KANNADA_DIGITS = [
+  {ch:'೦', cp:'0CE6', name:'0'}, {ch:'೧', cp:'0CE7', name:'1'},
+  {ch:'೨', cp:'0CE8', name:'2'}, {ch:'೩', cp:'0CE9', name:'3'},
+  {ch:'೪', cp:'0CEA', name:'4'}, {ch:'೫', cp:'0CEB', name:'5'},
+  {ch:'೬', cp:'0CEC', name:'6'}, {ch:'೭', cp:'0CED', name:'7'},
+  {ch:'೮', cp:'0CEE', name:'8'}, {ch:'೯', cp:'0CEF', name:'9'},
+  {ch:'।', cp:'0964', name:'Danda'},{ch:'॥', cp:'0965', name:'DDanda'},
+];
+
+function buildUnicodeCell(item) {
+  const d = document.createElement('div');
+  d.className = 'unicode-cell';
+  d.title = `U+${item.cp}  ${item.name}`;
+  d.innerHTML =
+    `<span class="uc-char">${item.ch}</span>` +
+    `<span class="uc-code">U+${item.cp.split('+')[0]}</span>` +
+    `<span class="uc-name">${item.name}</span>`;
+  // Click to use in OCR single mode
+  d.onclick = () => {
+    setOcrMode('single');
+    document.getElementById('ocr-single').scrollIntoView({behavior:'smooth'});
+  };
+  return d;
+}
+
+function buildUnicodeRef() {
+  const vg = document.getElementById('unicode-vowels');
+  const cg = document.getElementById('unicode-consonants');
+  const jg = document.getElementById('unicode-conjuncts');
+  const dg = document.getElementById('unicode-digits');
+  if (vg.children.length) return; // already built
+  KANNADA_VOWELS.forEach(x => vg.appendChild(buildUnicodeCell(x)));
+  KANNADA_CONSONANTS.forEach(x => cg.appendChild(buildUnicodeCell(x)));
+  KANNADA_CONJUNCTS.forEach(x => jg.appendChild(buildUnicodeCell(x)));
+  KANNADA_DIGITS.forEach(x => dg.appendChild(buildUnicodeCell(x)));
+}
+
+function toggleUnicodeRef() {
+  const panel = document.getElementById('unicode-ref-panel');
+  const btn   = document.getElementById('unicode-toggle-btn');
+  const open  = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  btn.textContent = open ? 'Hide chart' : 'Show chart';
+  if (open) buildUnicodeRef();
+}
+
+async function genTestImages() {
+  const st = document.getElementById('gen-images-status');
+  st.style.color = 'var(--mute)';
+  st.textContent = '⏳ Generating character test images…';
+  try {
+    const r = await fetch('/api/generate-test-images', {method:'POST'});
+    const d = await r.json();
+    if (r.ok) {
+      st.style.color = 'var(--green)';
+      st.textContent =
+        `✓ Generated ${d.count} images in test-images/.  Click "Run 1:1 OCR test" to verify each character.`;
+      document.getElementById('run-char-test-btn').style.display = 'inline-block';
+    } else {
+      st.style.color = 'var(--red)';
+      st.textContent = `✗ ${d.error || 'Failed'}`;
+    }
+  } catch(e) {
+    st.style.color = 'var(--red)';
+    st.textContent = `✗ ${e.message}`;
+  }
+}
+
+// ── 1:1 Character OCR accuracy test ────────────────────────────────────────
+// Fetches test-images/ list, runs Tesseract.js on each char image,
+// compares result to expected Unicode character, displays pass/fail per cell.
+let charTestWorker = null;
+
+async function runCharOcrTest() {
+  const btn = document.getElementById('run-char-test-btn');
+  const st  = document.getElementById('gen-images-status');
+  btn.disabled = true;
+  st.style.color = 'var(--mute)';
+  st.textContent = '⏳ Running 1:1 OCR test…';
+
+  // Make sure Unicode chart is visible
+  const panel = document.getElementById('unicode-ref-panel');
+  if (panel.style.display === 'none') toggleUnicodeRef();
+
+  // Get list of generated images
+  let files;
+  try {
+    const r = await fetch('/api/test-images');
+    const d = await r.json();
+    files = d.files || [];
+  } catch(e) {
+    st.style.color = 'var(--red)';
+    st.textContent = `✗ ${e.message}`;
+    btn.disabled = false;
+    return;
+  }
+
+  if (!files.length) {
+    st.style.color = 'var(--amber)';
+    st.textContent = 'No test images found — generate them first.';
+    btn.disabled = false;
+    return;
+  }
+
+  // Build map: char name → expected character
+  const nameToChar = {};
+  [...KANNADA_VOWELS, ...KANNADA_CONSONANTS, ...KANNADA_DIGITS].forEach(x => {
+    nameToChar[x.name.toLowerCase().replace(/\s+/g,'_')] = x.ch;
+  });
+  KANNADA_CONJUNCTS.forEach(x => {
+    nameToChar[x.cp.toLowerCase().replace(/[+ ]/g,'_')] = x.ch;  // fallback
+    nameToChar[x.name.toLowerCase().replace(/\s+/g,'_')]  = x.ch;
+  });
+
+  // Tesseract worker
+  if (!charTestWorker) {
+    charTestWorker = await Tesseract.createWorker('kan', 1, {
+      workerPath:'https://unpkg.com/tesseract.js@5/dist/worker.min.js',
+      langPath:'https://tessdata.projectnaptha.com/4.0.0',
+      corePath:'https://unpkg.com/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
+    });
+    await charTestWorker.setParameters({ tessedit_pageseg_mode:'10' }); // single char
+  }
+
+  let pass = 0, fail = 0, total = 0;
+  const results = [];
+
+  for (const file of files.filter(f => f.name.startsWith('char_'))) {
+    const imgName = file.name.replace('char_','').replace('.png','');
+    const expected = nameToChar[imgName];
+    if (!expected) continue;
+    total++;
+
+    const { data: { text } } = await charTestWorker.recognize(file.url);
+    const got = text.trim().replace(/\s+/g,'');
+    const ok  = got === expected || got.startsWith(expected);
+    if (ok) pass++; else fail++;
+
+    // Mark the cell in the chart
+    markCharCell(expected, ok, got);
+    results.push({ char: expected, name: imgName, expected, got, ok });
+  }
+
+  // Summary
+  const pct = total ? Math.round(pass / total * 100) : 0;
+  st.style.color = pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
+  st.textContent = `1:1 OCR: ${pass}/${total} correct (${pct}%)  —  ${fail} failures`;
+  btn.disabled = false;
+
+  // Offer CSV export
+  const csv = ['char,name,expected_codepoint,ocr_output,pass']
+    .concat(results.map(r =>
+      `"${r.char}","${r.name}","U+${r.expected.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')}","${r.got}",${r.ok}`
+    )).join('\n');
+  downloadText(csv, 'char-ocr-results.csv');
+}
+
+function markCharCell(ch, ok, got) {
+  // Find the cell whose .uc-char text matches ch
+  document.querySelectorAll('.unicode-cell').forEach(cell => {
+    if (cell.querySelector('.uc-char')?.textContent?.trim() === ch) {
+      cell.style.borderColor = ok ? 'var(--green)' : 'var(--red)';
+      cell.style.background  = ok ? '#ecfdf5' : '#fef2f2';
+      // Show what OCR returned on failure
+      let badge = cell.querySelector('.uc-ocr-badge');
+      if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'uc-ocr-badge';
+        badge.style.cssText = 'font-size:.58rem;margin-top:2px;font-family:monospace';
+        cell.appendChild(badge);
+      }
+      badge.textContent = ok ? '✓' : `✗ "${got}"`;
+      badge.style.color = ok ? 'var(--green)' : 'var(--red)';
+    }
+  });
+}
 </script>
 </body>
 </html>
