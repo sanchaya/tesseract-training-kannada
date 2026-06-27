@@ -164,6 +164,61 @@ function runBg(cmd, args, stepId) {
   });
 }
 
+// ── API: system check ─────────────────────────────────────────────────────
+app.get("/api/syscheck", async (req, res) => {
+  const { execFile } = require("child_process");
+  const util = require("util");
+  const execP = util.promisify(execFile);
+
+  async function ver(cmd, args, re) {
+    try {
+      const { stdout, stderr } = await execP(cmd, args, { timeout: 5000 });
+      const m = (stdout + stderr).match(re);
+      return m ? m[0] : "found";
+    } catch { return null; }
+  }
+
+  const [tessVer, lstmVer, combineVer, py3Ver, node] = await Promise.all([
+    ver("tesseract",      ["--version"],  /tesseract\s+[\d.]+/i),
+    ver("lstmtraining",   ["--version"],  /[\d.]+/),
+    ver("combine_tessdata",["--version"], /[\d.]+/),
+    ver("python3",        ["--version"],  /[\d.]+/),
+    ver("node",           ["--version"],  /[\d.]+/),
+  ]);
+
+  // Pillow
+  let pillowVer = null;
+  try {
+    const { stdout } = await execP("python3", ["-c", "import PIL; print(PIL.__version__)"], { timeout: 5000 });
+    pillowVer = stdout.trim();
+  } catch { pillowVer = null; }
+
+  const kanBase   = fs.existsSync(path.join(P.tessdataDir, "kan.traineddata"));
+  const diskBytes = fs.statfsSync ? null : null; // skip if unavailable
+
+  res.json({
+    tools: [
+      { name: "Tesseract OCR",       key: "tesseract",       ver: tessVer,
+        ok: !!tessVer && /tesseract\s+5\./i.test(tessVer||""),
+        warn: !!tessVer && /tesseract\s+4\./i.test(tessVer||""),
+        need: "5.x required — macOS: brew install tesseract  |  Ubuntu: ppa:alex-p/tesseract-ocr5" },
+      { name: "lstmtraining",        key: "lstmtraining",    ver: lstmVer,    ok: !!lstmVer,    need: "bundled with Tesseract" },
+      { name: "combine_tessdata",    key: "combine_tessdata",ver: combineVer, ok: !!combineVer, need: "bundled with Tesseract" },
+      { name: "Python 3",            key: "python3",         ver: py3Ver,     ok: !!py3Ver,     need: "3.8+" },
+      { name: "Pillow (PIL)",        key: "pillow",          ver: pillowVer,  ok: !!pillowVer,  need: "pip install Pillow" },
+      { name: "Node.js",             key: "node",            ver: node,       ok: !!node,       need: "18+" },
+    ],
+    data: [
+      { name: "Base model (kan.traineddata)", key: "kan_base",  ok: kanBase,
+        detail: kanBase ? "tessdata_best/kan.traineddata" : "Run step ① to download" },
+      { name: "Rendered training images",     key: "rendered",  ok: globCount(P.rendered, ".png") > 0,
+        detail: `${globCount(P.rendered, ".png").toLocaleString()} PNG files in rendered/` },
+      { name: "lstmf training files",         key: "lstmf",     ok: lineCount(P.lstmfList) > 0,
+        detail: `${lineCount(P.lstmfList).toLocaleString()} files in lstmf/list.txt` },
+    ],
+  });
+});
+
 // ── API: status ────────────────────────────────────────────────────────────
 app.get("/api/status", (req, res) => {
   const fonts    = loadFonts();

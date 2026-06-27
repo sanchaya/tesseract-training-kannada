@@ -21,44 +21,30 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NODE_ENV=production \
     PORT=3000
 
-# ── System packages ───────────────────────────────────────────────
+# ── Base utilities ────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Tesseract 5 + training tools
+    software-properties-common \
+    build-essential \
+    python3 python3-pip python3-dev \
+    fontconfig libfreetype6 \
+    libjpeg-turbo8 libpng-dev \
+    git curl wget ca-certificates unzip \
+ && rm -rf /var/lib/apt/lists/*
+
+# ── Tesseract 5 via PPA ───────────────────────────────────────────
+# Ubuntu 22.04 ships Tesseract 4; the alex-p PPA provides Tesseract 5.x
+RUN add-apt-repository -y ppa:alex-p/tesseract-ocr5 \
+ && apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-kan \
+    tesseract-ocr-script-knda \
+    tesseract-ocr-all \
     libtesseract-dev \
     libleptonica-dev \
-    tesseract-ocr-script-knda \
-    # Build tools needed for some npm native modules
-    build-essential \
-    python3 \
-    python3-pip \
-    python3-dev \
-    # Font rendering dependencies
-    fontconfig \
-    libfreetype6 \
-    # Image processing for Python (Pillow)
-    libjpeg-turbo8 \
-    libpng-dev \
-    # Utilities
-    git \
-    curl \
-    wget \
-    ca-certificates \
-    unzip \
- && rm -rf /var/lib/apt/lists/*
-
-# ── Tesseract training tools (not in standard apt package) ─────────
-# Install from source to get lstmtraining, combine_tessdata, etc.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    autoconf automake libtool pkg-config \
+    # Training tools (lstmtraining, combine_tessdata, etc.)
     libicu-dev libpango1.0-dev libcairo2-dev \
- && rm -rf /var/lib/apt/lists/*
-
-# Try apt training tools first (Ubuntu 22 has them in universe)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tesseract-ocr-all \
- && rm -rf /var/lib/apt/lists/* || true
+ && rm -rf /var/lib/apt/lists/* \
+ && tesseract --version
 
 # ── Node.js 20 LTS ────────────────────────────────────────────────
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \

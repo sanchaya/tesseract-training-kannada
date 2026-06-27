@@ -43,7 +43,8 @@ OUTPUT = CORPUS_DIR / "kan_corpus.txt"
 MAX_CHARS = 80
 MIN_KAN   = 8   # minimum Kannada chars per line
 
-KEEP_ASCII = set(' .,;:?!-/()"\'।॥*%0123456789')
+KEEP_ASCII = set(' .,;:?!-/()"\'।॥%0123456789')
+# Note: * intentionally excluded — markdown bullets must not appear in GT text
 
 def is_kannada(c: str) -> bool:
     return 0x0C80 <= ord(c) <= 0x0CFF
@@ -55,6 +56,9 @@ def clean_line(line: str) -> str:
     line = re.sub(r'https?://\S+', '', line)
     # Strip Wikipedia reference markers like [1], [2]
     line = re.sub(r'\[\d+\]', '', line)
+    # Strip markdown/wiki heading markers (==, ===, #, ##, *)
+    line = re.sub(r'^[=*#\s]+', '', line)
+    line = re.sub(r'[=*#]+$', '', line)
     # Keep only Kannada chars + allowed ASCII
     chars = [c for c in line if is_kannada(c) or c in KEEP_ASCII]
     # Collapse whitespace
