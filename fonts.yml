@@ -15,8 +15,8 @@
 #   id          - Short identifier (used for file naming in rendered/)
 #   name        - Human-readable font family name
 #   repo        - GitHub URL; fonts are cloned into fonts/<id>/
-#   font_dir    - Subdirectory inside repo containing .ttf files
-#   font_files  - .ttf filenames to render with
+#   font_dir    - Subdirectory inside repo containing font files
+#   font_files  - Font filenames to render with (.ttf or .otf)
 #   degrade     - true = add ink-spread simulation (historical/letterpress)
 #                 false = clean rendering (modern digital fonts)
 #   max_pages   - Training image count per font style
@@ -25,8 +25,8 @@
 fonts:
 
   # ── KarnataGTN ───────────────────────────────────────────────
-  # Modern variable font, G.T. Narayana Rao handwriting style.
-  # 6 static weights. Clean rendering (no degradation).
+  # Modern typeface, G.T. Narayana Rao handwriting style.
+  # 6 static weights (TTF preferred; OTF also available).
   - id: kan_gtn
     name: "Karnata GTN"
     description: "Kannada typeface in G.T. Narayana Rao style (Sanchaya)"
@@ -35,18 +35,21 @@ fonts:
     font_files:
       - KarnataGTN-Regular.ttf
       - KarnataGTN-Medium.ttf
+      - KarnataGTN-SemiBold.ttf
       - KarnataGTN-Bold.ttf
+      - KarnataGTN-ExtraBold.ttf
       - KarnataGTN-Black.ttf
     degrade: false
-    max_pages: 800
+    max_pages: 600
 
   # ── Karnata German Mission Press ─────────────────────────────
   # Historical letterpress revival, German Mission Press, Mangaluru.
+  # TTF and OTF both available — TTF used for training.
   - id: kan_gmp
     name: "Karnata German Mission Press"
     description: "Revival of German Mission Press Kannada typeface, Mangaluru"
     repo: https://github.com/sanchaya/karnata-german-mission-press-typeface
-    font_dir: fonts
+    font_dir: fonts/ttf
     font_files:
       - KarnataGermanMissionPressTypeface.ttf
     degrade: true
@@ -54,11 +57,12 @@ fonts:
 
   # ── Karnata Wesleyan Mission Press ───────────────────────────
   # Historical letterpress revival, Wesleyan Mission Press.
+  # TTF and OTF both available — TTF used for training.
   - id: kan_wmp
     name: "Karnata Wesleyan Mission Press"
     description: "Revival of Wesleyan Mission Press Kannada typeface, Bengaluru/Mangaluru"
     repo: https://github.com/sanchaya/karnata-wesleyan-mission-press-typeface
-    font_dir: fonts
+    font_dir: fonts/ttf
     font_files:
       - KarnataWesleyanMissionPress.ttf
     degrade: true
@@ -66,14 +70,14 @@ fonts:
 
   # ── Karnata F Kittel ─────────────────────────────────────────
   # Basel Mission Press, Mangalore (1830-1900). Named after F. Kittel.
-  # Designed specifically for OCR training.
+  # OTF only (no TTF version exists).
   - id: kan_kittel
     name: "Karnata F Kittel"
     description: "Revival of Basel Mission Press Mangalore typeface (1830-1900)"
     repo: https://github.com/sanchaya/karnata-f-kittel-font
     font_dir: fonts
     font_files:
-      - KarnataFKittel.ttf
+      - KarnataFKittel.otf
     degrade: true
     max_pages: 600
 

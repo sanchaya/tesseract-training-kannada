@@ -410,6 +410,30 @@ footer a:hover { text-decoration: underline; }
 }
 
 /* ── Kannada Unicode Reference ─────────────────────────── */
+.ucref-group-label {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--mute);
+  letter-spacing: .05em;
+  margin-bottom: 6px;
+}
+.font-tab-btn {
+  padding: 5px 13px;
+  font-size: .78rem;
+  font-weight: 600;
+  border: 1.5px solid var(--border2);
+  border-radius: 7px;
+  background: var(--card);
+  color: var(--ink2);
+  cursor: pointer;
+  transition: all .15s;
+}
+.font-tab-btn.active {
+  border-color: var(--brand);
+  background: var(--brand-xl);
+  color: var(--brand-d);
+}
 .unicode-grid {
   display: flex;
   flex-wrap: wrap;
@@ -444,11 +468,21 @@ footer a:hover { text-decoration: underline; }
   font-size: .58rem;
   color: var(--mute);
   text-align: center;
-  max-width: 54px;
+  max-width: 64px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* PNG mode: replace text glyph with image */
+.unicode-cell .uc-img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  image-rendering: crisp-edges;
+  border-radius: 3px;
+}
+.unicode-cell.png-mode .uc-char { display: none; }
+.unicode-cell:not(.png-mode) .uc-img { display: none; }
 </style>
 </head>
 <body>
@@ -1101,46 +1135,69 @@ footer a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- ── Kannada Unicode Reference ─────────────────────────────── -->
-  <div class="card" style="margin-top:18px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <h3 style="font-size:.95rem;color:var(--ink)">ಕನ್ನಡ Unicode Reference</h3>
-      <div style="display:flex;gap:8px">
-        <button onclick="genTestImages()" class="btn-sm"
-          style="font-size:.78rem;padding:4px 12px;background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer">
-          ⬇ Generate test images
+  <!-- ── Kannada Unicode Reference (per-font) ─────────────────── -->
+  <div class="card" style="margin-top:18px" id="unicode-ref-card">
+
+    <!-- Header row -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <h3 style="font-size:.95rem;color:var(--ink);margin:0">ಕನ್ನಡ Unicode Reference</h3>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button onclick="genTestImages()" id="btn-gen-imgs"
+          style="font-size:.76rem;padding:4px 11px;background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer">
+          ⬇ Generate images
         </button>
         <button onclick="runCharOcrTest()" id="run-char-test-btn"
-          style="display:none;font-size:.78rem;padding:4px 12px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer">
+          style="display:none;font-size:.76rem;padding:4px 11px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer">
           ▶ Run 1:1 OCR test
         </button>
-        <button onclick="toggleUnicodeRef()" class="btn-sm"
-          style="font-size:.78rem;padding:4px 12px;background:var(--brand-xl);color:var(--brand-d);border:none;border-radius:6px;cursor:pointer"
-          id="unicode-toggle-btn">Show chart</button>
+        <button onclick="toggleUnicodeRef()" id="unicode-toggle-btn"
+          style="font-size:.76rem;padding:4px 11px;background:var(--brand-xl);color:var(--brand-d);border:none;border-radius:6px;cursor:pointer">
+          Show chart
+        </button>
       </div>
     </div>
+
+    <!-- Font family tabs -->
+    <div id="font-tabs" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:12px;border-bottom:2px solid var(--border);padding-bottom:8px"></div>
+
+    <!-- Variant + view controls -->
+    <div id="font-controls" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <label style="font-size:.78rem;color:var(--mute)">Variant:</label>
+      <select id="variant-select" onchange="selectVariant(this.value)"
+        style="font-size:.78rem;padding:3px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--card)"></select>
+      <div style="margin-left:auto;display:flex;gap:6px">
+        <button onclick="setUnicodeView('live')" id="view-live-btn"
+          style="font-size:.74rem;padding:3px 10px;border:1.5px solid var(--brand);border-radius:5px;background:var(--brand);color:#fff;cursor:pointer">
+          Live preview
+        </button>
+        <button onclick="setUnicodeView('png')" id="view-png-btn"
+          style="font-size:.74rem;padding:3px 10px;border:1.5px solid var(--border2);border-radius:5px;background:var(--card);color:var(--ink2);cursor:pointer">
+          Generated PNGs
+        </button>
+      </div>
+    </div>
+
+    <!-- Character grid panels -->
     <div id="unicode-ref-panel" style="display:none">
-      <!-- Vowels -->
       <div style="margin-bottom:14px">
-        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--mute);letter-spacing:.04em;margin-bottom:6px">Vowels (ಸ್ವರಗಳು)</div>
+        <div class="ucref-group-label">Vowels — ಸ್ವರಗಳು</div>
         <div id="unicode-vowels" class="unicode-grid"></div>
       </div>
-      <!-- Consonants -->
       <div style="margin-bottom:14px">
-        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--mute);letter-spacing:.04em;margin-bottom:6px">Consonants (ವ್ಯಂಜನಗಳು)</div>
+        <div class="ucref-group-label">Consonants — ವ್ಯಂಜನಗಳು</div>
         <div id="unicode-consonants" class="unicode-grid"></div>
       </div>
-      <!-- Conjuncts -->
       <div style="margin-bottom:14px">
-        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--mute);letter-spacing:.04em;margin-bottom:6px">Conjuncts with Virama ್ (U+0CCD)</div>
+        <div class="ucref-group-label">Conjuncts with Virama ್&nbsp;(U+0CCD)</div>
         <div id="unicode-conjuncts" class="unicode-grid"></div>
       </div>
-      <!-- Digits & Numerals -->
-      <div>
-        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--mute);letter-spacing:.04em;margin-bottom:6px">Digits (ಅಂಕಿಗಳು)</div>
+      <div style="margin-bottom:6px">
+        <div class="ucref-group-label">Digits — ಅಂಕಿಗಳು</div>
         <div id="unicode-digits" class="unicode-grid"></div>
       </div>
     </div>
+
+    <!-- Status / progress -->
     <div id="gen-images-status" style="font-size:.8rem;color:var(--mute);margin-top:8px"></div>
   </div>
 </div>
@@ -1279,6 +1336,7 @@ function tab(id, btn) {
   if (id==='train') { loadBcer(); loadCheckpoints(); loadCorpusStats(); }
   if (id==='imgs')  loadImgs();
   if (id==='fonts') loadFonts();
+  if (id==='ocr' && !fontRegistry) loadFontRegistry();
   if (id==='scan')  loadScans();
 }
 
@@ -2407,127 +2465,319 @@ async function loadAll() {
 loadAll();
 setInterval(loadStatus, 20000);
 
-// ══════════════════════════════════════════════════════════════
-// Kannada Unicode Reference Chart
-// ══════════════════════════════════════════════════════════════
+// ── State ──────────────────────────────────────────────────────
+let fontRegistry     = null;   // [{id,name,variants:[{name,fmt,fontUrl,...}]}]
+let uFontId          = null;   // currently selected font id
+let uVariant         = null;   // currently selected variant name
+let uViewMode        = 'live'; // 'live' | 'png'
+let uPngMap          = {};     // charKey → image URL for current variant
+let charTestWorker   = null;
+
+// ── Character data ─────────────────────────────────────────────
 const KANNADA_VOWELS = [
-  {ch:'ಅ', cp:'0C85', name:'A'},   {ch:'ಆ', cp:'0C86', name:'AA'},
-  {ch:'ಇ', cp:'0C87', name:'I'},   {ch:'ಈ', cp:'0C88', name:'II'},
-  {ch:'ಉ', cp:'0C89', name:'U'},   {ch:'ಊ', cp:'0C8A', name:'UU'},
-  {ch:'ಋ', cp:'0C8B', name:'RR'},  {ch:'ಌ', cp:'0C8C', name:'LI'},
-  {ch:'ಎ', cp:'0C8E', name:'E'},   {ch:'ಏ', cp:'0C8F', name:'EE'},
-  {ch:'ಐ', cp:'0C90', name:'AI'},  {ch:'ಒ', cp:'0C92', name:'O'},
-  {ch:'ಓ', cp:'0C93', name:'OO'},  {ch:'ಔ', cp:'0C94', name:'AU'},
-  {ch:'ಂ', cp:'0C82', name:'Anusvara'}, {ch:'ಃ', cp:'0C83', name:'Visarga'},
+  {ch:'ಅ',cp:'0C85',name:'A'},   {ch:'ಆ',cp:'0C86',name:'AA'},
+  {ch:'ಇ',cp:'0C87',name:'I'},   {ch:'ಈ',cp:'0C88',name:'II'},
+  {ch:'ಉ',cp:'0C89',name:'U'},   {ch:'ಊ',cp:'0C8A',name:'UU'},
+  {ch:'ಋ',cp:'0C8B',name:'RR'},  {ch:'ಎ',cp:'0C8E',name:'E'},
+  {ch:'ಏ',cp:'0C8F',name:'EE'},  {ch:'ಐ',cp:'0C90',name:'AI'},
+  {ch:'ಒ',cp:'0C92',name:'O'},   {ch:'ಓ',cp:'0C93',name:'OO'},
+  {ch:'ಔ',cp:'0C94',name:'AU'},  {ch:'ಂ',cp:'0C82',name:'Anusvara'},
+  {ch:'ಃ',cp:'0C83',name:'Visarga'},
 ];
-
 const KANNADA_CONSONANTS = [
-  {ch:'ಕ', cp:'0C95', name:'KA'},  {ch:'ಖ', cp:'0C96', name:'KHA'},
-  {ch:'ಗ', cp:'0C97', name:'GA'},  {ch:'ಘ', cp:'0C98', name:'GHA'},
-  {ch:'ಙ', cp:'0C99', name:'NGA'}, {ch:'ಚ', cp:'0C9A', name:'CA'},
-  {ch:'ಛ', cp:'0C9B', name:'CHA'}, {ch:'ಜ', cp:'0C9C', name:'JA'},
-  {ch:'ಝ', cp:'0C9D', name:'JHA'}, {ch:'ಞ', cp:'0C9E', name:'NYA'},
-  {ch:'ಟ', cp:'0C9F', name:'TTA'}, {ch:'ಠ', cp:'0CA0', name:'TTHA'},
-  {ch:'ಡ', cp:'0CA1', name:'DDA'}, {ch:'ಢ', cp:'0CA2', name:'DDHA'},
-  {ch:'ಣ', cp:'0CA3', name:'NNA'}, {ch:'ತ', cp:'0CA4', name:'TA'},
-  {ch:'ಥ', cp:'0CA5', name:'THA'}, {ch:'ದ', cp:'0CA6', name:'DA'},
-  {ch:'ಧ', cp:'0CA7', name:'DHA'}, {ch:'ನ', cp:'0CA8', name:'NA'},
-  {ch:'ಪ', cp:'0CAA', name:'PA'},  {ch:'ಫ', cp:'0CAB', name:'PHA'},
-  {ch:'ಬ', cp:'0CAC', name:'BA'},  {ch:'ಭ', cp:'0CAD', name:'BHA'},
-  {ch:'ಮ', cp:'0CAE', name:'MA'},  {ch:'ಯ', cp:'0CAF', name:'YA'},
-  {ch:'ರ', cp:'0CB0', name:'RA'},  {ch:'ಱ', cp:'0CB1', name:'RRA'},
-  {ch:'ಲ', cp:'0CB2', name:'LA'},  {ch:'ಳ', cp:'0CB3', name:'LLA'},
-  {ch:'ವ', cp:'0CB5', name:'VA'},  {ch:'ಶ', cp:'0CB6', name:'SHA'},
-  {ch:'ಷ', cp:'0CB7', name:'SSA'}, {ch:'ಸ', cp:'0CB8', name:'SA'},
-  {ch:'ಹ', cp:'0CB9', name:'HA'},
+  {ch:'ಕ',cp:'0C95',name:'KA'}, {ch:'ಖ',cp:'0C96',name:'KHA'},{ch:'ಗ',cp:'0C97',name:'GA'},
+  {ch:'ಘ',cp:'0C98',name:'GHA'},{ch:'ಙ',cp:'0C99',name:'NGA'},{ch:'ಚ',cp:'0C9A',name:'CA'},
+  {ch:'ಛ',cp:'0C9B',name:'CHA'},{ch:'ಜ',cp:'0C9C',name:'JA'}, {ch:'ಝ',cp:'0C9D',name:'JHA'},
+  {ch:'ಞ',cp:'0C9E',name:'NYA'},{ch:'ಟ',cp:'0C9F',name:'TTA'},{ch:'ಠ',cp:'0CA0',name:'TTHA'},
+  {ch:'ಡ',cp:'0CA1',name:'DDA'},{ch:'ಢ',cp:'0CA2',name:'DDHA'},{ch:'ಣ',cp:'0CA3',name:'NNA'},
+  {ch:'ತ',cp:'0CA4',name:'TA'}, {ch:'ಥ',cp:'0CA5',name:'THA'},{ch:'ದ',cp:'0CA6',name:'DA'},
+  {ch:'ಧ',cp:'0CA7',name:'DHA'},{ch:'ನ',cp:'0CA8',name:'NA'}, {ch:'ಪ',cp:'0CAA',name:'PA'},
+  {ch:'ಫ',cp:'0CAB',name:'PHA'},{ch:'ಬ',cp:'0CAC',name:'BA'}, {ch:'ಭ',cp:'0CAD',name:'BHA'},
+  {ch:'ಮ',cp:'0CAE',name:'MA'}, {ch:'ಯ',cp:'0CAF',name:'YA'}, {ch:'ರ',cp:'0CB0',name:'RA'},
+  {ch:'ಱ',cp:'0CB1',name:'RRA'},{ch:'ಲ',cp:'0CB2',name:'LA'}, {ch:'ಳ',cp:'0CB3',name:'LLA'},
+  {ch:'ವ',cp:'0CB5',name:'VA'}, {ch:'ಶ',cp:'0CB6',name:'SHA'},{ch:'ಷ',cp:'0CB7',name:'SSA'},
+  {ch:'ಸ',cp:'0CB8',name:'SA'}, {ch:'ಹ',cp:'0CB9',name:'HA'},
 ];
-
-// Common conjuncts — consonant + ್ (virama U+0CCD) + next consonant
 const KANNADA_CONJUNCTS = [
-  {ch:'ಕ್ತ', cp:'0C95+0CCD+0CA4', name:'k+t'},
-  {ch:'ಕ್ಷ', cp:'0C95+0CCD+0CB7', name:'kṣa'},
-  {ch:'ಜ್ಞ', cp:'0C9C+0CCD+0C9E', name:'jña'},
-  {ch:'ತ್ತ', cp:'0CA4+0CCD+0CA4', name:'tt'},
-  {ch:'ದ್ದ', cp:'0CA6+0CCD+0CA6', name:'dd'},
-  {ch:'ನ್ನ', cp:'0CA8+0CCD+0CA8', name:'nn'},
-  {ch:'ಮ್ಮ', cp:'0CAE+0CCD+0CAE', name:'mm'},
-  {ch:'ಲ್ಲ', cp:'0CB2+0CCD+0CB2', name:'ll'},
-  {ch:'ಸ್ತ', cp:'0CB8+0CCD+0CA4', name:'st'},
-  {ch:'ಪ್ರ', cp:'0CAA+0CCD+0CB0', name:'pr'},
-  {ch:'ಗ್ರ', cp:'0C97+0CCD+0CB0', name:'gr'},
-  {ch:'ತ್ರ', cp:'0CA4+0CCD+0CB0', name:'tr'},
-  {ch:'ಶ್ರ', cp:'0CB6+0CCD+0CB0', name:'śr'},
-  {ch:'ಸ್ವ', cp:'0CB8+0CCD+0CB5', name:'sv'},
-  {ch:'ನ್ತ', cp:'0CA8+0CCD+0CA4', name:'nt'},
-  {ch:'ರ್ಕ', cp:'0CB0+0CCD+0C95', name:'rk'},
-  {ch:'ಂಚ', cp:'0C82+0C9A',       name:'anca'},
-  {ch:'ಂಗ', cp:'0C82+0C97',       name:'anga'},
-  {ch:'ಕ್ಕ', cp:'0C95+0CCD+0C95', name:'kk'},
-  {ch:'ಬ್ಬ', cp:'0CAC+0CCD+0CAC', name:'bb'},
-  {ch:'ಯ್ಯ', cp:'0CAF+0CCD+0CAF', name:'yy'},
-  {ch:'ರ್ರ', cp:'0CB0+0CCD+0CB0', name:'rr'},
-  {ch:'ಡ್ಡ', cp:'0CA1+0CCD+0CA1', name:'ḍḍ'},
-  {ch:'ಷ್ಟ', cp:'0CB7+0CCD+0C9F', name:'ṣṭ'},
+  {ch:'ಕ್ಷ',name:'ksha'},{ch:'ಜ್ಞ',name:'jnya'},{ch:'ತ್ತ',name:'tt'},
+  {ch:'ದ್ದ',name:'dd'},  {ch:'ನ್ನ',name:'nn'},  {ch:'ಮ್ಮ',name:'mm'},
+  {ch:'ಲ್ಲ',name:'ll'},  {ch:'ಸ್ತ',name:'st'},  {ch:'ಪ್ರ',name:'pr'},
+  {ch:'ಗ್ರ',name:'gr'},  {ch:'ತ್ರ',name:'tr'},  {ch:'ಶ್ರ',name:'shr'},
+  {ch:'ಸ್ವ',name:'sv'},  {ch:'ನ್ತ',name:'nt'},  {ch:'ರ್ಕ',name:'rk'},
+  {ch:'ಕ್ಕ',name:'kk'},  {ch:'ಬ್ಬ',name:'bb'},  {ch:'ಷ್ಟ',name:'sht'},
+  {ch:'ಕ್ತ',name:'kt'},  {ch:'ನ್ಮ',name:'nm'},  {ch:'ಧ್ವ',name:'dhv'},
+  {ch:'ಸ್ಪ',name:'sp'},  {ch:'ನ್ದ',name:'nd'},  {ch:'ರ್ಥ',name:'rth'},
 ];
-
 const KANNADA_DIGITS = [
-  {ch:'೦', cp:'0CE6', name:'0'}, {ch:'೧', cp:'0CE7', name:'1'},
-  {ch:'೨', cp:'0CE8', name:'2'}, {ch:'೩', cp:'0CE9', name:'3'},
-  {ch:'೪', cp:'0CEA', name:'4'}, {ch:'೫', cp:'0CEB', name:'5'},
-  {ch:'೬', cp:'0CEC', name:'6'}, {ch:'೭', cp:'0CED', name:'7'},
-  {ch:'೮', cp:'0CEE', name:'8'}, {ch:'೯', cp:'0CEF', name:'9'},
-  {ch:'।', cp:'0964', name:'Danda'},{ch:'॥', cp:'0965', name:'DDanda'},
+  {ch:'೦',cp:'0CE6',name:'0'},{ch:'೧',cp:'0CE7',name:'1'},{ch:'೨',cp:'0CE8',name:'2'},
+  {ch:'೩',cp:'0CE9',name:'3'},{ch:'೪',cp:'0CEA',name:'4'},{ch:'೫',cp:'0CEB',name:'5'},
+  {ch:'೬',cp:'0CEC',name:'6'},{ch:'೭',cp:'0CED',name:'7'},{ch:'೮',cp:'0CEE',name:'8'},
+  {ch:'೯',cp:'0CEF',name:'9'},{ch:'।',cp:'0964',name:'danda'},{ch:'॥',cp:'0965',name:'ddanda'},
 ];
 
-function buildUnicodeCell(item) {
+// ── Load font registry ─────────────────────────────────────────
+async function loadFontRegistry() {
+  try {
+    const r = await fetch('/api/fonts-registry');
+    const d = await r.json();
+    fontRegistry = d.fonts || [];
+    renderFontTabs();
+    if (fontRegistry.length) selectFont(fontRegistry[0].id);
+  } catch(e) {
+    console.warn('Font registry unavailable:', e);
+  }
+}
+
+// ── Font family tabs ───────────────────────────────────────────
+function renderFontTabs() {
+  const el = document.getElementById('font-tabs');
+  el.innerHTML = '';
+  el.style.display = 'flex';
+  fontRegistry.forEach(f => {
+    const b = document.createElement('button');
+    b.className = 'font-tab-btn';
+    b.id = `ftab-${f.id}`;
+    b.textContent = f.name;
+    b.title = f.description || '';
+    b.onclick = () => selectFont(f.id);
+    el.appendChild(b);
+  });
+}
+
+function selectFont(fontId) {
+  uFontId = fontId;
+  document.querySelectorAll('.font-tab-btn').forEach(b => b.classList.remove('active'));
+  const tab = document.getElementById(`ftab-${fontId}`);
+  if (tab) tab.classList.add('active');
+
+  const font = fontRegistry.find(f => f.id === fontId);
+  if (!font) return;
+
+  // Populate variant dropdown
+  const sel = document.getElementById('variant-select');
+  sel.innerHTML = '';
+  font.variants.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = `${v.name}  [${v.fmt}]${v.hasImages ? '' : ' — no images yet'}`;
+    sel.appendChild(opt);
+  });
+  document.getElementById('font-controls').style.display = 'flex';
+
+  selectVariant(font.variants[0]?.name);
+}
+
+function selectVariant(variantName) {
+  uVariant = variantName;
+  document.getElementById('variant-select').value = variantName;
+
+  const font    = fontRegistry.find(f => f.id === uFontId);
+  const variant = font?.variants.find(v => v.name === variantName);
+  if (!variant) return;
+
+  // Inject @font-face for this variant
+  injectFontFace(variantName, variant.fontUrl);
+
+  // Show/hide OCR test button based on whether images exist
+  document.getElementById('run-char-test-btn').style.display =
+    variant.hasImages ? 'inline-block' : 'none';
+
+  // Re-render chart in current view mode
+  if (document.getElementById('unicode-ref-panel').style.display !== 'none') {
+    renderUnicodeGrid();
+  }
+}
+
+// ── @font-face injection ───────────────────────────────────────
+const injectedFaces = new Set();
+function injectFontFace(variantName, fontUrl) {
+  if (injectedFaces.has(variantName)) return;
+  injectedFaces.add(variantName);
+  const style = document.createElement('style');
+  style.textContent = `@font-face {
+    font-family: '${CSS.escape(variantName)}';
+    src: url('${fontUrl}') format('${fontUrl.endsWith('.otf') ? 'opentype' : 'truetype'}');
+    font-display: block;
+  }`;
+  document.head.appendChild(style);
+}
+
+// ── View mode toggle ───────────────────────────────────────────
+function setUnicodeView(mode) {
+  uViewMode = mode;
+  const liveBtn = document.getElementById('view-live-btn');
+  const pngBtn  = document.getElementById('view-png-btn');
+  if (mode === 'live') {
+    liveBtn.style.background = 'var(--brand)'; liveBtn.style.color = '#fff';
+    liveBtn.style.borderColor = 'var(--brand)';
+    pngBtn.style.background  = 'var(--card)';  pngBtn.style.color  = 'var(--ink2)';
+    pngBtn.style.borderColor  = 'var(--border2)';
+  } else {
+    pngBtn.style.background  = 'var(--brand)'; pngBtn.style.color  = '#fff';
+    pngBtn.style.borderColor  = 'var(--brand)';
+    liveBtn.style.background = 'var(--card)';  liveBtn.style.color = 'var(--ink2)';
+    liveBtn.style.borderColor = 'var(--border2)';
+  }
+  if (mode === 'png') loadVariantPngs().then(() => renderUnicodeGrid());
+  else renderUnicodeGrid();
+}
+
+// ── Load PNG map for current variant ──────────────────────────
+async function loadVariantPngs() {
+  if (!uFontId || !uVariant) return;
+  const st = document.getElementById('gen-images-status');
+  st.style.color = 'var(--mute)';
+  st.textContent = 'Loading images…';
+  try {
+    const r = await fetch(`/api/test-images/${uFontId}/${encodeURIComponent(uVariant)}`);
+    const d = await r.json();
+    uPngMap = {};
+    (d.files || []).forEach(f => {
+      // key by file stem, e.g. 'vowel_a', 'consonant_ka', 'conjunct_ksha', 'digit_0'
+      const key = f.file.replace('.png','');
+      uPngMap[key] = f.url;
+      // Also map by character if manifest has it
+      if (f.ch) uPngMap[`ch:${f.ch}`] = f.url;
+    });
+    st.textContent = d.files?.length
+      ? `${d.files.length} images loaded for ${uVariant}`
+      : 'No images found — click Generate images first';
+    st.style.color = d.files?.length ? 'var(--green)' : 'var(--amber)';
+  } catch(e) {
+    st.style.color = 'var(--red)'; st.textContent = `✗ ${e.message}`;
+  }
+}
+
+// ── PNG URL helper ─────────────────────────────────────────────
+function pngFor(type, nameOrCh) {
+  // Try by key pattern: vowel_A, consonant_KA, conjunct_ksha, digit_0
+  const k1 = `${type}_${nameOrCh.toLowerCase()}`;
+  if (uPngMap[k1]) return uPngMap[k1];
+  // Try by character
+  if (uPngMap[`ch:${nameOrCh}`]) return uPngMap[`ch:${nameOrCh}`];
+  return null;
+}
+
+// ── Build one character cell ───────────────────────────────────
+function buildUnicodeCell(item, type) {
   const d = document.createElement('div');
   d.className = 'unicode-cell';
-  d.title = `U+${item.cp}  ${item.name}`;
-  d.innerHTML =
-    `<span class="uc-char">${item.ch}</span>` +
-    `<span class="uc-code">U+${item.cp.split('+')[0]}</span>` +
-    `<span class="uc-name">${item.name}</span>`;
-  // Click to use in OCR single mode
-  d.onclick = () => {
-    setOcrMode('single');
-    document.getElementById('ocr-single').scrollIntoView({behavior:'smooth'});
-  };
+  d.dataset.ch   = item.ch;
+  d.dataset.type = type;
+  d.dataset.name = item.name || item.ch;
+  d.title = `${item.ch}  ${item.cp ? 'U+'+item.cp+' · ' : ''}${item.name || ''}`;
+
+  // Live-preview glyph (hidden in PNG mode)
+  const span = document.createElement('span');
+  span.className = 'uc-char';
+  span.textContent = item.ch;
+
+  // PNG image (hidden in live mode)
+  const img = document.createElement('img');
+  img.className = 'uc-img';
+  img.alt = item.ch;
+  img.loading = 'lazy';
+
+  const code = document.createElement('span');
+  code.className = 'uc-code';
+  code.textContent = item.cp ? `U+${item.cp}` : item.name;
+
+  const name = document.createElement('span');
+  name.className = 'uc-name';
+  name.textContent = item.name || item.ch;
+
+  d.append(span, img, code, name);
+  d.onclick = () => useCharInOcr(item.ch);
   return d;
 }
 
-function buildUnicodeRef() {
-  const vg = document.getElementById('unicode-vowels');
-  const cg = document.getElementById('unicode-consonants');
-  const jg = document.getElementById('unicode-conjuncts');
-  const dg = document.getElementById('unicode-digits');
-  if (vg.children.length) return; // already built
-  KANNADA_VOWELS.forEach(x => vg.appendChild(buildUnicodeCell(x)));
-  KANNADA_CONSONANTS.forEach(x => cg.appendChild(buildUnicodeCell(x)));
-  KANNADA_CONJUNCTS.forEach(x => jg.appendChild(buildUnicodeCell(x)));
-  KANNADA_DIGITS.forEach(x => dg.appendChild(buildUnicodeCell(x)));
+// ── Render full grid ───────────────────────────────────────────
+function renderUnicodeGrid() {
+  const fontFamily = uVariant ? `'${CSS.escape(uVariant)}', 'Noto Sans Kannada', serif` : 'inherit';
+
+  const groups = [
+    { id:'unicode-vowels',     items:KANNADA_VOWELS,     type:'vowel' },
+    { id:'unicode-consonants', items:KANNADA_CONSONANTS, type:'consonant' },
+    { id:'unicode-conjuncts',  items:KANNADA_CONJUNCTS,  type:'conjunct' },
+    { id:'unicode-digits',     items:KANNADA_DIGITS,     type:'digit' },
+  ];
+
+  groups.forEach(({ id, items, type }) => {
+    const container = document.getElementById(id);
+    if (!container) return;
+
+    // Build or reuse cells
+    if (container.children.length !== items.length) {
+      container.innerHTML = '';
+      items.forEach(item => container.appendChild(buildUnicodeCell(item, type)));
+    }
+
+    // Apply font + mode to each cell
+    Array.from(container.children).forEach((cell, i) => {
+      const item = items[i];
+      cell.querySelector('.uc-char').style.fontFamily = fontFamily;
+
+      if (uViewMode === 'png') {
+        cell.classList.add('png-mode');
+        const img   = cell.querySelector('.uc-img');
+        const url   = pngFor(type, item.name || item.ch);
+        if (url && img.src !== location.origin + url) {
+          img.src   = url;
+          img.onerror = () => { img.src = ''; cell.classList.remove('png-mode'); };
+        } else if (!url) {
+          cell.classList.remove('png-mode'); // no image → fall back to live text
+        }
+      } else {
+        cell.classList.remove('png-mode');
+      }
+    });
+  });
 }
 
+// ── Toggle chart visibility ────────────────────────────────────
 function toggleUnicodeRef() {
   const panel = document.getElementById('unicode-ref-panel');
   const btn   = document.getElementById('unicode-toggle-btn');
   const open  = panel.style.display === 'none';
   panel.style.display = open ? 'block' : 'none';
   btn.textContent = open ? 'Hide chart' : 'Show chart';
-  if (open) buildUnicodeRef();
+  if (open) {
+    // Ensure font registry loaded
+    if (!fontRegistry) {
+      loadFontRegistry().then(() => renderUnicodeGrid());
+    } else {
+      renderUnicodeGrid();
+    }
+  }
 }
 
+// ── Use character in OCR single-mode ──────────────────────────
+function useCharInOcr(ch) {
+  setOcrMode('single');
+  document.getElementById('ocr-single')?.scrollIntoView({ behavior:'smooth' });
+}
+
+// ── Generate test images (per-font or all) ────────────────────
 async function genTestImages() {
   const st = document.getElementById('gen-images-status');
+  const btn = document.getElementById('btn-gen-imgs');
+  btn.disabled = true;
   st.style.color = 'var(--mute)';
-  st.textContent = '⏳ Generating character test images…';
+  st.textContent = `⏳ Generating images for ${uFontId || 'all fonts'}…`;
   try {
-    const r = await fetch('/api/generate-test-images', {method:'POST'});
+    const body = uFontId ? JSON.stringify({ fontId: uFontId }) : '{}';
+    const r = await fetch('/api/generate-test-images', {
+      method: 'POST', headers:{'Content-Type':'application/json'}, body
+    });
     const d = await r.json();
     if (r.ok) {
       st.style.color = 'var(--green)';
-      st.textContent =
-        `✓ Generated ${d.count} images in test-images/.  Click "Run 1:1 OCR test" to verify each character.`;
+      st.textContent = `✓ ${d.count} images generated.`;
       document.getElementById('run-char-test-btn').style.display = 'inline-block';
+      // Reload PNG map if in PNG view
+      if (uViewMode === 'png') await loadVariantPngs().then(() => renderUnicodeGrid());
+      // Refresh registry (hasImages flags may have changed)
+      loadFontRegistry();
     } else {
       st.style.color = 'var(--red)';
       st.textContent = `✗ ${d.error || 'Failed'}`;
@@ -2536,13 +2786,10 @@ async function genTestImages() {
     st.style.color = 'var(--red)';
     st.textContent = `✗ ${e.message}`;
   }
+  btn.disabled = false;
 }
 
-// ── 1:1 Character OCR accuracy test ────────────────────────────────────────
-// Fetches test-images/ list, runs Tesseract.js on each char image,
-// compares result to expected Unicode character, displays pass/fail per cell.
-let charTestWorker = null;
-
+// ── 1:1 Character OCR accuracy test ───────────────────────────
 async function runCharOcrTest() {
   const btn = document.getElementById('run-char-test-btn');
   const st  = document.getElementById('gen-images-status');
@@ -2550,39 +2797,32 @@ async function runCharOcrTest() {
   st.style.color = 'var(--mute)';
   st.textContent = '⏳ Running 1:1 OCR test…';
 
-  // Make sure Unicode chart is visible
+  // Make sure PNG map is loaded
+  await loadVariantPngs();
+
+  // Ensure chart is visible and in PNG mode so user can see results
   const panel = document.getElementById('unicode-ref-panel');
   if (panel.style.display === 'none') toggleUnicodeRef();
+  setUnicodeView('png');
 
-  // Get list of generated images
-  let files;
-  try {
-    const r = await fetch('/api/test-images');
-    const d = await r.json();
-    files = d.files || [];
-  } catch(e) {
-    st.style.color = 'var(--red)';
-    st.textContent = `✗ ${e.message}`;
-    btn.disabled = false;
-    return;
-  }
+  // Build expected-char list from PNG map
+  const allItems = [
+    ...KANNADA_VOWELS.map(x => ({...x, type:'vowel'})),
+    ...KANNADA_CONSONANTS.map(x => ({...x, type:'consonant'})),
+    ...KANNADA_CONJUNCTS.map(x => ({...x, type:'conjunct'})),
+    ...KANNADA_DIGITS.map(x => ({...x, type:'digit'})),
+  ];
 
-  if (!files.length) {
+  const testPairs = allItems
+    .map(item => ({ item, url: pngFor(item.type, item.name||item.ch) }))
+    .filter(p => p.url);
+
+  if (!testPairs.length) {
     st.style.color = 'var(--amber)';
-    st.textContent = 'No test images found — generate them first.';
+    st.textContent = 'No images loaded — generate them first.';
     btn.disabled = false;
     return;
   }
-
-  // Build map: char name → expected character
-  const nameToChar = {};
-  [...KANNADA_VOWELS, ...KANNADA_CONSONANTS, ...KANNADA_DIGITS].forEach(x => {
-    nameToChar[x.name.toLowerCase().replace(/\s+/g,'_')] = x.ch;
-  });
-  KANNADA_CONJUNCTS.forEach(x => {
-    nameToChar[x.cp.toLowerCase().replace(/[+ ]/g,'_')] = x.ch;  // fallback
-    nameToChar[x.name.toLowerCase().replace(/\s+/g,'_')]  = x.ch;
-  });
 
   // Tesseract worker
   if (!charTestWorker) {
@@ -2591,61 +2831,54 @@ async function runCharOcrTest() {
       langPath:'https://tessdata.projectnaptha.com/4.0.0',
       corePath:'https://unpkg.com/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
     });
-    await charTestWorker.setParameters({ tessedit_pageseg_mode:'10' }); // single char
+    await charTestWorker.setParameters({ tessedit_pageseg_mode:'10' });
   }
 
-  let pass = 0, fail = 0, total = 0;
+  let pass = 0, fail = 0;
   const results = [];
 
-  for (const file of files.filter(f => f.name.startsWith('char_'))) {
-    const imgName = file.name.replace('char_','').replace('.png','');
-    const expected = nameToChar[imgName];
-    if (!expected) continue;
-    total++;
-
-    const { data: { text } } = await charTestWorker.recognize(file.url);
+  for (const { item, url } of testPairs) {
+    const { data:{ text } } = await charTestWorker.recognize(url);
     const got = text.trim().replace(/\s+/g,'');
-    const ok  = got === expected || got.startsWith(expected);
+    const ok  = got === item.ch || got.startsWith(item.ch);
     if (ok) pass++; else fail++;
-
-    // Mark the cell in the chart
-    markCharCell(expected, ok, got);
-    results.push({ char: expected, name: imgName, expected, got, ok });
+    markCharCell(item.ch, ok, got);
+    results.push({ char:item.ch, name:item.name||item.ch, got, ok,
+                   cp: item.cp ? `U+${item.cp}` : '' });
   }
 
-  // Summary
-  const pct = total ? Math.round(pass / total * 100) : 0;
-  st.style.color = pct >= 90 ? 'var(--green)' : pct >= 70 ? 'var(--amber)' : 'var(--red)';
-  st.textContent = `1:1 OCR: ${pass}/${total} correct (${pct}%)  —  ${fail} failures`;
+  const total = pass + fail;
+  const pct   = total ? Math.round(pass/total*100) : 0;
+  st.style.color = pct>=90 ? 'var(--green)' : pct>=70 ? 'var(--amber)' : 'var(--red)';
+  st.textContent = `1:1 OCR [${uVariant}]: ${pass}/${total} correct (${pct}%)`;
   btn.disabled = false;
 
-  // Offer CSV export
-  const csv = ['char,name,expected_codepoint,ocr_output,pass']
-    .concat(results.map(r =>
-      `"${r.char}","${r.name}","U+${r.expected.codePointAt(0).toString(16).toUpperCase().padStart(4,'0')}","${r.got}",${r.ok}`
-    )).join('\n');
-  downloadText(csv, 'char-ocr-results.csv');
+  // Export CSV
+  const csv = ['char,name,codepoint,ocr_output,pass']
+    .concat(results.map(r => `"${r.char}","${r.name}","${r.cp}","${r.got}",${r.ok}`))
+    .join('\n');
+  downloadText(csv, `char-ocr-${uFontId}-${uVariant}.csv`);
 }
 
 function markCharCell(ch, ok, got) {
-  // Find the cell whose .uc-char text matches ch
   document.querySelectorAll('.unicode-cell').forEach(cell => {
-    if (cell.querySelector('.uc-char')?.textContent?.trim() === ch) {
+    if (cell.dataset.ch === ch) {
       cell.style.borderColor = ok ? 'var(--green)' : 'var(--red)';
       cell.style.background  = ok ? '#ecfdf5' : '#fef2f2';
-      // Show what OCR returned on failure
       let badge = cell.querySelector('.uc-ocr-badge');
       if (!badge) {
         badge = document.createElement('span');
         badge.className = 'uc-ocr-badge';
-        badge.style.cssText = 'font-size:.58rem;margin-top:2px;font-family:monospace';
+        badge.style.cssText = 'font-size:.58rem;margin-top:2px;font-family:monospace;text-align:center';
         cell.appendChild(badge);
       }
-      badge.textContent = ok ? '✓' : `✗ "${got}"`;
+      badge.textContent = ok ? '✓' : `✗"${got}"`;
       badge.style.color = ok ? 'var(--green)' : 'var(--red)';
     }
   });
 }
+
+
 </script>
 </body>
 </html>
