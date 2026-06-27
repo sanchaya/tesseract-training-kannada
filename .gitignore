@@ -23,9 +23,25 @@ lstmf/
 output/
 best/
 scan-input/
-tessdata_best/*.traineddata   # downloaded at runtime; checked-in .gitkeep only
-fonts/*.ttf                   # downloaded at runtime
+
+# tessdata — downloaded at runtime via 01-prep-base.sh
+tessdata_best/*.traineddata
+# configs symlink set up by 02-make-lstmf.sh
+tessdata_best/configs
+
+# ── Fonts (cloned/downloaded at runtime by 01-prep-base.sh) ────────
+# git-cloned font repos — fetched fresh, not submodules
+fonts/kan_*/
+# binary font files
+fonts/*.ttf
 fonts/*.otf
+fonts/**/*.ttf
+fonts/**/*.otf
+
+# ── Corpus cache (large downloaded files, regenerated at runtime) ───
+corpus/cache/
+# raw text extracted from Wikipedia dump
+corpus/raw_kannada.txt
 
 # ── Logs ───────────────────────────────────────────────────────────
 logs/

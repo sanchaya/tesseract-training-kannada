@@ -369,6 +369,18 @@ footer {
 footer a { color: var(--brand-l); text-decoration: none; }
 footer a:hover { text-decoration: underline; }
 
+/* ── System checklist ───────────────────────────────────────────── */
+.chk-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:8px; }
+.chk-item { display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:10px 14px; }
+.chk-icon { font-size:1.1rem; flex-shrink:0; }
+.chk-name { font-weight:600; font-size:.85rem; color:var(--ink); }
+.chk-ver  { font-size:.75rem; color:var(--mute); font-family:monospace; margin-top:2px; }
+.chk-need { font-size:.73rem; color:var(--red); margin-top:2px; }
+.chk-item.ok   { border-color:#86efac; background:#f0fdf4; }
+.chk-item.warn { border-color:#fcd34d; background:#fffbeb; }
+.chk-item.bad  { border-color:#fca5a5; background:#fef2f2; }
+.chk-section  { font-size:.72rem; font-weight:700; color:var(--mute); text-transform:uppercase; letter-spacing:.06em; margin:10px 0 6px; }
+
 /* ── Glossary ─────────────────────────────────────────────────── */
 .gloss-item { border-bottom: 1px solid var(--border); }
 .gloss-item:last-child { border-bottom: none; }
@@ -459,6 +471,16 @@ footer a:hover { text-decoration: underline; }
     <button class="btn btn-outline" onclick="loadAll()">↺ Refresh</button>
   </div>
   <div id="steps-list"></div>
+
+  <!-- ── System readiness checklist ── -->
+  <div class="sec" style="margin-top:22px">
+    <h2>System readiness</h2>
+    <button class="btn btn-outline" onclick="loadSyscheck()" id="syscheck-btn">Check now</button>
+  </div>
+  <div id="syscheck-panel" style="display:none;margin-bottom:18px">
+    <div id="syscheck-tools" style="margin-bottom:10px"></div>
+    <div id="syscheck-data"></div>
+  </div>
 
   <div class="sec" style="margin-top:22px"><h2>Run steps</h2></div>
   <div class="actions">
@@ -957,13 +979,11 @@ function toast(msg, ms=3200) {
   setTimeout(() => t.classList.remove('show'), ms);
 }
 
-// ── Offline detection ────────────────────────────────────────────
-let _serverAvailable = null;
-async function apiGet(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(r.status);
-  return r.json();
-}
+// ── Offline / static mode detection ──────────────────────────────
+// When opened as file:// the browser blocks all fetch() before the
+// network even tries. Detect this up front and skip API calls entirely.
+const STATIC_MODE = window.location.protocol === 'file:';
+
 function showOfflineBanner() {
   if (document.getElementById('offline-banner')) return;
   const b = document.createElement('div');
@@ -971,6 +991,89 @@ function showOfflineBanner() {
   b.style.cssText = 'background:#fef3c7;border-bottom:1px solid #f59e0b;color:#92400e;padding:8px 24px;font-size:.84rem;text-align:center;';
   b.innerHTML = '⚡ <strong>Offline / static mode</strong> — OCR testing works fully in-browser. Training pipeline requires a running server (<a href="https://github.com/sanchaya/tesseract-training-kannada" target="_blank" style="color:#92400e">see README</a>).';
   document.querySelector('header').after(b);
+}
+
+async function apiGet(url) {
+  if (STATIC_MODE) throw new Error('static');
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+// ── System checklist ─────────────────────────────────────────────
+async function loadSyscheck() {
+  const panel = document.getElementById('syscheck-panel');
+  const btn   = document.getElementById('syscheck-btn');
+  panel.style.display = 'block';
+  document.getElementById('syscheck-tools').innerHTML = '<div style="color:var(--mute);font-size:.85rem">Checking…</div>';
+
+  if (STATIC_MODE) {
+    // Static: show what's needed without live checks
+    const items = [
+      { name:'Tesseract OCR 4.x / 5.x', ok:null, detail:'tesseract --version' },
+      { name:'lstmtraining',             ok:null, detail:'bundled with Tesseract training tools' },
+      { name:'combine_tessdata',         ok:null, detail:'bundled with Tesseract training tools' },
+      { name:'Python 3.8+',             ok:null, detail:'python3 --version' },
+      { name:'Pillow (PIL)',             ok:null, detail:'pip install Pillow' },
+      { name:'Node.js 18+ (for portal)',ok:null, detail:'node --version' },
+    ];
+    const dataItems = [
+      { name:'Base model — kan.traineddata', detail:'Download from tessdata_best GitHub or run step ①' },
+      { name:'Rendered training images',     detail:'Run step ④ (render) after downloading fonts' },
+      { name:'lstmf training files',         detail:'Run step ⑤ after rendering images' },
+    ];
+    document.getElementById('syscheck-tools').innerHTML =
+      '<div class="chk-section">Required tools (verify manually)</div>' +
+      '<div class="chk-grid">' + items.map(i => `
+        <div class="chk-item">
+          <div class="chk-icon">🔧</div>
+          <div><div class="chk-name">${i.name}</div>
+          <div class="chk-ver">${i.detail}</div></div>
+        </div>`).join('') + '</div>';
+    document.getElementById('syscheck-data').innerHTML =
+      '<div class="chk-section">Required data files</div>' +
+      '<div class="chk-grid">' + dataItems.map(i => `
+        <div class="chk-item">
+          <div class="chk-icon">📂</div>
+          <div><div class="chk-name">${i.name}</div>
+          <div class="chk-ver">${i.detail}</div></div>
+        </div>`).join('') + '</div>';
+    btn.textContent = 'Check now';
+    return;
+  }
+
+  let d;
+  try { d = await apiGet('/api/syscheck'); } catch(e) {
+    document.getElementById('syscheck-tools').innerHTML = '<div style="color:var(--red)">Server not running.</div>';
+    return;
+  }
+
+  const allOk = [...d.tools, ...d.data].every(i => i.ok);
+  btn.textContent = allOk ? '✓ All ready' : '⚠ Issues found';
+
+  document.getElementById('syscheck-tools').innerHTML =
+    '<div class="chk-section">Tools</div>' +
+    '<div class="chk-grid">' + d.tools.map(t => `
+      <div class="chk-item ${t.ok ? 'ok' : t.warn ? 'warn' : 'bad'}">
+        <div class="chk-icon">${t.ok ? '✅' : t.warn ? '⚠️' : '❌'}</div>
+        <div>
+          <div class="chk-name">${t.name}</div>
+          ${t.ok || t.warn
+            ? `<div class="chk-ver">${t.ver}${t.warn ? ' — upgrade to v5 recommended' : ''}</div>`
+            : `<div class="chk-need">Not found — ${t.need}</div>`}
+        </div>
+      </div>`).join('') + '</div>';
+
+  document.getElementById('syscheck-data').innerHTML =
+    '<div class="chk-section" style="margin-top:12px">Training data</div>' +
+    '<div class="chk-grid">' + d.data.map(t => `
+      <div class="chk-item ${t.ok ? 'ok' : 'bad'}">
+        <div class="chk-icon">${t.ok ? '✅' : '⏳'}</div>
+        <div>
+          <div class="chk-name">${t.name}</div>
+          <div class="chk-ver">${t.detail}</div>
+        </div>
+      </div>`).join('') + '</div>';
 }
 
 // ── Dashboard ────────────────────────────────────────────────────
@@ -1148,6 +1251,7 @@ async function loadCorpusStats() {
 async function run(step) {
   const names = { prep:'Prep base', wiki:'Download corpus', clean:'Clean corpus',
                   render:'Render images', lstmf:'Make lstmf', train:'Train', package:'Package' };
+  if (STATIC_MODE) { toast('Training unavailable in static mode — run the Node.js server'); return; }
   if (!confirm(`Run "${names[step]}"?\n\nOutput will stream to the Live log tab.`)) return;
   try {
     const r = await (await fetch('/api/run/'+step, { method: 'POST' })).json();
@@ -1295,6 +1399,7 @@ function previewScan(input) {
 }
 
 async function uploadScan() {
+  if (STATIC_MODE) { toast('Upload unavailable in static mode'); return; }
   if (!scanFile) { toast('Select a scan image first'); return; }
   const gt = document.getElementById('scan-gt').value.trim();
   if (!gt) { toast('Ground truth text is required'); return; }
@@ -1341,6 +1446,7 @@ async function loadScans() {
 }
 
 async function deleteScan(name) {
+  if (STATIC_MODE) { toast('Server not running'); return; }
   if (!confirm(`Delete ${name}?`)) return;
   try {
     await fetch('/api/scans/delete', {
@@ -1356,11 +1462,16 @@ async function deleteScan(name) {
 function startLog() {
   const box  = document.getElementById('log-box');
   const stat = document.getElementById('log-stat');
+  if (STATIC_MODE) {
+    appendLog('Running in static / offline mode — live log requires the Node.js server.');
+    stat.textContent='Offline'; stat.className='pill pill-amber';
+    return;
+  }
   // Load recent history
   fetch('/api/log/tail?lines=80').then(r=>r.json()).then(d => {
     if (d.exists) d.lines.forEach(l => appendLog(l));
   }).catch(() => {
-    appendLog('Server not running — live log unavailable in static mode.');
+    appendLog('Server not running — live log unavailable.');
     stat.textContent='Offline'; stat.className='pill pill-amber';
   });
   // Open SSE
