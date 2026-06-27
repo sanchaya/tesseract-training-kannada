@@ -60,14 +60,16 @@ From the portal Dashboard, click each step button in order. Or run the scripts d
 
 All fonts are from the Sanchaya Karnata family (SIL Open Font License 1.1). Karnata Bandipur is excluded.
 
-| Font | Historical source | Styles | Rendering |
-|---|---|---|---|
-| [Karnata GTN](https://fonts.sanchaya.net/family/KarnataGTN) | G.T. Narayana Rao handwriting revival | 4 (Regular, Medium, Bold, Black) | Clean |
-| [Karnata German Mission Press](https://fonts.sanchaya.net/family/Karnata-German-Mission-Press) | German Mission Press, Mangaluru (19th c.) | 1 | Degraded |
-| [Karnata Wesleyan Mission Press](https://fonts.sanchaya.net/family/Karnata-Wesleyan-Mission-Press) | Wesleyan Mission Press, Bengaluru (19th c.) | 1 | Degraded |
-| [Karnata F Kittel](https://fonts.sanchaya.net/family/Karnata-F-Kittel-Font) | Basel Mission Press, Mangalore (1830–1900) | 1 | Degraded |
+| Font | Historical source | Weights | Formats | Rendering |
+|---|---|---|---|---|
+| [Karnata GTN](https://fonts.sanchaya.net/family/KarnataGTN) | G.T. Narayana Rao handwriting revival | 6 (Regular → Black) | TTF + OTF | Clean |
+| [Karnata German Mission Press](https://fonts.sanchaya.net/family/Karnata-German-Mission-Press) | German Mission Press, Mangaluru (19th c.) | 1 | TTF + OTF | Degraded |
+| [Karnata Wesleyan Mission Press](https://fonts.sanchaya.net/family/Karnata-Wesleyan-Mission-Press) | Wesleyan Mission Press, Bengaluru (19th c.) | 1 | TTF + OTF | Degraded |
+| [Karnata F Kittel](https://fonts.sanchaya.net/family/Karnata-F-Kittel-Font) | Basel Mission Press, Mangalore (1830–1900) | 1 | OTF only | Degraded |
 
 **Clean** = rendered faithfully. **Degraded** = Gaussian blur + salt-and-pepper noise + ±0.8° rotation, simulating real letterpress ink spread and paper texture.
+
+Both TTF and OTF variants are used for training where available — the two formats are rasterised slightly differently, adding diversity that improves model robustness. This gives 18 training variants in total across the four font families.
 
 ---
 
@@ -274,8 +276,8 @@ Runs both `kan` (base) and `kan_hist` on the same image and prints the outputs s
 The portal provides a browser UI for running the pipeline, monitoring progress, and testing the finished model.
 
 ```bash
-bash start-portal.sh
-# → http://localhost:5000
+node server.js
+# → http://localhost:3000
 ```
 
 ### Tabs
@@ -288,7 +290,13 @@ bash start-portal.sh
 - **Batch** — select multiple images and run OCR on all at once; results in a table; export as CSV.
 - **Wikisource** — fetch a proofread page from kn.wikisource.org by URL, run OCR, and compare output against the human-verified text.
 
-**Kannada Unicode Reference** (bottom of OCR tab) — full chart of vowels, consonants, conjuncts (virama combinations), and Kannada digits with Unicode codepoints. Click *Generate test images* to render each character to a PNG via `scripts/gen-char-images.py` (uses Pillow), then *Run 1:1 OCR test* to verify Tesseract recognises every character — cells turn ✓ green or ✗ red showing exactly what was returned. Results export as CSV.
+**Kannada Unicode Reference** (bottom of OCR tab) — per-font character testing panel with three sub-features:
+
+- **Live preview** — select a font family (GTN, GMP, WMP, Kittel) and a TTF or OTF variant from the dropdown; characters are rendered live in the browser using the actual font file served from `/fonts/` via CSS `@font-face`. No server round-trip — switch fonts and variants instantly to compare glyph shapes.
+- **Generated PNGs** — click *Generate images* to run `scripts/gen-char-images.py` (Pillow) which writes one PNG per character to `test-images/<font>/<variant>/`. Switch to PNG view to see the actual rasterised pixels Tesseract will process.
+- **1:1 OCR test** — runs Tesseract.js on every character PNG and marks each cell ✓ green (correct) or ✗ red (shows what was returned instead). Pinpoints exactly which characters or conjuncts need more training data. Results export as CSV per variant.
+
+The panel covers 86 characters: 15 vowels, 35 consonants, 24 conjuncts (virama combinations), and 12 Kannada digits.
 
 **Scan upload** — drag-and-drop real scanned pages and paste ground-truth text. Files are saved to `scan-input/` and included automatically in the next make-lstmf run.
 
@@ -313,12 +321,15 @@ bash start-portal.sh
   name: "Karnata New Press"
   description: "Description of the historical source"
   repo: https://github.com/sanchaya/karnata-new-press-typeface
-  font_dir: fonts
+  font_dir: fonts/ttf        # subdirectory containing font files
   font_files:
-    - KarnataNewPress.ttf
-  degrade: true          # true for historical/letterpress, false for modern
+    - KarnataNewPress.ttf    # list both .ttf and .otf if both exist
+    # - KarnataNewPress.otf  # OTF will be used alongside TTF for more training diversity
+  degrade: true              # true for historical/letterpress, false for modern
   max_pages: 600
 ```
+
+The server's `scanFontDir()` and `gen-char-images.py` both walk the font directory automatically — if both a `.ttf` and `.otf` exist with the same stem, they are registered as separate variants (`<Stem>-ttf` and `<Stem>-otf`) and each gets its own set of training images and Unicode test images.
 
 2. Re-run the affected steps:
 

@@ -713,6 +713,182 @@ app.get("/api/test-images", (req, res) => {
   res.json({ files });
 });
 
+// ── Char-train: save/load OCR baseline results ────────────────────────────
+app.post("/api/char-train/baseline", express.json(), (req, res) => {
+  const { fontId, variant, results } = req.body || {};
+  if (!fontId || !variant || !results) return res.status(400).json({ error: "fontId, variant, results required" });
+  const varDir = path.join(P.testImages, fontId, variant);
+  if (!fs.existsSync(varDir)) return res.status(404).json({ error: "Variant dir not found" });
+  const histFile = path.join(varDir, "ocr_history.json");
+  let history = [];
+  if (fs.existsSync(histFile)) {
+    try { history = JSON.parse(fs.readFileSync(histFile, "utf8")); } catch (_) {}
+  }
+  const entry = { ts: new Date().toISOString(), label: req.body.label || "baseline", ...results };
+  history.push(entry);
+  fs.writeFileSync(histFile, JSON.stringify(history, null, 2));
+  res.json({ ok: true, history });
+});
+
+app.get("/api/char-train/history/:fontId/:variant", (req, res) => {
+  const varDir = path.join(P.testImages, req.params.fontId,
+                           decodeURIComponent(req.params.variant));
+  const histFile = path.join(varDir, "ocr_history.json");
+  if (!fs.existsSync(histFile)) return res.json({ history: [] });
+  try { res.json({ history: JSON.parse(fs.readFileSync(histFile, "utf8")) }); }
+  catch (_) { res.json({ history: [] }); }
+});
+
+// ── Char-train: generate lstmf + fine-tune from test images ───────────────
+// State tracking for the long-running train job
+let charTrainJob = null;
+
+app.post("/api/char-train/start", express.json(), (req, res) => {
+  if (charTrainJob && charTrainJob.running) {
+    return res.status(409).json({ error: "Training already running", jobId: charTrainJob.id });
+  }
+  const { fontId, variant, iterations = 500 } = req.body || {};
+  if (!fontId || !variant) return res.status(400).json({ error: "fontId and variant required" });
+
+  const varDir   = path.join(P.testImages, fontId, variant);
+  const lstmfDir = path.join(ROOT, "lstmf", "char-train", fontId, variant);
+  const tessdata = path.join(ROOT, "tessdata_best");
+  const outputDir = path.join(ROOT, "output");
+
+  if (!fs.existsSync(varDir)) return res.status(404).json({ error: "No test images for this variant. Generate images first." });
+  if (!fs.existsSync(path.join(tessdata, "kan.traineddata"))) {
+    return res.status(412).json({ error: "kan.traineddata not found in tessdata_best/. Run Step 1 (Prep) first." });
+  }
+
+  fs.mkdirSync(lstmfDir, { recursive: true });
+
+  const jobId = Date.now().toString();
+  charTrainJob = { id: jobId, running: true, phase: "lstmf", log: [], error: null, done: false, fontId, variant };
+
+  // Run async — client polls /api/char-train/status
+  (async () => {
+    const addLog = msg => { charTrainJob.log.push(msg); };
+    try {
+      // ── Phase 1: generate lstmf from line + sentence images ──
+      addLog("Phase 1/2 — Generating .lstmf training files…");
+      const pngs = fs.readdirSync(varDir)
+        .filter(f => /^(line_|sentence_)/.test(f) && f.endsWith(".png"))
+        .sort();
+      if (pngs.length === 0) throw new Error("No line or sentence images found. Generate images first.");
+      addLog(`Found ${pngs.length} training images (line_ + sentence_ files)`);
+
+      const lstmfFiles = [];
+      for (const png of pngs) {
+        const base  = png.replace(".png", "");
+        const gtTxt = path.join(varDir, base + ".gt.txt");
+        const outBase = path.join(lstmfDir, base);
+        if (!fs.existsSync(gtTxt)) { addLog(`  skip ${png} (no .gt.txt)`); continue; }
+        await new Promise((resolve, reject) => {
+          const proc = spawn("tesseract", [
+            path.join(varDir, png), outBase,
+            "--psm", "7", "-l", "kan",
+            `--tessdata-dir`, tessdata,
+            "lstm.train"
+          ], { cwd: ROOT });
+          let err = "";
+          proc.stderr.on("data", d => { err += d.toString(); });
+          proc.on("close", code => {
+            const lstmf = outBase + ".lstmf";
+            if (code === 0 && fs.existsSync(lstmf)) {
+              lstmfFiles.push(lstmf);
+              addLog(`  ✓ ${base}.lstmf`);
+              resolve();
+            } else {
+              addLog(`  ✗ ${base}: ${err.trim().split("\n").pop()}`);
+              resolve(); // non-fatal, keep going
+            }
+          });
+        });
+      }
+
+      if (lstmfFiles.length === 0) throw new Error("No .lstmf files produced. Check Tesseract 5 is installed and kan.traineddata is present.");
+
+      // Write list.txt for this char-train job
+      const listTxt = path.join(lstmfDir, "list.txt");
+      fs.writeFileSync(listTxt, lstmfFiles.join("\n") + "\n");
+      addLog(`\n${lstmfFiles.length} lstmf files ready → starting fine-tune…`);
+
+      // ── Phase 2: lstmtraining fine-tune ──
+      charTrainJob.phase = "train";
+      const bestCheckpoint = fs.existsSync(outputDir)
+        ? fs.readdirSync(outputDir)
+            .filter(f => /^kan_hist_[\d.]+_\d+_\d+\.checkpoint$/.test(f))
+            .sort((a, b) => {
+              const bcer = f => parseFloat(f.split("_")[2]);
+              return bcer(a) - bcer(b);
+            })[0]
+        : null;
+      const startModel = bestCheckpoint
+        ? path.join(outputDir, bestCheckpoint)
+        : path.join(outputDir, "kan.lstm");
+      if (!fs.existsSync(startModel)) throw new Error(`Starting model not found: ${startModel}. Run Step 1 (Prep) first.`);
+
+      addLog(`Starting from: ${path.basename(startModel)}`);
+      addLog(`Fine-tuning for ${iterations} iterations…\n`);
+
+      await new Promise((resolve, reject) => {
+        const proc = spawn("lstmtraining", [
+          "--traineddata",    path.join(tessdata, "kan.traineddata"),
+          "--model_output",   path.join(outputDir, `kan_hist_chartrain_${fontId}`),
+          "--continue_from",  startModel,
+          "--train_listfile", listTxt,
+          "--max_iterations", String(iterations),
+          "--target_error_rate", "0.01",
+          "--debug_interval", "0"
+        ], { cwd: ROOT });
+
+        const bcerRe = /At iteration\s+(\d+).*?BCER train=([\d.]+)%/;
+        let lastBcer = null;
+        const onData = d => {
+          const lines = d.toString().split("\n");
+          lines.forEach(line => {
+            if (!line.trim()) return;
+            addLog(line);
+            const m = bcerRe.exec(line);
+            if (m) { charTrainJob.bcer = parseFloat(m[2]); charTrainJob.iter = parseInt(m[1]); }
+          });
+        };
+        proc.stdout.on("data", onData);
+        proc.stderr.on("data", onData);
+        proc.on("close", code => {
+          if (code === 0 || code === null) resolve();
+          else reject(new Error(`lstmtraining exited with code ${code}`));
+        });
+      });
+
+      addLog("\n✓ Fine-tuning complete!");
+      charTrainJob.running = false;
+      charTrainJob.done    = true;
+    } catch (err) {
+      addLog(`\n✗ Error: ${err.message}`);
+      charTrainJob.error   = err.message;
+      charTrainJob.running = false;
+    }
+  })();
+
+  res.json({ ok: true, jobId });
+});
+
+app.get("/api/char-train/status", (req, res) => {
+  if (!charTrainJob) return res.json({ running: false, done: false, log: [] });
+  res.json({
+    running: charTrainJob.running,
+    done:    charTrainJob.done,
+    phase:   charTrainJob.phase,
+    bcer:    charTrainJob.bcer,
+    iter:    charTrainJob.iter,
+    error:   charTrainJob.error,
+    log:     charTrainJob.log.slice(-80), // last 80 lines
+    fontId:  charTrainJob.fontId,
+    variant: charTrainJob.variant
+  });
+});
+
 // ── SPA fallback ───────────────────────────────────────────────────────────
 app.get("*", (req, res) => {
   res.sendFile(path.join(P.public, "index.html"));

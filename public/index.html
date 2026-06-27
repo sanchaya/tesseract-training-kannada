@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TrainOCR — Sanchaya</title>
-<link rel="icon" type="image/svg+xml" href="/sanchaya-logo.svg">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="alternate icon" href="/favicon.svg">
 <meta name="description" content="Tesseract training portal for historical Kannada OCR — Sanchaya">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -488,10 +489,9 @@ footer a:hover { text-decoration: underline; }
 <body>
 
 <header>
-  <a class="header-logo" href="https://sanchaya.net" target="_blank" rel="noopener">
-    <img src="/sanchaya-logo.svg" alt="Sanchaya" height="28"
-         onerror="this.style.display='none';this.nextElementSibling.style.opacity='1'">
-    <span>Sanchaya</span>
+  <a class="header-logo" href="#" onclick="tab('dashboard');return false;" title="TrainOCR home">
+    <img src="https://pada.sanchaya.net/images/sanchaya-logo.png" alt="Sanchaya" height="28"
+         onerror="this.src='/sanchaya-logo.svg'">
   </a>
   <div class="header-title">
     <h1>TrainOCR</h1>
@@ -815,17 +815,30 @@ footer a:hover { text-decoration: underline; }
       <div style="padding:12px;background:var(--bg);border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">🔍 OCR test — three modes</div>
         <div style="font-size:.8rem;color:var(--mute);line-height:1.6">
-          The <strong>OCR test</strong> tab has three modes:<br>
-          • <strong>Single image</strong> — drop one image, compare <code>kan</code> vs <code>kan_hist</code>, export result as .txt.<br>
-          • <strong>Batch</strong> — load multiple images, run OCR on all, export results as CSV.<br>
-          • <strong>Wikisource</strong> — fetch a proofread page from kn.wikisource.org and compare OCR output to the human-verified text side-by-side.<br><br>
-          <strong>Kannada Unicode Reference</strong> (bottom of OCR tab):<br>
-          Shows all vowels, consonants, conjuncts and digits with Unicode codepoints. Click <em>Generate test images</em> to render each character to a PNG via Pillow, then <em>Run 1:1 OCR test</em> to verify Tesseract can recognise every character — each cell turns green (✓) or red (✗) with what Tesseract actually returned. Results export as CSV.
+          The <strong>OCR test</strong> tab has three sub-modes (tabs at the top of the panel):<br>
+          • <strong>Single image</strong> — drop any Kannada image; <code>kan</code> and <code>kan_hist</code> run in parallel; paste ground-truth text to get live CER/WER; export result as <code>.txt</code>.<br>
+          • <strong>Batch</strong> — select multiple images, OCR all at once, view results in a table, export as CSV.<br>
+          • <strong>Wikisource</strong> — paste a kn.wikisource.org page URL; fetches the human-proofread text and runs OCR side-by-side for direct comparison.<br><br>
+          <strong>Tip:</strong> always compare <code>kan</code> vs <code>kan_hist</code> on the same image to measure the improvement your training has achieved.
+        </div>
+      </div>
+      <div style="padding:12px;background:var(--bg);border-radius:8px">
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">🔤 Kannada Unicode Reference &amp; per-font image testing</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">
+          Scroll to the bottom of the <strong>OCR test</strong> tab to find the Unicode Reference panel.<br><br>
+          <strong>Font tabs</strong> — select a font family (GTN, GMP, WMP, Kittel). Each font has TTF <em>and</em> OTF variants selectable from the dropdown — both formats are used for training to capture any rasterisation differences.<br><br>
+          <strong>Live preview</strong> — characters are rendered directly in your browser using the actual font file served from <code>/fonts/</code> via <code>@font-face</code>. No images needed — switch fonts and variants instantly.<br><br>
+          <strong>Generated PNGs</strong> — click <em>Generate images</em> to run <code>scripts/gen-char-images.py</code> (Pillow) which writes one PNG per character to <code>test-images/&lt;font&gt;/&lt;variant&gt;/</code>. Switch to PNG view to see exactly what Tesseract sees during recognition — the actual rasterised pixels.<br><br>
+          <strong>1:1 OCR test</strong> — appears after images are generated. Runs Tesseract.js on every character PNG and marks each cell ✓ green (correct) or ✗ red (shows what was returned instead). Results export as CSV per variant. Use this to identify specific characters or conjuncts where the model needs more training data.
         </div>
       </div>
       <div style="padding:12px;background:var(--bg);border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">➕ Adding a new font</div>
-        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Edit <code>fonts.yml</code> with the font repo URL and file name. Set <code>degrade: true</code> for historical/letterpress fonts. Re-run Prep base → Render images → Make lstmf → Train. New fonts continue training from the last checkpoint.</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">
+          Edit <code>fonts.yml</code> — add the font's repo URL, <code>font_dir</code>, and list each file under <code>font_files</code>. Include both <code>.ttf</code> and <code>.otf</code> if the font ships both — the server registers them as separate training variants automatically.<br><br>
+          Set <code>degrade: true</code> for historical/letterpress typefaces (adds ink-spread blur + noise). Set <code>degrade: false</code> for clean modern fonts.<br><br>
+          Then re-run: <strong>Prep base → Render images → Make lstmf → Train</strong>. Training resumes from the last checkpoint, so no earlier work is lost.
+        </div>
       </div>
     </div>
   </div>
@@ -911,7 +924,28 @@ footer a:hover { text-decoration: underline; }
         </button>
         <div class="gloss-body">The corpus is the pool of Kannada text lines that get rendered into PNG training images. It must cover the full Unicode Kannada block (U+0C80–U+0CFF), including conjunct consonants formed with the virama (U+0CCD). A corpus sourced from historical books is preferable for kan_hist because it reflects actual vocabulary and typographic patterns the model will encounter on real historical scans. Wikipedia is added only as a supplement for glyph coverage.</div>
       </div>
-    </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">Virama &amp; conjuncts — how Kannada stacking works</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">In Kannada (and all Brahmic scripts), two consonants can be written as a single stacked glyph called a conjunct. The virama (ಹಲಂತ, U+0CCD) is an invisible combining character placed after the first consonant to suppress its inherent vowel and signal the stack. For example: ಕ + ್ + ತ → ಕ್ತ. Tesseract must learn these multi-codepoint sequences as single visual units. The Unicode Reference panel in the OCR tab shows all 24 common conjuncts used in training.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">TTF vs OTF — two font formats</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">TrueType (.ttf) and OpenType/CFF (.otf) are two formats for the same underlying typeface design. They differ in how glyph outlines are mathematically described. When rasterised to pixels, small differences appear at low resolutions. TrainOCR uses both formats for fonts that provide them, giving the model slightly different pixel patterns and improving robustness on real scanned material.</div>
+      </div>
+      <div class="gloss-item">
+        <button class="gloss-btn" onclick="toggleGloss(this)">
+          <span class="gloss-term">@font-face — live font preview</span>
+          <span class="gloss-arrow">▸</span>
+        </button>
+        <div class="gloss-body">The Unicode Reference panel renders characters in the browser using CSS @font-face — the actual TTF or OTF file is served from /fonts/ and loaded directly by the browser. You see the exact glyph shapes of the historical typeface in real time, with no server processing. Compare this to PNG mode, which shows what Pillow rendered at 150 DPI — exactly what Tesseract sees during training.</div>
+      </div>
+ </div>
   </div>
 </div>
 
@@ -1136,49 +1170,75 @@ footer a:hover { text-decoration: underline; }
   </div>
 
   <!-- ── Kannada Unicode Reference (per-font) ─────────────────── -->
-  <div class="card" style="margin-top:18px" id="unicode-ref-card">
+  <div class="card" style="margin-top:24px" id="unicode-ref-card">
 
-    <!-- Header row -->
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
-      <h3 style="font-size:.95rem;color:var(--ink);margin:0">ಕನ್ನಡ Unicode Reference</h3>
+    <!-- ── Section header ───────────────────────────────── -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div>
+        <h3 style="font-size:.95rem;color:var(--ink);margin:0 0 3px">ಕನ್ನಡ Character Testing</h3>
+        <p style="font-size:.76rem;color:var(--mute);margin:0">Browse all Kannada characters per font · render test PNGs · run 1:1 OCR accuracy check</p>
+      </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <button onclick="genTestImages()" id="btn-gen-imgs"
-          style="font-size:.76rem;padding:4px 11px;background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer">
-          ⬇ Generate images
+        <button onclick="genTestImages(false)" id="btn-gen-imgs"
+          title="Generate PNG test images for the selected font variant"
+          style="font-size:.76rem;padding:5px 12px;background:var(--brand);color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap">
+          🖼 Generate images
+        </button>
+        <button onclick="genTestImages(true)" id="btn-gen-all"
+          title="Generate PNG test images for every font and variant (takes ~30s)"
+          style="font-size:.76rem;padding:5px 12px;background:var(--card);color:var(--ink2);border:1.5px solid var(--border2);border-radius:6px;cursor:pointer;white-space:nowrap">
+          🖼 All fonts
         </button>
         <button onclick="runCharOcrTest()" id="run-char-test-btn"
-          style="display:none;font-size:.76rem;padding:4px 11px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer">
-          ▶ Run 1:1 OCR test
+          style="display:none;font-size:.76rem;padding:5px 12px;background:#059669;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap">
+          ▶ Run OCR test
         </button>
-        <button onclick="toggleUnicodeRef()" id="unicode-toggle-btn"
-          style="font-size:.76rem;padding:4px 11px;background:var(--brand-xl);color:var(--brand-d);border:none;border-radius:6px;cursor:pointer">
-          Show chart
+        <button onclick="exportCharOcrCsv()" id="export-char-csv-btn"
+          style="display:none;font-size:.76rem;padding:5px 12px;background:var(--card);color:var(--ink2);border:1.5px solid var(--border2);border-radius:6px;cursor:pointer">
+          ⬇ CSV
+        </button>
+        <button onclick="startCharTrain()" id="btn-char-train"
+          title="Fine-tune the OCR model on this font's generated images to improve accuracy"
+          style="display:none;font-size:.76rem;padding:5px 12px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;white-space:nowrap">
+          🎓 Train on images
         </button>
       </div>
     </div>
 
-    <!-- Font family tabs -->
-    <div id="font-tabs" style="display:none;flex-wrap:wrap;gap:6px;margin-bottom:12px;border-bottom:2px solid var(--border);padding-bottom:8px"></div>
+    <!-- ── Font family tabs ───────────────────────────────── -->
+    <div id="font-tabs" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;border-bottom:2px solid var(--border);padding-bottom:10px">
+      <span style="font-size:.76rem;color:var(--mute);align-self:center">Loading fonts…</span>
+    </div>
 
-    <!-- Variant + view controls -->
-    <div id="font-controls" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">
-      <label style="font-size:.78rem;color:var(--mute)">Variant:</label>
-      <select id="variant-select" onchange="selectVariant(this.value)"
-        style="font-size:.78rem;padding:3px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--card)"></select>
-      <div style="margin-left:auto;display:flex;gap:6px">
+    <!-- ── Variant + view toggle ─────────────────────────── -->
+    <div id="font-controls" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="font-size:.76rem;color:var(--mute);white-space:nowrap">Variant:</label>
+        <select id="variant-select" onchange="selectVariant(this.value)"
+          style="font-size:.78rem;padding:4px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--card);max-width:240px"></select>
+      </div>
+      <!-- View toggle: segmented control -->
+      <div style="margin-left:auto;background:var(--bg);border:1.5px solid var(--border2);border-radius:7px;display:flex;overflow:hidden">
         <button onclick="setUnicodeView('live')" id="view-live-btn"
-          style="font-size:.74rem;padding:3px 10px;border:1.5px solid var(--brand);border-radius:5px;background:var(--brand);color:#fff;cursor:pointer">
-          Live preview
+          style="font-size:.74rem;padding:4px 12px;border:none;cursor:pointer;transition:all .15s;background:var(--brand);color:#fff;font-weight:600">
+          👁 Live preview
         </button>
         <button onclick="setUnicodeView('png')" id="view-png-btn"
-          style="font-size:.74rem;padding:3px 10px;border:1.5px solid var(--border2);border-radius:5px;background:var(--card);color:var(--ink2);cursor:pointer">
-          Generated PNGs
+          style="font-size:.74rem;padding:4px 12px;border:none;cursor:pointer;transition:all .15s;background:transparent;color:var(--ink2)">
+          🖼 Generated PNGs
         </button>
       </div>
+      <!-- Status line inline -->
+      <span id="gen-images-status" style="font-size:.76rem;color:var(--mute)"></span>
     </div>
 
-    <!-- Character grid panels -->
-    <div id="unicode-ref-panel" style="display:none">
+    <!-- ── "No images yet" hint ──────────────────────────── -->
+    <div id="png-hint" style="display:none;padding:10px 14px;background:var(--brand-xxl);border:1px solid var(--brand-l);border-radius:7px;font-size:.78rem;color:var(--brand-d);margin-bottom:12px">
+      💡 No PNG images yet for this variant. Click <strong>🖼 Generate images</strong> above to render them with Pillow, then switch back to <strong>Generated PNGs</strong>.
+    </div>
+
+    <!-- ── Character grid ────────────────────────────────── -->
+    <div id="unicode-ref-panel">
       <div style="margin-bottom:14px">
         <div class="ucref-group-label">Vowels — ಸ್ವರಗಳು</div>
         <div id="unicode-vowels" class="unicode-grid"></div>
@@ -1188,19 +1248,62 @@ footer a:hover { text-decoration: underline; }
         <div id="unicode-consonants" class="unicode-grid"></div>
       </div>
       <div style="margin-bottom:14px">
-        <div class="ucref-group-label">Conjuncts with Virama ್&nbsp;(U+0CCD)</div>
+        <div class="ucref-group-label">Conjuncts with Virama ್ (U+0CCD)</div>
         <div id="unicode-conjuncts" class="unicode-grid"></div>
       </div>
       <div style="margin-bottom:6px">
         <div class="ucref-group-label">Digits — ಅಂಕಿಗಳು</div>
         <div id="unicode-digits" class="unicode-grid"></div>
       </div>
+      <div id="ocr-summary-row" style="display:none;margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:.78rem;color:var(--mute)"></div>
     </div>
 
-    <!-- Status / progress -->
-    <div id="gen-images-status" style="font-size:.8rem;color:var(--mute);margin-top:8px"></div>
+    <!-- ── Training panel ─────────────────────────────── -->
+    <div id="char-train-panel" style="display:none;margin-top:18px;border-top:1px solid var(--border);padding-top:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        <h4 style="font-size:.88rem;font-weight:700;color:var(--brand-d);margin:0">🎓 Fine-tune on character images</h4>
+        <div style="font-size:.76rem;color:var(--mute)">Uses generated line & sentence PNGs as training data for a targeted boost</div>
+      </div>
+
+      <!-- Iterations + start -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <label style="font-size:.76rem;color:var(--mute)">Iterations:</label>
+        <select id="train-iters" style="font-size:.78rem;padding:3px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--card)">
+          <option value="200">200 — quick test</option>
+          <option value="500" selected>500 — standard</option>
+          <option value="1000">1000 — thorough</option>
+          <option value="2000">2000 — deep</option>
+        </select>
+        <button onclick="startCharTrain()" id="btn-start-train"
+          style="font-size:.78rem;padding:5px 14px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer">
+          ▶ Start training
+        </button>
+        <button onclick="stopCharTrainPoll()" id="btn-stop-train"
+          style="display:none;font-size:.78rem;padding:5px 14px;background:var(--red);color:#fff;border:none;border-radius:6px;cursor:pointer">
+          ⏹ Cancel
+        </button>
+        <span id="train-phase-badge" style="font-size:.74rem;padding:2px 8px;border-radius:10px;background:var(--bg);color:var(--mute)"></span>
+      </div>
+
+      <!-- Progress -->
+      <div id="train-progress-wrap" style="display:none;margin-bottom:10px">
+        <div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-bottom:4px">
+          <div id="train-progress-bar" style="height:100%;background:var(--brand);width:0%;transition:width .4s"></div>
+        </div>
+        <div style="font-size:.74rem;color:var(--mute)" id="train-progress-txt"></div>
+      </div>
+
+      <!-- Log -->
+      <pre id="train-log" style="display:none;font-size:.68rem;max-height:160px;overflow-y:auto;background:var(--bg);padding:8px;border-radius:6px;color:var(--ink2);margin-bottom:12px;line-height:1.5"></pre>
+
+      <!-- Before/After accuracy comparison -->
+      <div id="train-accuracy-panel" style="display:none">
+        <div style="font-size:.8rem;font-weight:700;color:var(--ink);margin-bottom:8px">Accuracy history</div>
+        <div id="train-accuracy-chart" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+      </div>
+    </div>
+
   </div>
-</div>
 
 <!-- ═══ SCAN UPLOAD ══════════════════════════════════════════════ -->
 <div id="pg-scan" class="page">
@@ -2553,16 +2656,26 @@ function selectFont(fontId) {
   const font = fontRegistry.find(f => f.id === fontId);
   if (!font) return;
 
+  // Update "Generate images" button label with short font name
+  const genBtn = document.getElementById('btn-gen-imgs');
+  if (genBtn) genBtn.textContent = `🖼 Generate — ${font.name.replace('Karnata ', '')}`;
+
   // Populate variant dropdown
   const sel = document.getElementById('variant-select');
   sel.innerHTML = '';
   font.variants.forEach(v => {
     const opt = document.createElement('option');
     opt.value = v.name;
-    opt.textContent = `${v.name}  [${v.fmt}]${v.hasImages ? '' : ' — no images yet'}`;
+    const fmtBadge = v.fmt === 'otf' ? '  [OTF]' : '  [TTF]';
+    const imgBadge = v.hasImages ? ' ✓' : '';
+    opt.textContent = v.name + fmtBadge + imgBadge;
     sel.appendChild(opt);
   });
   document.getElementById('font-controls').style.display = 'flex';
+
+  // Clear status line when switching fonts
+  const st = document.getElementById('gen-images-status');
+  if (st) st.textContent = '';
 
   selectVariant(font.variants[0]?.name);
 }
@@ -2575,15 +2688,26 @@ function selectVariant(variantName) {
   const variant = font?.variants.find(v => v.name === variantName);
   if (!variant) return;
 
-  // Inject @font-face for this variant
+  // Inject @font-face for live preview
   injectFontFace(variantName, variant.fontUrl);
 
-  // Show/hide OCR test button based on whether images exist
+  // Show/hide OCR test + export buttons based on whether images exist
   document.getElementById('run-char-test-btn').style.display =
     variant.hasImages ? 'inline-block' : 'none';
+  document.getElementById('export-char-csv-btn').style.display = 'none';
 
-  // Re-render chart in current view mode
-  if (document.getElementById('unicode-ref-panel').style.display !== 'none') {
+  // PNG hint: show when in PNG mode and no images yet
+  const hint = document.getElementById('png-hint');
+  if (uViewMode === 'png' && !variant.hasImages) {
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
+  }
+
+  // Re-render in current view mode
+  if (uViewMode === 'png') {
+    loadVariantPngs().then(() => renderUnicodeGrid());
+  } else {
     renderUnicodeGrid();
   }
 }
@@ -2607,19 +2731,26 @@ function setUnicodeView(mode) {
   uViewMode = mode;
   const liveBtn = document.getElementById('view-live-btn');
   const pngBtn  = document.getElementById('view-png-btn');
+  // Segmented control: active = brand bg, inactive = transparent
   if (mode === 'live') {
-    liveBtn.style.background = 'var(--brand)'; liveBtn.style.color = '#fff';
-    liveBtn.style.borderColor = 'var(--brand)';
-    pngBtn.style.background  = 'var(--card)';  pngBtn.style.color  = 'var(--ink2)';
-    pngBtn.style.borderColor  = 'var(--border2)';
+    liveBtn.style.cssText = 'font-size:.74rem;padding:4px 12px;border:none;cursor:pointer;transition:all .15s;background:var(--brand);color:#fff;font-weight:600';
+    pngBtn.style.cssText  = 'font-size:.74rem;padding:4px 12px;border:none;cursor:pointer;transition:all .15s;background:transparent;color:var(--ink2)';
+    document.getElementById('png-hint').style.display = 'none';
+    renderUnicodeGrid();
   } else {
-    pngBtn.style.background  = 'var(--brand)'; pngBtn.style.color  = '#fff';
-    pngBtn.style.borderColor  = 'var(--brand)';
-    liveBtn.style.background = 'var(--card)';  liveBtn.style.color = 'var(--ink2)';
-    liveBtn.style.borderColor = 'var(--border2)';
+    pngBtn.style.cssText  = 'font-size:.74rem;padding:4px 12px;border:none;cursor:pointer;transition:all .15s;background:var(--brand);color:#fff;font-weight:600';
+    liveBtn.style.cssText = 'font-size:.74rem;padding:4px 12px;border:none;cursor:pointer;transition:all .15s;background:transparent;color:var(--ink2)';
+    // Check if images exist for this variant
+    const font    = fontRegistry?.find(f => f.id === uFontId);
+    const variant = font?.variants.find(v => v.name === uVariant);
+    const hint = document.getElementById('png-hint');
+    if (variant && !variant.hasImages) {
+      hint.style.display = 'block';
+    } else {
+      hint.style.display = 'none';
+    }
+    loadVariantPngs().then(() => renderUnicodeGrid());
   }
-  if (mode === 'png') loadVariantPngs().then(() => renderUnicodeGrid());
-  else renderUnicodeGrid();
 }
 
 // ── Load PNG map for current variant ──────────────────────────
@@ -2736,19 +2867,8 @@ function renderUnicodeGrid() {
 
 // ── Toggle chart visibility ────────────────────────────────────
 function toggleUnicodeRef() {
-  const panel = document.getElementById('unicode-ref-panel');
-  const btn   = document.getElementById('unicode-toggle-btn');
-  const open  = panel.style.display === 'none';
-  panel.style.display = open ? 'block' : 'none';
-  btn.textContent = open ? 'Hide chart' : 'Show chart';
-  if (open) {
-    // Ensure font registry loaded
-    if (!fontRegistry) {
-      loadFontRegistry().then(() => renderUnicodeGrid());
-    } else {
-      renderUnicodeGrid();
-    }
-  }
+  // Legacy — panel is always visible now; kept in case called elsewhere
+  if (!fontRegistry) loadFontRegistry();
 }
 
 // ── Use character in OCR single-mode ──────────────────────────
@@ -2758,35 +2878,40 @@ function useCharInOcr(ch) {
 }
 
 // ── Generate test images (per-font or all) ────────────────────
-async function genTestImages() {
-  const st = document.getElementById('gen-images-status');
-  const btn = document.getElementById('btn-gen-imgs');
-  btn.disabled = true;
+async function genTestImages(all = false) {
+  const st     = document.getElementById('gen-images-status');
+  const btn    = document.getElementById('btn-gen-imgs');
+  const btnAll = document.getElementById('btn-gen-all');
+  [btn, btnAll].forEach(b => b && (b.disabled = true));
   st.style.color = 'var(--mute)';
-  st.textContent = `⏳ Generating images for ${uFontId || 'all fonts'}…`;
+  const label = all ? 'all fonts' : (uFontId ? uFontId : 'selected font');
+  st.textContent = `⏳ Generating images for ${label}…`;
+  document.getElementById('png-hint').style.display = 'none';
   try {
-    const body = uFontId ? JSON.stringify({ fontId: uFontId }) : '{}';
+    // If all=true, omit fontId so server generates every font
+    const body = (!all && uFontId) ? JSON.stringify({ fontId: uFontId }) : '{}';
     const r = await fetch('/api/generate-test-images', {
       method: 'POST', headers:{'Content-Type':'application/json'}, body
     });
     const d = await r.json();
     if (r.ok) {
       st.style.color = 'var(--green)';
-      st.textContent = `✓ ${d.count} images generated.`;
+      st.textContent = `✓ ${d.count} images generated${all ? ' across all fonts' : ''}`;
       document.getElementById('run-char-test-btn').style.display = 'inline-block';
-      // Reload PNG map if in PNG view
+      document.getElementById('export-char-csv-btn').style.display = 'none';
+      // Reload PNG map and re-render if in PNG view
       if (uViewMode === 'png') await loadVariantPngs().then(() => renderUnicodeGrid());
-      // Refresh registry (hasImages flags may have changed)
-      loadFontRegistry();
+      // Refresh registry so hasImages flags update
+      await loadFontRegistry();
     } else {
       st.style.color = 'var(--red)';
-      st.textContent = `✗ ${d.error || 'Failed'}`;
+      st.textContent = `✗ ${d.error || 'Generation failed'}`;
     }
   } catch(e) {
     st.style.color = 'var(--red)';
     st.textContent = `✗ ${e.message}`;
   }
-  btn.disabled = false;
+  [btn, btnAll].forEach(b => b && (b.disabled = false));
 }
 
 // ── 1:1 Character OCR accuracy test ───────────────────────────
@@ -2878,6 +3003,199 @@ function markCharCell(ch, ok, got) {
   });
 }
 
+// ══ Char-train: save OCR snapshot ═══════════════════════════════════════
+async function saveOcrSnapshot(label) {
+  if (!uFontId || !uVariant) return null;
+  const cells = [...document.querySelectorAll('.unicode-cell')];
+  let correct = 0, total = 0;
+  const byCategory = {}, byCorrect = {};
+  cells.forEach(cell => {
+    const badge = cell.querySelector('.uc-ocr-badge');
+    if (!badge) return;
+    total++;
+    const cat = cell.dataset.type || 'other';
+    byCategory[cat] = (byCategory[cat]||0) + 1;
+    if (badge.textContent === '✓') { correct++; byCorrect[cat] = (byCorrect[cat]||0)+1; }
+  });
+  if (total === 0) return null;
+  const overall = Math.round(correct / total * 100);
+  const catPct = {};
+  Object.keys(byCategory).forEach(k => {
+    catPct[k] = byCategory[k] > 0 ? Math.round((byCorrect[k]||0)/byCategory[k]*100) : null;
+  });
+  try {
+    await fetch('/api/char-train/baseline', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ fontId:uFontId, variant:uVariant, label, results:{overall, byCategory:catPct, correct, total} })
+    });
+  } catch(e) { console.warn('snapshot save failed:', e); }
+  return { overall, catPct, correct, total };
+}
+
+// ══ Char-train: load & render accuracy history bars ══════════════════════
+async function loadAccuracyHistory() {
+  if (!uFontId || !uVariant) return;
+  try {
+    const r = await fetch(`/api/char-train/history/${uFontId}/${encodeURIComponent(uVariant)}`);
+    const d = await r.json();
+    renderAccuracyHistory(d.history || []);
+  } catch(e) {}
+}
+
+function renderAccuracyHistory(history) {
+  const panel = document.getElementById('train-accuracy-panel');
+  const chart = document.getElementById('train-accuracy-chart');
+  if (!history.length) { panel.style.display='none'; return; }
+  panel.style.display = 'block';
+  chart.innerHTML = '';
+  const maxH = 120;
+  history.forEach(snap => {
+    const col = document.createElement('div');
+    col.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;min-width:72px';
+    const pct = document.createElement('div');
+    pct.style.cssText = 'font-size:.82rem;font-weight:700;color:var(--ink)';
+    pct.textContent = (snap.overall ?? 0) + '%';
+    const bar = document.createElement('div');
+    const h = Math.max(4, Math.round((snap.overall||0)/100*maxH));
+    const isBaseline = snap.label === 'baseline';
+    bar.style.cssText = `width:48px;height:${h}px;border-radius:4px 4px 0 0;` +
+      `background:${isBaseline ? 'var(--mute)' : 'var(--green)'};` +
+      `transition:height .4s;display:flex;align-items:flex-end;justify-content:center`;
+    bar.title = `${snap.label}: ${snap.overall}% (${snap.correct}/${snap.total})`;
+    const lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:.62rem;color:var(--mute);text-align:center;max-width:72px;word-break:break-word';
+    lbl.textContent = snap.label;
+    const ts = document.createElement('div');
+    ts.style.cssText = 'font-size:.58rem;color:var(--mute)';
+    ts.textContent = snap.ts ? new Date(snap.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+    col.append(pct, bar, lbl, ts);
+    chart.appendChild(col);
+  });
+  if (history.length >= 2) {
+    const delta = (history[history.length-1].overall||0) - (history[0].overall||0);
+    const note = document.createElement('div');
+    note.style.cssText = `align-self:center;margin-left:8px;font-size:.78rem;padding:4px 10px;border-radius:20px;` +
+      `background:${delta>=0?'#ecfdf5':'#fef2f2'};color:${delta>=0?'var(--green)':'var(--red)'};` +
+      `font-weight:700;white-space:nowrap`;
+    note.textContent = `${delta>=0?'▲':'▼'} ${Math.abs(delta)}pp`;
+    chart.appendChild(note);
+  }
+}
+
+// ══ Char-train: start training + poll ════════════════════════════════════
+let charTrainPollTimer = null;
+
+async function startCharTrain() {
+  if (!uFontId || !uVariant) { alert('Select a font and variant first.'); return; }
+  // Reveal panel and scroll into view
+  const panel = document.getElementById('char-train-panel');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior:'smooth', block:'nearest' });
+
+  const iters    = document.getElementById('train-iters').value;
+  const logEl    = document.getElementById('train-log');
+  const progWrap = document.getElementById('train-progress-wrap');
+  const progBar  = document.getElementById('train-progress-bar');
+  const progTxt  = document.getElementById('train-progress-txt');
+  const badge    = document.getElementById('train-phase-badge');
+  const btnStart = document.getElementById('btn-start-train');
+  const btnStop  = document.getElementById('btn-stop-train');
+
+  logEl.style.display = 'block';
+  logEl.textContent = 'Starting…';
+  progWrap.style.display = 'block';
+  progBar.style.width = '2%';
+  badge.textContent = '⏳ Starting'; badge.style.background='var(--bg)'; badge.style.color='var(--mute)';
+  btnStart.style.display = 'none';
+  btnStop.style.display = 'inline-block';
+  document.getElementById('btn-char-train').disabled = true;
+
+  // Remove any previous completion message
+  document.querySelectorAll('.train-done-msg').forEach(el=>el.remove());
+
+  try {
+    const r = await fetch('/api/char-train/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ fontId:uFontId, variant:uVariant, iterations:parseInt(iters) })
+    });
+    const d = await r.json();
+    if (!r.ok) {
+      logEl.textContent = '✗ ' + (d.error || 'Failed to start');
+      resetTrainUI(); return;
+    }
+    // Poll every 1.5s
+    charTrainPollTimer = setInterval(async () => {
+      try {
+        const sr = await fetch('/api/char-train/status');
+        const sd = await sr.json();
+        if (sd.log?.length) { logEl.textContent = sd.log.join('\n'); logEl.scrollTop = logEl.scrollHeight; }
+        if (sd.phase === 'lstmf') {
+          badge.textContent = '⚙ Building lstmf files'; badge.style.background='var(--brand-xl)'; badge.style.color='var(--brand-d)';
+          progBar.style.width = '20%'; progTxt.textContent = 'Converting images to training format…';
+        } else if (sd.phase === 'train') {
+          const pct = sd.iter ? Math.min(95, 20 + Math.round(sd.iter/parseInt(iters)*75)) : 40;
+          progBar.style.width = pct + '%';
+          badge.textContent = sd.bcer != null ? `🧠 BCER ${sd.bcer.toFixed(2)}%` : '🧠 Training…';
+          badge.style.background = '#ede9fe'; badge.style.color = '#4c1d95';
+          progTxt.textContent = sd.iter ? `Iteration ${sd.iter} / ${iters}` : 'Training…';
+        }
+        if (sd.error) {
+          badge.textContent = '✗ Error'; badge.style.color = 'var(--red)'; badge.style.background = '#fef2f2';
+          resetTrainUI(); return;
+        }
+        if (sd.done) {
+          progBar.style.width = '100%';
+          badge.textContent = '✓ Complete'; badge.style.background = '#ecfdf5'; badge.style.color = 'var(--green)';
+          progTxt.textContent = 'Done! Run the 1:1 OCR test above to measure accuracy improvement.';
+          stopCharTrainPoll();
+          resetTrainUI();
+          // Show call-to-action
+          const msg = document.createElement('div');
+          msg.className = 'train-done-msg';
+          msg.style.cssText = 'margin-top:10px;padding:10px 14px;background:#ede9fe;border-radius:8px;font-size:.8rem;color:#4c1d95';
+          msg.innerHTML = '🎉 <strong>Training complete!</strong> Click <strong>▶ Run OCR test</strong> above to see how accuracy improved.';
+          progWrap.after(msg);
+        }
+      } catch(e) { /* network blip, keep polling */ }
+    }, 1500);
+  } catch(e) {
+    logEl.textContent = '✗ ' + e.message;
+    resetTrainUI();
+  }
+}
+
+function stopCharTrainPoll() {
+  if (charTrainPollTimer) { clearInterval(charTrainPollTimer); charTrainPollTimer = null; }
+}
+
+function resetTrainUI() {
+  stopCharTrainPoll();
+  document.getElementById('btn-start-train').style.display = 'inline-block';
+  document.getElementById('btn-stop-train').style.display = 'none';
+  document.getElementById('btn-char-train').disabled = false;
+}
+
+// ══ Wire up: show Train button + history when variant has images ══════════
+function refreshTrainSection() {
+  const font    = fontRegistry?.find(f => f.id === uFontId);
+  const variant = font?.variants.find(v => v.name === uVariant);
+  const trainBtn = document.getElementById('btn-char-train');
+  if (trainBtn) trainBtn.style.display = variant?.hasImages ? 'inline-block' : 'none';
+  if (variant?.hasImages) loadAccuracyHistory();
+}
+
+// Patch selectVariant to refresh training section
+const _baseSV = selectVariant;
+selectVariant = function(v) { _baseSV(v); refreshTrainSection(); };
+
+// Patch runCharOcrTest to auto-save snapshot after completion
+const _baseRun = runCharOcrTest;
+runCharOcrTest = async function() {
+  await _baseRun();
+  const label = 'test ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  await saveOcrSnapshot(label);
+  await loadAccuracyHistory();
+};
 
 </script>
 </body>
