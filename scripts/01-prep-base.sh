@@ -55,13 +55,11 @@ for font in data['fonts']:
 
     print(f"  [{fid}] {repo}")
     if (dest / '.git').exists():
-        print(f"    already cloned — pulling latest")
-        subprocess.run(['git', '-C', str(dest), 'pull', '--ff-only'],
-                       check=True, capture_output=True)
+        print(f"    ✓ already cloned — skipping (use git -C fonts/{fid} pull to update)")
     else:
         subprocess.run(['git', 'clone', '--depth', '1', repo, str(dest)],
                        check=True)
-    print(f"    → {dest}")
+        print(f"    → cloned to {dest}")
 PYEOF
 
 # ── B: Download kan base model ─────────────────────────────────

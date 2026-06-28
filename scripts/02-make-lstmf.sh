@@ -99,6 +99,7 @@ process_dir() {
         return
     fi
 
+    mkdir -p "$out_dir"
     echo ""
     echo "→ Processing $label ($count images)..."
 
@@ -117,6 +118,7 @@ def make_lstmf(img_path, out_dir, list_file, tessdata):
         return False
 
     out_dir  = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     stem     = img_path.stem
     dst_img  = out_dir / (stem + img_path.suffix)
     dst_box  = out_dir / (stem + '.box')
@@ -130,7 +132,24 @@ def make_lstmf(img_path, out_dir, list_file, tessdata):
         w, h = im.size
 
     # Create WordStr box file (Tesseract 4/5 line-level training format)
-    gt_text = gt_path.read_text(encoding='utf-8').strip()
+    # Strip chars absent from kan.traineddata unicharset; collapse spaces
+    #
+    # _UNSUPPORTED: characters NOT in tessdata_best/kan.traineddata unicharset.
+    # After running 00c-expand-unicharset.sh and retraining with tessdata_expanded/,
+    # clear this set so all Kannada chars are trained.
+    #
+    # Verified missing (run 00c-expand-unicharset.sh to fix):
+    #   ಋ U+0C8B  ಙ U+0C99  ಝ U+0C9D  ಱ U+0CB1
+    # Verified PRESENT (was incorrectly filtered before):
+    #   ಞ U+0C9E  — removed from filter
+    import re as _re
+    import os as _os
+    # Use empty set if tessdata_expanded/kan.traineddata exists (expansion done)
+    _expanded = _os.path.exists(_os.path.join(tdata, '..', 'tessdata_expanded', 'kan.traineddata'))
+    _UNSUPPORTED = set() if _expanded else set('ಋಙಝಱ')
+    _raw = gt_path.read_text(encoding='utf-8').strip()
+    _tokens = [t for t in _raw.split(' ') if not (len(t)==1 and t in _UNSUPPORTED)]
+    gt_text = _re.sub(r'\s+', ' ', ' '.join(_tokens)).strip()
     with open(dst_box, 'w', encoding='utf-8') as bf:
         bf.write(f"WordStr 0 0 {w} {h} 0 #{gt_text}\n\n")
 
@@ -140,7 +159,7 @@ def make_lstmf(img_path, out_dir, list_file, tessdata):
          "--tessdata-dir", tessdata,
          "--dpi", "150", "--psm", "6",
          "-l", "kan", "lstm.train"],
-        capture_output=True, text=True
+        capture_output=True, encoding='utf-8', errors='replace'
     )
     if lstmf.exists():
         with open(list_file, 'a', encoding='utf-8') as lf:
@@ -170,8 +189,9 @@ print(f"  {label}: {ok} OK  {fail} failed  {skip} skipped (no gt.txt)")
 PYEOF
 }
 
-process_dir "$RENDERED_DIR"  "$LSTMF_DIR/rendered"  "Synthetic rendered"
-process_dir "$SCAN_DIR"      "$LSTMF_DIR/scan"      "Real scan images"
+process_dir "$RENDERED_DIR"           "$LSTMF_DIR/rendered"   "Synthetic rendered"
+process_dir "$SCAN_DIR"               "$LSTMF_DIR/scan"       "Real scan images"
+process_dir "$RENDERED_DIR/font-test" "$LSTMF_DIR/font-test"  "Per-font test images"
 
 TOTAL=$(wc -l < "$LSTMF_DIR/list.txt" | tr -d ' ')
 

@@ -1,17 +1,18 @@
 # Portal reference — kan_hist Training Portal
 
-The portal is a single-file Flask app (`portal.py`) that provides a browser UI for the full `kan_hist` training pipeline.
+The portal is a Node.js / Express app (`server.js`) that provides a browser UI for the full `kan_hist` training pipeline.
 
 ## Starting the portal
 
 ```bash
-bash start-portal.sh          # installs dependencies and starts
-# or
-python3 portal.py
-# → http://localhost:5000
+node server.js
+# → http://localhost:3000
 
 # Custom port
-PORT=8080 python3 portal.py
+PORT=8080 node server.js
+
+# Dev mode (auto-restarts on file change)
+node --watch server.js
 ```
 
 ## REST API
@@ -26,13 +27,16 @@ Returns completion state of each pipeline step plus whether `lstmtraining` is cu
 
 ```json
 {
-  "01_prep":   { "label": "1. Prep base model", "done": true,  "detail": "kan.traineddata ✓  fonts 4/4" },
-  "02_corpus": { "label": "2. Build corpus",    "done": true,  "detail": "5,200 lines" },
-  "03_render": { "label": "3. Render images",   "done": true,  "detail": "31,200 PNG images" },
-  "04_lstmf":  { "label": "4. Generate lstmf",  "done": true,  "detail": "31,200 .lstmf files" },
-  "05_train":  { "label": "5. Train",           "done": true,  "detail": "47 checkpoints" },
-  "06_package":{ "label": "6. Package",         "done": false, "detail": "Not done" },
-  "_training": false
+  "00_unichar": { "label": "Expand unicharset", "done": false, "detail": "Not done — ಋ ಙ ಝ ಱ missing" },
+  "01_prep":    { "label": "1. Prep base",      "done": true,  "detail": "kan.traineddata ✓  fonts 4/4" },
+  "02_corpus":  { "label": "2. Corpus",         "done": true,  "detail": "5,200 lines" },
+  "03_render":  { "label": "3. Render images",  "done": true,  "detail": "31,200 PNG images" },
+  "04_lstmf":   { "label": "4. Make lstmf",     "done": true,  "detail": "31,200 .lstmf files" },
+  "05_train":   { "label": "5. Train",          "done": true,  "detail": "47 checkpoints" },
+  "06_package": { "label": "6. Package",        "done": false, "detail": "Not done" },
+  "_training": false,
+  "_runningStep": null,
+  "_completedSteps": {}
 }
 ```
 
@@ -112,10 +116,23 @@ Returns up to `n` base64-encoded sample images from `rendered/` (default: 16).
 
 Starts a pipeline step in a background thread. Output is appended to `training.log`.
 
-Valid step values: `prep`, `wiki`, `clean`, `render`, `lstmf`, `train`, `package`
+Valid step values: `expandunichar`, `prep`, `wiki`, `clean`, `specimen`, `render`, `lstmf`, `train`, `package`
+
+| Step | Script | Notes |
+|---|---|---|
+| `expandunichar` | `scripts/00c-expand-unicharset.sh` | Adds ಋ ಙ ಝ ಱ to unicharset → `tessdata_expanded/` |
+| `prep` | `scripts/01-prep-base.sh` | Downloads base model, clones fonts |
+| `wiki` | `corpus/download-wiki.py` | Download Kannada Wikipedia corpus |
+| `clean` | `corpus/clean-corpus.py` | Clean raw corpus |
+| `specimen` | `corpus/generate-specimen.py --merge` | Generate systematic glyph-coverage corpus |
+| `render` | `corpus/render-corpus.py` | Render PNG+gt.txt pairs |
+| `lstmf` | `scripts/02-make-lstmf.sh` | PNG+gt.txt → .lstmf files |
+| `train` | `scripts/03-train.sh` | Fine-tune LSTM |
+| `package` | `scripts/04-package.sh` | Export `kan_hist.traineddata` |
 
 ```bash
-curl -X POST http://localhost:5000/api/run/train
+curl -X POST http://localhost:3000/api/run/expandunichar
+curl -X POST http://localhost:3000/api/run/train
 ```
 
 ```json
@@ -194,14 +211,22 @@ Available `ops`: `binarize`, `denoise`, `enhance_contrast`
 
 ### Tesseract.js model serving
 
-#### `GET /tessdata/<lang>.traineddata`
+#### `GET /traineddata/<lang>.traineddata[.gz]`
 
-Serves traineddata files for Tesseract.js. The OCR test tab fetches models from this endpoint automatically using the same origin (no CORS configuration needed).
+Serves traineddata files for Tesseract.js. The Live OCR tab fetches models from this endpoint automatically.
 
-- `kan.traineddata` → served from `tessdata_best/`
 - `kan_hist.traineddata` → served from `best/`
+- `kan_hist.traineddata.gz` → gzip-compressed on-the-fly (Tesseract.js v5 always requests `.gz`)
 
-Only `.traineddata` files are allowed.
+Tesseract.js v5 requests the `.gz` form first. The server compresses the file on-the-fly using Node's built-in `zlib` — no pre-compressed copy needed. Only `.traineddata` files are served; other extensions return 403.
+
+#### `DELETE /api/rendered`
+
+Deletes all files in `rendered/` (PNGs, `.gt.txt`, and subdirectories like `font-test/`). Used by the "↺ Clear & re-render" button.
+
+#### `DELETE /api/test-images[?fontId=<id>]`
+
+Deletes character test images. Without `fontId`, clears all fonts. With `fontId`, clears only that font's directory.
 
 ### Log streaming
 
@@ -234,12 +259,12 @@ Returns a self-contained HTML report as a file download. Includes BCER chart, pi
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | `5000` | Port to listen on |
+| `PORT` | `3000` | Port to listen on |
 | `BEST_CHECKPOINT` | (auto) | Override checkpoint for packaging step |
 
 ## Directory assumptions
 
-The portal expects the following relative to `portal.py`:
+The portal expects the following relative to `server.js`:
 
 | Path | Purpose |
 |---|---|
@@ -251,4 +276,6 @@ The portal expects the following relative to `portal.py`:
 | `scan-input/` | Real scans (created automatically) |
 | `best/` | Packaged `kan_hist.traineddata` |
 | `tessdata_best/` | Base `kan.traineddata` |
+| `tessdata_expanded/` | Expanded unicharset traineddata (created by `00c-expand-unicharset.sh`) |
+| `tmp/langdata_lstm/` | Cached langdata from GitHub (created by `00c-expand-unicharset.sh`) |
 | `training.log` | Training log (streamed live) |

@@ -13,7 +13,7 @@ The training data is synthetic: the Karnata fonts are rendered against a real Ka
 | Parameter | Value | Notes |
 |---|---|---|
 | `--learning_rate` | `0.001` | Standard starting point for fine-tuning. Reduce to `0.0001` if BCER oscillates or does not converge. |
-| `--max_iterations` | `100,000` | Upper bound. In practice, convergence occurs between 20,000–60,000 iterations for this dataset. |
+| `--max_iterations` | `500,000` | Upper bound — absolute, not relative to checkpoint. In practice, convergence occurs between 20,000–60,000 iterations. Set high so resuming from a late checkpoint does not exit immediately. |
 | `--target_error_rate` | `-1` | Disabled — we stop manually when BCER plateaus. |
 
 ### When to stop training
@@ -29,6 +29,8 @@ Practical targets for a well-functioning model:
 | 1–2% | Good — suitable for typical mission press scans |
 | < 1% | Excellent — test carefully on real held-out scans |
 
+**Observed result (June 2026, ~5,400 synthetic Karnata images):** BCER reached **0.092%** at iteration 9,589. This is well under the excellent threshold and was reached early — a consequence of the high rendering consistency of the Karnata fonts. Verify on real historical scans before treating this as a real-world accuracy figure.
+
 BCER (Byte Character Error Rate) measures how many characters the model gets wrong in training data, not on real documents. A BCER of 1.5% on synthetic images might correspond to 5–10% error on actual historical scans, depending on their condition.
 
 ## Corpus design
@@ -40,6 +42,12 @@ BCER (Byte Character Error Rate) measures how many characters the model gets wro
 ಕ ಖ ಗ ಘ ಙ ಚ ಛ ಜ ಝ ಞ
 ```
 They ensure the model sees every glyph at least once, regardless of corpus frequency.
+
+> **Unicharset note:** Four characters — `ಋ ಙ ಝ ಱ` — are absent from `tessdata_best/kan.traineddata`'s unicharset. Coverage lines containing them are silently filtered by `02-make-lstmf.sh` unless you first run `scripts/00c-expand-unicharset.sh` to produce `tessdata_expanded/kan.traineddata`. After expansion, the filter is automatically lifted. `ಞ` is present in the unicharset and does not need special handling.
+
+### Specimen corpus
+
+`corpus/generate-specimen.py` produces a systematically designed corpus that guarantees coverage of every vowel, every consonant×matra combination, common conjuncts, and historical vocabulary. Run with `--merge` to append to the existing corpus rather than replace it. This complements Wikipedia prose, which may have gaps in rare character combinations.
 
 ### Wikipedia prose
 
@@ -99,6 +107,10 @@ CONTINUE_FROM=output/kan_hist_2.5_20000.checkpoint ./scripts/03-train.sh
 ```
 
 This is useful for trying different learning rates from the same starting point.
+
+### Expanding the unicharset mid-training
+
+If you run `scripts/00c-expand-unicharset.sh` after training has already started, `03-train.sh` will detect `tessdata_expanded/` on the next run and use it as `--traineddata`. Tesseract automatically resizes the LSTM output layer to cover the new characters, preserving all existing weights. New-character output nodes start with random weights and require training examples containing those characters to become useful. Expect BCER to rise slightly for ~5,000 iterations, then recover.
 
 ## Adding real scanned training data
 

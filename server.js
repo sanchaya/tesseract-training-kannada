@@ -61,6 +61,33 @@ app.use("/test-images", express.static(path.join(ROOT, "test-images")));
 app.use("/fonts",       express.static(path.join(ROOT, "fonts"),
   { setHeaders: (res) => res.setHeader("Access-Control-Allow-Origin", "*") }));
 
+// ── Serve traineddata for Tesseract.js in-browser testing ─────────────────
+// Tesseract.js v5 always fetches <lang>.traineddata.gz first — serve gzipped on the fly
+app.get("/traineddata/:filename", (req, res) => {
+  const fn      = req.params.filename;
+  const wantsGz = fn.endsWith('.traineddata.gz');
+  const baseName = wantsGz ? fn.slice(0, -3) : fn;
+  if (!baseName.endsWith('.traineddata')) return res.status(403).end();
+
+  const candidates = [
+    path.join(ROOT, "best",          baseName),
+    path.join(ROOT, "tessdata_best", baseName),
+    path.join(ROOT, baseName),
+  ];
+  const f = candidates.find(c => fs.existsSync(c));
+  if (!f) return res.status(404).json({ error: `${baseName} not found` });
+
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  if (wantsGz) {
+    res.setHeader("Content-Type", "application/gzip");
+    const zlib = require("zlib");
+    fs.createReadStream(f).pipe(zlib.createGzip()).pipe(res);
+  } else {
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.sendFile(f);
+  }
+});
+
 const upload = multer({ dest: path.join(ROOT, "tmp") });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -159,7 +186,8 @@ function sampleImages(n = 16) {
   });
 }
 
-function runBg(cmd, args, stepId) {
+function runBg(cmd, args, stepId, opts = {}) {
+  runningStep = stepId;
   const log  = fs.openSync(P.logFile, "a");
   const sep  = "=".repeat(55);
   fs.writeSync(log, `\n${sep}\n[trainocr] ${stepId}: ${cmd} ${args.join(" ")}\n${new Date().toISOString()}\n${sep}\n\n`);
@@ -169,10 +197,13 @@ function runBg(cmd, args, stepId) {
     cwd:   ROOT,
     stdio: ["ignore", fs.openSync(P.logFile, "a"), fs.openSync(P.logFile, "a")],
     detached: false,
+    env: { ...process.env, ...(opts.env || {}) },
   });
   child.on("exit", code => {
+    runningStep = null;
+    completedSteps[stepId] = { code, ts: Date.now(), ok: code === 0 };
     const l = fs.openSync(P.logFile, "a");
-    fs.writeSync(l, `\n[trainocr] ${stepId} exit ${code}\n`);
+    fs.writeSync(l, `\n[trainocr] ${stepId} ${code === 0 ? "✓ done" : `✗ failed (exit ${code})`}\n`);
     fs.closeSync(l);
   });
 }
@@ -320,13 +351,16 @@ app.get("/api/status", (req, res) => {
   const bestOk   = fs.existsSync(path.join(P.bestDir, "kan_hist.traineddata"));
 
   res.json({
-    "01_prep":   { label: "1. Prep base model",  done: fs.existsSync(path.join(P.tessdataDir, "kan.traineddata")) && cloned === fonts.length, detail: `kan.traineddata ${fs.existsSync(path.join(P.tessdataDir,"kan.traineddata"))?"✓":"✗"}  fonts ${cloned}/${fonts.length}` },
-    "02_corpus": { label: "2. Build corpus",     done: corpN > 0,     detail: `${corpN.toLocaleString()} lines` },
-    "03_render": { label: "3. Render images",    done: rendered > 0,  detail: `${rendered.toLocaleString()} PNG images` },
-    "04_lstmf":  { label: "4. Generate lstmf",   done: lstmfN > 0,    detail: `${lstmfN.toLocaleString()} .lstmf files` },
-    "05_train":  { label: "5. Train",            done: cps.length > 0, detail: cps.length ? `${cps.length} checkpoints` : "Not started" },
-    "06_package":{ label: "6. Package",          done: bestOk,        detail: bestOk ? "kan_hist.traineddata ready" : "Not done" },
-    _training:   isTrainingRunning(),
+    "00_unichar": { label: "Expand unicharset", done: fs.existsSync(path.join(ROOT, "tessdata_expanded", "kan.traineddata")), detail: fs.existsSync(path.join(ROOT, "tessdata_expanded", "kan.traineddata")) ? "Expanded (ಋ ಙ ಝ ಱ added)" : "Not done — ಋ ಙ ಝ ಱ missing" },
+    "01_prep":   { label: "1. Prep base",      done: fs.existsSync(path.join(P.tessdataDir, "kan.traineddata")) && cloned === fonts.length, detail: `kan.traineddata ${fs.existsSync(path.join(P.tessdataDir,"kan.traineddata"))?"✓":"✗"}  fonts ${cloned}/${fonts.length}` },
+    "02_corpus": { label: "2. Corpus",         done: corpN > 0,     detail: `${corpN.toLocaleString()} lines` },
+    "03_render": { label: "3. Render images",  done: rendered > 0,  detail: `${rendered.toLocaleString()} PNG images` },
+    "04_lstmf":  { label: "4. Make lstmf",     done: lstmfN > 0,    detail: `${lstmfN.toLocaleString()} .lstmf files` },
+    "05_train":  { label: "5. Train",          done: cps.length > 0, detail: cps.length ? `${cps.length} checkpoints` : "Not started" },
+    "06_package":{ label: "6. Package",        done: bestOk,        detail: bestOk ? "kan_hist.traineddata ready" : "Not done" },
+    _training:       isTrainingRunning(),
+    _runningStep:    runningStep,
+    _completedSteps: completedSteps,
   });
 });
 
@@ -393,9 +427,12 @@ app.get("/api/scans", (req, res) => {
 
 app.post("/api/scans/upload", upload.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No image file" });
-  const gt   = (req.body.gt || "").trim();
-  const name = req.file.originalname;
-  const stem = name.replace(/\.[^.]+$/, "");
+  const gt  = (req.body.gt || "").trim();
+  const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+  // Sanitize filename — replace spaces/special chars, keep ASCII+extension
+  const rawStem = path.basename(req.file.originalname, path.extname(req.file.originalname));
+  const stem    = rawStem.replace(/[^\w\-]/g, '_').replace(/_+/g, '_').slice(0, 80);
+  const name    = stem + ext;
   fs.renameSync(req.file.path, path.join(P.scanDir, name));
   if (gt) fs.writeFileSync(path.join(P.scanDir, stem + ".gt.txt"), gt, "utf8");
   res.json({ ok: true, saved: name, has_gt: !!gt });
@@ -430,12 +467,19 @@ app.post("/api/preprocess", async (req, res) => {
   }
 });
 
+// Strip absolute ROOT path from log lines so user paths are not exposed in the UI.
+// e.g. /Users/alice/Projects/tesseract-training-kannada/tmp/… → tmp/…
+const _rootPrefix = ROOT.endsWith("/") ? ROOT : ROOT + "/";
+function sanitizeLogLine(line) {
+  return line.split(_rootPrefix).join("");
+}
+
 // ── API: log tail ──────────────────────────────────────────────────────────
 app.get("/api/log/tail", (req, res) => {
   const n = parseInt(req.query.lines) || 100;
   if (!fs.existsSync(P.logFile)) return res.json({ lines: [], exists: false });
   const lines = fs.readFileSync(P.logFile, "utf8").split("\n");
-  res.json({ lines: lines.slice(-n), exists: true, total: lines.length });
+  res.json({ lines: lines.slice(-n).map(sanitizeLogLine), exists: true, total: lines.length });
 });
 
 // ── API: log SSE stream ────────────────────────────────────────────────────
@@ -457,7 +501,7 @@ app.get("/api/log/stream", (req, res) => {
     fs.closeSync(fd);
     pos = size;
     buf.toString("utf8").split("\n").forEach(line => {
-      if (line) res.write(`data: ${JSON.stringify(line)}\n\n`);
+      if (line) res.write(`data: ${JSON.stringify(sanitizeLogLine(line))}\n\n`);
     });
   }, 1000);
 
@@ -467,20 +511,159 @@ app.get("/api/log/stream", (req, res) => {
 // ── API: run step ──────────────────────────────────────────────────────────
 app.post("/api/run/:step", (req, res) => {
   const cmds = {
-    prep:    ["bash", [path.join(P.scripts, "01-prep-base.sh")]],
-    wiki:    ["python3", [path.join(P.corpus, "download-wiki.py")]],
-    clean:   ["python3", [path.join(P.corpus, "clean-corpus.py")]],
-    render:  ["python3", [path.join(P.corpus, "render-corpus.py")]],
-    lstmf:   ["bash", [path.join(P.scripts, "02-make-lstmf.sh")]],
-    train:   ["bash", [path.join(P.scripts, "03-train.sh")]],
-    package: ["bash", [path.join(P.scripts, "04-package.sh")]],
+    prep:          ["bash",    [path.join(P.scripts, "01-prep-base.sh")]],
+    wiki:          ["python3", [path.join(P.corpus,  "download-wiki.py")]],
+    clean:         ["python3", [path.join(P.corpus,  "clean-corpus.py")]],
+    specimen:      ["python3", [path.join(P.corpus,  "generate-specimen.py"), "--merge"]],
+    render:        ["python3", [path.join(P.corpus,  "render-corpus.py")]],
+    lstmf:         ["bash",    [path.join(P.scripts, "02-make-lstmf.sh")]],
+    train:         ["bash",    [path.join(P.scripts, "03-train.sh")]],
+    package:       ["bash",    [path.join(P.scripts, "04-package.sh")]],
+    expandunichar: ["bash",    [path.join(P.scripts, "00c-expand-unicharset.sh")]],
   };
   const { step } = req.params;
+  const force = req.query.force === '1';
   if (!cmds[step]) return res.status(400).json({ error: `Unknown step: ${step}` });
   const [cmd, args] = cmds[step];
   if (!fs.existsSync(args[0])) return res.status(404).json({ error: `Script not found: ${args[0]}` });
-  runBg(cmd, args, step);
+
+  // Skip wiki download if corpus already exists (unless ?force=1)
+  if (step === 'wiki' && !force) {
+    const stats = corpusStats();
+    if (stats && stats.total_lines > 0) {
+      return res.json({ ok: true, step, skipped: true,
+        reason: `Corpus already downloaded — ${stats.total_lines.toLocaleString()} lines. Use ?force=1 to re-download.` });
+    }
+  }
+
+  // Pass --force to expand script when requested
+  const runArgs = [...args];
+  if (step === 'expandunichar' && force) runArgs.push('--force');
+
+  // Support TRAIN_MODE=fresh for training with expanded unicharset from base weights
+  const runOpts = {};
+  if (step === 'train' && req.query.mode === 'fresh') {
+    runOpts.env = { TRAIN_MODE: 'fresh' };
+  }
+
+  runBg(cmd, runArgs, step, runOpts);
   res.json({ ok: true, step });
+});
+
+// ── Font image comparison ─────────────────────────────────────────────────
+app.get("/api/font-images/compare", (req, res) => {
+  const testDir  = path.join(ROOT, "test-images");
+  const families = ["kan_gmp", "kan_gtn", "kan_kittel", "kan_wmp"];
+  const TESTS    = ["line_vowels","line_consonants","line_conjuncts","line_digits",
+                    "sentence_01","sentence_02","sentence_03","sentence_04"];
+
+  function pickVariant(fontId) {
+    const fdir = path.join(testDir, fontId);
+    if (!fs.existsSync(fdir)) return null;
+    const variants = fs.readdirSync(fdir).filter(v => {
+      const vp = path.join(fdir, v);
+      return fs.statSync(vp).isDirectory() && fs.existsSync(path.join(vp, "line_vowels.png"));
+    });
+    // prefer non-otf, non-ttf; then otf; then ttf
+    const base = variants.find(v => !v.endsWith("-otf") && !v.endsWith("-ttf"));
+    return base || variants.find(v => v.endsWith("-otf")) || variants[0] || null;
+  }
+
+  const result = families.map(fontId => {
+    const variant = pickVariant(fontId);
+    if (!variant) return null;
+    const varDir = path.join(testDir, fontId, variant);
+    const images = TESTS.map(t => {
+      const img = path.join(varDir, t + ".png");
+      const gt  = path.join(varDir, t + ".gt.txt");
+      if (!fs.existsSync(img)) return null;
+      return {
+        name: t,
+        b64:  fs.readFileSync(img).toString("base64"),
+        gt:   fs.existsSync(gt) ? fs.readFileSync(gt, "utf8").trim() : "",
+      };
+    }).filter(Boolean);
+    return { id: fontId, variant, images };
+  }).filter(Boolean);
+
+  res.json(result);
+});
+
+// ── OCR quality check ─────────────────────────────────────────────────────
+app.get("/api/ocr-quality", async (req, res) => {
+  const testDir  = path.join(ROOT, "test-images");
+  const tessdata = path.join(ROOT, "tessdata_best");
+  const families = ["kan_gmp", "kan_gtn", "kan_kittel", "kan_wmp"];
+  const TESTS    = ["line_vowels","line_consonants","line_conjuncts","line_digits","sentence_01","sentence_02"];
+  const model    = req.query.model || "kan_hist";
+
+  // Check model exists
+  const modelPath = path.join(tessdata, model + ".traineddata");
+  if (!fs.existsSync(modelPath)) {
+    const alt = path.join(ROOT, "output", model + ".traineddata");
+    if (fs.existsSync(alt)) fs.copyFileSync(alt, modelPath);
+    else return res.json({ error: `Model ${model}.traineddata not found`, results: [] });
+  }
+
+  function cer(gt, pred) {
+    const g = [...gt.replace(/\s+/g,' ').trim()];
+    const p = [...pred.replace(/\s+/g,' ').trim()];
+    if (!g.length) return 0;
+    // Levenshtein distance
+    const dp = Array.from({length: g.length+1}, () => new Array(p.length+1).fill(0));
+    for (let i=1;i<=g.length;i++) dp[i][0]=i;
+    for (let j=1;j<=p.length;j++) dp[0][j]=j;
+    for (let i=1;i<=g.length;i++)
+      for (let j=1;j<=p.length;j++)
+        dp[i][j] = g[i-1]===p[j-1] ? dp[i-1][j-1]
+          : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+    return +(dp[g.length][p.length] / g.length * 100).toFixed(1);
+  }
+
+  function runTess(imgPath) {
+    return new Promise(resolve => {
+      execFile("tesseract", [imgPath, "stdout", "--tessdata-dir", tessdata,
+        "--dpi", "150", "--psm", "6", "-l", model], (err, stdout) => {
+        resolve((stdout || "").replace(/\n/g, " ").trim());
+      });
+    });
+  }
+
+  function pickVariant(fontId) {
+    const fdir = path.join(testDir, fontId);
+    if (!fs.existsSync(fdir)) return null;
+    const variants = fs.readdirSync(fdir).filter(v => {
+      const vp = path.join(fdir, v);
+      return fs.statSync(vp).isDirectory() && fs.existsSync(path.join(vp, "line_vowels.png"));
+    });
+    const base = variants.find(v => !v.endsWith("-otf") && !v.endsWith("-ttf"));
+    return base || variants.find(v => v.endsWith("-otf")) || variants[0] || null;
+  }
+
+  const results = [];
+  for (const fontId of families) {
+    const variant = pickVariant(fontId);
+    if (!variant) continue;
+    const varDir = path.join(testDir, fontId, variant);
+    const fontResults = [];
+    for (const t of TESTS) {
+      const img = path.join(varDir, t + ".png");
+      const gt  = path.join(varDir, t + ".gt.txt");
+      if (!fs.existsSync(img) || !fs.existsSync(gt)) continue;
+      const gtText   = fs.readFileSync(gt, "utf8").trim();
+      const predText = await runTess(img);
+      fontResults.push({ test: t, gt: gtText, pred: predText, cer: cer(gtText, predText) });
+    }
+    const avgCer = fontResults.length
+      ? +(fontResults.reduce((s,r)=>s+r.cer,0) / fontResults.length).toFixed(1) : 999;
+    results.push({ fontId, variant, avgCer, tests: fontResults });
+  }
+
+  // Overall
+  const overall = results.length
+    ? +(results.reduce((s,r)=>s+r.avgCer,0)/results.length).toFixed(1) : 999;
+
+  res.json({ model, overall, results });
 });
 
 // ── Font registry: scans actual files + merges manifest data ──────────────
@@ -702,6 +885,48 @@ app.post("/api/generate-test-images", async (req, res) => {
   });
 });
 
+// ── Clear rendered/ training images ──────────────────────────────────────
+app.delete("/api/rendered", (req, res) => {
+  const dir = path.join(ROOT, "rendered");
+  if (!fs.existsSync(dir)) return res.json({ ok: true, pngs: 0, txts: 0 });
+  let pngs = 0, txts = 0;
+  for (const entry of fs.readdirSync(dir)) {
+    const full = path.join(dir, entry);
+    const stat = fs.statSync(full);
+    if (stat.isDirectory()) {
+      // Subdirs like font-test/ — wipe entirely
+      fs.rmSync(full, { recursive: true, force: true });
+    } else if (entry.endsWith(".png"))    { fs.unlinkSync(full); pngs++; }
+      else if (entry.endsWith(".gt.txt")) { fs.unlinkSync(full); txts++; }
+  }
+  res.json({ ok: true, pngs, txts });
+});
+
+// ── Clear test images (font or all) ──────────────────────────────────────
+app.delete("/api/test-images", (req, res) => {
+  const outDir = path.join(ROOT, "test-images");
+  const fontId = req.query.fontId;   // optional: clear one font; omit = clear all
+  if (!fs.existsSync(outDir)) return res.json({ ok: true, deleted: 0 });
+
+  let deleted = 0;
+  if (fontId) {
+    // Clear just the one font's directory
+    const fontDir = path.join(outDir, fontId);
+    if (fs.existsSync(fontDir)) {
+      fs.rmSync(fontDir, { recursive: true, force: true });
+      deleted++;
+    }
+  } else {
+    // Clear everything under test-images/
+    for (const entry of fs.readdirSync(outDir)) {
+      const full = path.join(outDir, entry);
+      fs.rmSync(full, { recursive: true, force: true });
+      deleted++;
+    }
+  }
+  res.json({ ok: true, deleted, fontId: fontId || null });
+});
+
 // ── List test images ──────────────────────────────────────────────────────
 app.get("/api/test-images", (req, res) => {
   const outDir = path.join(ROOT, "test-images");
@@ -741,7 +966,9 @@ app.get("/api/char-train/history/:fontId/:variant", (req, res) => {
 
 // ── Char-train: generate lstmf + fine-tune from test images ───────────────
 // State tracking for the long-running train job
-let charTrainJob = null;
+let charTrainJob  = null;
+let runningStep   = null;   // currently active pipeline step
+let completedSteps = {};    // stepId → { code, ts }
 
 app.post("/api/char-train/start", express.json(), (req, res) => {
   if (charTrainJob && charTrainJob.running) {
@@ -762,6 +989,27 @@ app.post("/api/char-train/start", express.json(), (req, res) => {
 
   fs.mkdirSync(lstmfDir, { recursive: true });
 
+  // Ensure tessdata configs dir exists (required for lstm.train mode)
+  const configsDir = path.join(tessdata, "configs");
+  if (!fs.existsSync(configsDir)) {
+    const { execSync } = require("child_process");
+    try {
+      const sysConfigs = execSync(
+        "find /usr/local/share /opt/homebrew/share /usr/share -name 'configs' -path '*/tessdata/*' 2>/dev/null | head -1"
+      ).toString().trim();
+      if (sysConfigs) {
+        fs.symlinkSync(sysConfigs, configsDir);
+      } else {
+        // Create minimal configs dir with lstm.train file
+        fs.mkdirSync(configsDir, { recursive: true });
+        fs.writeFileSync(path.join(configsDir, "lstm.train"), "lstm_train_mode 1\n");
+      }
+    } catch(_) {
+      fs.mkdirSync(configsDir, { recursive: true });
+      fs.writeFileSync(path.join(configsDir, "lstm.train"), "lstm_train_mode 1\n");
+    }
+  }
+
   const jobId = Date.now().toString();
   charTrainJob = { id: jobId, running: true, phase: "lstmf", log: [], error: null, done: false, fontId, variant };
 
@@ -779,29 +1027,55 @@ app.post("/api/char-train/start", express.json(), (req, res) => {
 
       const lstmfFiles = [];
       for (const png of pngs) {
-        const base  = png.replace(".png", "");
-        const gtTxt = path.join(varDir, base + ".gt.txt");
+        const base    = png.replace(".png", "");
+        const srcPng  = path.join(varDir, png);
+        const gtTxt   = path.join(varDir, base + ".gt.txt");
         const outBase = path.join(lstmfDir, base);
+        const dstPng  = outBase + ".png";
+        const boxFile = outBase + ".box";
+        const lstmf   = outBase + ".lstmf";
         if (!fs.existsSync(gtTxt)) { addLog(`  skip ${png} (no .gt.txt)`); continue; }
-        await new Promise((resolve, reject) => {
+
+        // Copy image into lstmf work dir
+        fs.copyFileSync(srcPng, dstPng);
+
+        // Build WordStr box file (required for Tesseract 5 line-level training)
+        // Collapse spaces; strip chars absent from kan.traineddata unicharset (ಋ ಙ ಝ ಞ ಱ)
+        const UNSUPPORTED = new Set([...'ಋಙಝಞಱ']);
+        const gt = fs.readFileSync(gtTxt, "utf8").trim()
+          .split(' ').filter(tok => !(tok.length === 1 && UNSUPPORTED.has(tok))).join(' ')
+          .replace(/\s+/g, " ").trim();
+        let w = 300, h = 100;
+        try {
+          const dimOut = await new Promise((res, rej) =>
+            execFile("python3", ["-c",
+              `from PIL import Image; im=Image.open(${JSON.stringify(dstPng)}); print(im.width,im.height)`
+            ], (err, stdout) => err ? rej(err) : res(stdout))
+          );
+          const [pw, ph] = dimOut.trim().split(" ").map(Number);
+          if (pw > 0 && ph > 0) { w = pw; h = ph; }
+        } catch(_) {}
+        fs.writeFileSync(boxFile, `WordStr 0 0 ${w} ${h} 0 #${gt}\n\n`);
+
+        await new Promise((resolve) => {
           const proc = spawn("tesseract", [
-            path.join(varDir, png), outBase,
-            "--psm", "7", "-l", "kan",
-            `--tessdata-dir`, tessdata,
-            "lstm.train"
+            dstPng, outBase,
+            "--tessdata-dir", tessdata,
+            "--dpi", "150", "--psm", "6",
+            "-l", "kan", "lstm.train"
           ], { cwd: ROOT });
           let err = "";
           proc.stderr.on("data", d => { err += d.toString(); });
+          proc.stdout.on("data", d => { /* swallow */ });
           proc.on("close", code => {
-            const lstmf = outBase + ".lstmf";
             if (code === 0 && fs.existsSync(lstmf)) {
               lstmfFiles.push(lstmf);
               addLog(`  ✓ ${base}.lstmf`);
-              resolve();
             } else {
-              addLog(`  ✗ ${base}: ${err.trim().split("\n").pop()}`);
-              resolve(); // non-fatal, keep going
+              const lastErr = err.trim().split("\n").pop() || `exit ${code}`;
+              addLog(`  ✗ ${base}: ${lastErr}`);
             }
+            resolve();
           });
         });
       }
@@ -886,6 +1160,111 @@ app.get("/api/char-train/status", (req, res) => {
     log:     charTrainJob.log.slice(-80), // last 80 lines
     fontId:  charTrainJob.fontId,
     variant: charTrainJob.variant
+  });
+});
+
+// ── Per-font image summary ─────────────────────────────────────────────────
+app.get("/api/char-images/summary", (req, res) => {
+  const tiDir = path.join(ROOT, "test-images");
+  let fonts = [];
+  try {
+    const doc = require("js-yaml").load(fs.readFileSync(P.fontsYml, "utf8"));
+    fonts = (doc.fonts || []).map(f => {
+      const scanned = scanFontDir(f.id);
+      const variants = Object.entries(scanned).map(([varName, info]) => {
+        const varDir = path.join(tiDir, f.id, varName);
+        const exists = fs.existsSync(varDir);
+        let line = 0, sent = 0, chars = 0;
+        if (exists) {
+          for (const fn of fs.readdirSync(varDir)) {
+            if (!fn.endsWith(".png")) continue;
+            if (fn.startsWith("line_"))     line++;
+            else if (fn.startsWith("sentence_")) sent++;
+            else if (fn.startsWith("char_"))    chars++;
+          }
+        }
+        return { name: varName, fmt: info.fmt, line, sent, chars,
+                 hasTrainImages: line + sent > 0, hasImages: line + sent + chars > 0 };
+      });
+      const ready = variants.filter(v => v.hasTrainImages).length;
+      return { id: f.id, name: f.name, variants, ready, total: variants.length };
+    });
+  } catch(e) { return res.status(500).json({ error: e.message }); }
+  res.json({ fonts });
+});
+
+// ── Sync font test images into rendered/font-test/ for main pipeline ───────
+app.post("/api/sync-test-images", async (req, res) => {
+  const tiDir   = path.join(ROOT, "test-images");
+  const syncDir = path.join(ROOT, "rendered", "font-test");
+  fs.mkdirSync(syncDir, { recursive: true });
+  let copied = 0, skipped = 0, errors = [];
+  if (!fs.existsSync(tiDir)) return res.json({ ok: true, copied: 0, skipped: 0, errors: [] });
+
+  for (const fontId of fs.readdirSync(tiDir)) {
+    const fontPath = path.join(tiDir, fontId);
+    if (!fs.statSync(fontPath).isDirectory()) continue;
+    for (const variant of fs.readdirSync(fontPath)) {
+      const varPath = path.join(fontPath, variant);
+      if (!fs.statSync(varPath).isDirectory()) continue;
+      const pngs = fs.readdirSync(varPath)
+        .filter(f => (f.startsWith("line_") || f.startsWith("sentence_")) && f.endsWith(".png"));
+      for (const png of pngs) {
+        const gt = path.join(varPath, png.replace(".png", ".gt.txt"));
+        if (!fs.existsSync(gt)) { skipped++; continue; }
+        const stem = `${fontId}__${variant}__${png.replace(".png","")}`;
+        try {
+          fs.copyFileSync(path.join(varPath, png), path.join(syncDir, stem + ".png"));
+          fs.copyFileSync(gt, path.join(syncDir, stem + ".gt.txt"));
+          copied++;
+        } catch(e) { errors.push(`${stem}: ${e.message}`); }
+      }
+    }
+  }
+  res.json({ ok: true, copied, skipped, errors, syncDir });
+});
+
+// ── Pre-flight check before training pipeline ──────────────────────────────
+app.get("/api/preflight", (req, res) => {
+  const tiDir    = path.join(ROOT, "test-images");
+  const syncDir  = path.join(ROOT, "rendered", "font-test");
+  const rendDir  = path.join(ROOT, "rendered");
+
+  let totalVariants = 0, readyVariants = 0, trainImages = 0;
+  const fontStatus = [];
+
+  if (fs.existsSync(tiDir)) {
+    for (const fontId of fs.readdirSync(tiDir)) {
+      const fp = path.join(tiDir, fontId);
+      if (!fs.statSync(fp).isDirectory()) continue;
+      const varResults = [];
+      for (const variant of fs.readdirSync(fp)) {
+        const vp = path.join(fp, variant);
+        if (!fs.statSync(vp).isDirectory()) continue;
+        totalVariants++;
+        const files = fs.readdirSync(vp);
+        const line = files.filter(f => (f.startsWith("line_") || f.startsWith("sentence_")) && f.endsWith(".png")).length;
+        const chars = files.filter(f => f.startsWith("char_") && f.endsWith(".png")).length;
+        if (line > 0) { readyVariants++; trainImages += line; }
+        varResults.push({ variant, line, chars, ready: line > 0 });
+      }
+      fontStatus.push({ fontId, variants: varResults });
+    }
+  }
+
+  const syncedCount = fs.existsSync(syncDir)
+    ? fs.readdirSync(syncDir).filter(f => f.endsWith(".png")).length : 0;
+  const renderedCount = fs.existsSync(rendDir)
+    ? fs.readdirSync(rendDir).filter(f => f.endsWith(".png")).length : 0;
+  const kanExists = fs.existsSync(path.join(ROOT, "tessdata_best", "kan.traineddata"));
+
+  res.json({
+    fonts: fontStatus,
+    fontVariants:  { ready: readyVariants, total: totalVariants, trainImages },
+    synced:        { count: syncedCount, upToDate: syncedCount >= trainImages },
+    rendered:      { count: renderedCount },
+    kanExists,
+    goForTraining: readyVariants > 0 && kanExists,
   });
 });
 
