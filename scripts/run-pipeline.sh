@@ -34,6 +34,14 @@ cd "$ROOT"
 mkdir -p logs
 PIPELINE_LOG="$ROOT/logs/pipeline.log"
 
+# The portal's Live Log tails logs/training.log and only that file. Writing
+# pipeline output solely to pipeline.log made the portal look frozen for the
+# hours a rebuild takes — nothing was broken, it was just watching a different
+# file. Mirror into both: pipeline.log is this script's own record, training.log
+# is the portal's stream.
+PORTAL_LOG="$ROOT/logs/training.log"
+LOG_TARGETS=("$PIPELINE_LOG" "$PORTAL_LOG")
+
 # Root of the classical corpus — the folder holding per-title .txt sources and
 # the generated a5-pages/. Override for a corpus kept outside the repo:
 #   CLASSICAL_CORPUS_DIR=/path/to/classical-corpus-kannada ./scripts/run-pipeline.sh
@@ -61,7 +69,7 @@ should_run() {
 }
 
 hr()  { printf '━%.0s' $(seq 1 60); echo; }
-say() { echo "$*" | tee -a "$PIPELINE_LOG"; }
+say() { echo "$*" | tee -a "${LOG_TARGETS[@]}"; }
 stage() { hr; say "▶ $1"; hr; }
 
 metric() { say "   📊 $1"; }
@@ -131,7 +139,7 @@ started=0
 # everything built before it.
 if should_run unicharset; then
   stage "1/7  Expand unicharset  (adds ಋ ಙ ಝ ಱ ೃ ಞ ೞ)"
-  ./scripts/00c-expand-unicharset.sh --force 2>&1 | tee -a "$PIPELINE_LOG" | tail -5
+  ./scripts/00c-expand-unicharset.sh --force 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
   metric "unicharset units: $(
     combine_tessdata -u tessdata_expanded/kan.traineddata /tmp/_pl. >/dev/null 2>&1 &&
     head -1 /tmp/_pl.lstm-unicharset 2>/dev/null || echo '?')"
@@ -140,7 +148,7 @@ fi
 # ── 2. Corpus ────────────────────────────────────────────────────────────────
 if should_run corpus; then
   stage "2/7  Clean corpus  (strip unassigned codepoints)"
-  python3 corpus/clean-corpus.py 2>&1 | tee -a "$PIPELINE_LOG" | tail -6
+  python3 -u corpus/clean-corpus.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -6
   metric "corpus lines: $(wc -l < corpus/kan_corpus.txt | tr -d ' ')"
 fi
 
@@ -149,14 +157,14 @@ fi
 # without it render-corpus.py skips every file that already exists.
 if should_run render; then
   stage "3/7  Render synthetic lines  (--force)"
-  python3 corpus/render-corpus.py --force 2>&1 | tee -a "$PIPELINE_LOG" | tail -3
+  python3 -u corpus/render-corpus.py --force 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -3
   metric "rendered images: $(ls rendered/*.png 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
 # ── 4. Inventory ─────────────────────────────────────────────────────────────
 if should_run inventory; then
   stage "4/7  Character inventory"
-  python3 corpus/generate-inventory.py 2>&1 | tee -a "$PIPELINE_LOG" | tail -5
+  python3 -u corpus/generate-inventory.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
   metric "inventory images: $(find inventory -name '*.png' | wc -l | tr -d ' ')"
 fi
 
@@ -176,9 +184,9 @@ if [ $WITH_CLASSICAL -eq 1 ] && should_run classical; then
   fi
   say "   corpus: $CLASSICAL_DIR  ($titles source texts)"
 
-  python3 corpus/render-a5-pages.py \
+  python3 -u corpus/render-a5-pages.py \
     --corpus-dir "$CLASSICAL_DIR" \
-    --lines --workers 4 2>&1 | tee -a "$PIPELINE_LOG" | tail -5
+    --lines --workers 4 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
   metric "classical line images: $(find "$CLASSICAL_A5" -name '*_line*.png' 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
@@ -190,14 +198,14 @@ if should_run lstmf; then
   rm -rf lstmf/rendered lstmf/inventory lstmf/classical lstmf/font-test lstmf/list.txt 2>/dev/null || true
   INVENTORY_DIR="$ROOT/inventory" \
   CLASSICAL_A5_DIR="$CLASSICAL_A5" \
-    ./scripts/02-make-lstmf.sh 2>&1 | tee -a "$PIPELINE_LOG" | tail -8
+    ./scripts/02-make-lstmf.sh 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -8
   metric "lstmf entries: $(wc -l < lstmf/list.txt | tr -d ' ')"
 fi
 
 # ── 7. Validate before committing hours of GPU time ──────────────────────────
 if should_run validate; then
   stage "7/7  Validate training set"
-  python3 - <<'PY' 2>&1 | tee -a "$PIPELINE_LOG"
+  python3 -u - <<'PY' 2>&1 | tee -a "${LOG_TARGETS[@]}"
 import subprocess, tempfile, os, collections
 from pathlib import Path
 from PIL import Image
