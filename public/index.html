@@ -3213,6 +3213,7 @@ async function runOcr() {
   try {
     const w = await Tesseract.createWorker('kan', 1, {
       langPath: LANG,
+      cacheMethod: 'none',   // see note at createWorker('kan_hist') below
       logger: m => { if (m.status==='recognizing text') setP(10+m.progress*40, 'Running kan…'); },
     });
     await w.setParameters({ tessedit_pageseg_mode: parseInt(psm) });
@@ -3230,6 +3231,12 @@ async function runOcr() {
   try {
     const w2 = await Tesseract.createWorker('kan_hist', 1, {
       langPath: LANG,
+      // cacheMethod:'none' — Tesseract.js caches the fetched model in IndexedDB
+      // keyed by language NAME. Re-packaging writes the same kan_hist.traineddata
+      // filename, so the cache is never invalidated and the browser keeps running
+      // whichever build it saw first. This panel exists to test the model you
+      // just packaged, so it must always fetch. Costs ~13 MB per run.
+      cacheMethod: 'none',
       logger: m => { if (m.status==='recognizing text') setP(55+m.progress*40, 'Running kan_hist…'); },
     });
     await w2.setParameters({ tessedit_pageseg_mode: parseInt(psm) });
@@ -3425,12 +3432,12 @@ async function runBatch() {
   setBP(5, 'Loading kan model…');
   let kanW, histW, histOk = false;
   try {
-    kanW = await Tesseract.createWorker('kan', 1, { langPath: LANG });
+    kanW = await Tesseract.createWorker('kan', 1, { langPath: LANG, cacheMethod: 'none' });
     await kanW.setParameters({ tessedit_pageseg_mode: psm });
   } catch(e) { toast('Failed to load kan model'); btn.disabled=false; return; }
   setBP(15, 'Loading kan_hist model…');
   try {
-    histW = await Tesseract.createWorker('kan_hist', 1, { langPath: LANG });
+    histW = await Tesseract.createWorker('kan_hist', 1, { langPath: LANG, cacheMethod: 'none' });
     await histW.setParameters({ tessedit_pageseg_mode: psm });
     histOk = true;
   } catch(e) { /* kan_hist not packaged yet — run kan only */ }
@@ -3671,7 +3678,7 @@ async function runWsOcr() {
   let kanText='', histText='', histOk=false;
   const t0 = Date.now();
   try {
-    const w = await Tesseract.createWorker('kan', 1, { langPath: LANG,
+    const w = await Tesseract.createWorker('kan', 1, { langPath: LANG, cacheMethod: 'none',
       logger: m => { if(m.status==='recognizing text') setWP(10+m.progress*40,'Running kan…'); }});
     const { data: { text } } = await w.recognize(src);
     kanText = text.trim(); await w.terminate();
@@ -3680,7 +3687,7 @@ async function runWsOcr() {
 
   setWP(55, 'Running kan_hist…');
   try {
-    const w2 = await Tesseract.createWorker('kan_hist', 1, { langPath: LANG,
+    const w2 = await Tesseract.createWorker('kan_hist', 1, { langPath: LANG, cacheMethod: 'none',
       logger: m => { if(m.status==='recognizing text') setWP(55+m.progress*40,'Running kan_hist…'); }});
     const { data: { text } } = await w2.recognize(src);
     histText = text.trim(); histOk=true; await w2.terminate();
@@ -5214,6 +5221,7 @@ async function _tjsGetWorker() {
 
   _tjsWorker = await Tesseract.createWorker('kan_hist', 1, {
     langPath: window.location.origin + '/traineddata',
+    cacheMethod: 'none',      // always fetch the freshly packaged model
     logger: m => {
       console.log('[Tesseract]', m.status, m.progress);
       const range = progressMap[m.status];

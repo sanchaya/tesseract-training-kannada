@@ -1611,14 +1611,62 @@ app.get("/api/test-images/:fontId/:variant", (req, res) => {
 });
 
 // ── Serve tessdata for Tesseract.js ────────────────────────────────────────
+// Tesseract.js v5 asks for <lang>.traineddata.gz FIRST and only falls back to
+// the uncompressed name. This route rejected the .gz form with 403, so every
+// model load took the fallback path — and, worse, a 403 is a cacheable response
+// in some browsers.
+//
+// Freshness matters here more than bandwidth: this endpoint exists to test a
+// model you have just repackaged. Re-packaging writes the same filename, so any
+// caching layer will happily serve the previous build. Hence no-store, and an
+// ETag derived from the file's mtime+size so a conditional request cannot
+// revalidate a stale copy either.
 app.get("/tessdata/:file", (req, res) => {
   const { file } = req.params;
-  if (!file.endsWith(".traineddata")) return res.status(403).send("Forbidden");
-  for (const dir of [P.bestDir, P.tessdataDir]) {
-    const p = path.join(dir, file);
-    if (fs.existsSync(p)) return res.sendFile(p);
+  const wantsGz  = file.endsWith(".traineddata.gz");
+  const baseName = wantsGz ? file.slice(0, -3) : file;
+  if (!baseName.endsWith(".traineddata")) return res.status(403).send("Forbidden");
+
+  let found = null;
+  for (const dir of [P.bestDir, P.tessdataDir, ROOT]) {
+    const p = path.join(dir, baseName);
+    if (fs.existsSync(p)) { found = p; break; }
   }
-  res.status(404).send("Not found");
+  if (!found) return res.status(404).send("Not found");
+
+  const st = fs.statSync(found);
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("ETag", `"${st.mtimeMs}-${st.size}"`);
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("X-Model-Modified", new Date(st.mtimeMs).toISOString());
+
+  if (wantsGz) {
+    res.setHeader("Content-Type", "application/gzip");
+    return fs.createReadStream(found).pipe(require("zlib").createGzip()).pipe(res);
+  }
+  res.setHeader("Content-Type", "application/octet-stream");
+  res.sendFile(found);
+});
+
+// Which model the Live OCR test would actually load, and when it was built.
+// Lets the UI show provenance instead of leaving you to wonder whether the
+// browser is running the model you just packaged.
+app.get("/api/model-info/:lang", (req, res) => {
+  const lang = req.params.lang.replace(/[^\w.-]/g, "");
+  for (const dir of [P.bestDir, P.tessdataDir, ROOT]) {
+    const p = path.join(dir, `${lang}.traineddata`);
+    if (fs.existsSync(p)) {
+      const st = fs.statSync(p);
+      return res.json({
+        lang,
+        path: path.relative(ROOT, p),
+        size: st.size,
+        modified: new Date(st.mtimeMs).toISOString(),
+      });
+    }
+  }
+  res.status(404).json({ error: `${lang}.traineddata not found` });
 });
 
 // ── Report download ────────────────────────────────────────────────────────
