@@ -287,17 +287,16 @@ def _make_lstmf_impl(img_path_str):
     dst_box = out_path / (stem + '.box')
     lstmf   = out_path / (stem + '.lstmf')
 
-    # Resume: already done
-    if lstmf.exists():
-        return str(lstmf.resolve())
-
-    shutil.copy2(img_path, dst_img)
-
+    # ── Read + clean the ground truth FIRST ─────────────────────────────────
+    # Validation must happen BEFORE the resume check. Previously the function
+    # returned an existing .lstmf immediately, so every file built by an earlier
+    # run was re-admitted to list.txt without ever being validated — the guards
+    # below logged zero rejections while training still failed on 1,480 lines
+    # per 3,000 log lines. Resume must not mean "trust whatever is on disk".
     from PIL import Image as _PIL
-    with _PIL.open(dst_img) as im:
+    with _PIL.open(img_path) as im:
         w, h = im.size
 
-    # Clean and filter ground-truth text.
     # _clean_gt() fixes corpus OCR errors (digit-zero→anusvara, editorial marks, +).
     # _UNSUPPORTED filters whole tokens whose chars aren't in the tessdata unicharset.
     # Both are computed once at module level above.
@@ -305,6 +304,38 @@ def _make_lstmf_impl(img_path_str):
     _raw    = _clean_gt(_raw)                        # Fix OCR / editorial issues
     _tokens = [t for t in _raw.split(' ') if not any(c in _UNSUPPORTED for c in t)]
     gt_text = _re.sub(r'\s+', ' ', ' '.join(_tokens)).strip()
+
+    def _reject(reason):
+        """Drop this pair and remove any stale artefacts a previous run left."""
+        print(f"  ⊘ {stem}: {reason}", flush=True)
+        for _f in (dst_img, dst_box, lstmf):
+            try: _f.unlink(missing_ok=True)
+            except OSError: pass
+        return None
+
+    _txt = gt_text.strip()
+
+    # Guard 1 — encodable in the unicharset actually being used
+    if _txt and not _encodable(_txt):
+        _bad = ''.join(sorted({c for c in _txt if not _encodable(c)}))
+        return _reject(f"not encodable in unicharset"
+                       f"{f' (offending: {_bad})' if _bad else ''}")
+
+    # Guard 2 — CTC feasibility. The LSTM scales input to 48px height, so the
+    # timestep budget is roughly the width at that scale; CTC needs at least one
+    # timestep per label. A full PAGE image paired with the whole page's text
+    # (875x1241 → ~33 timesteps, ~700 labels) can never align, and lstmtraining
+    # reports "Compute CTC targets failed". Line images pass comfortably.
+    _timesteps = int(w * (48.0 / h)) if h else 0
+    if _txt and _timesteps < len(_txt):
+        return _reject(f"CTC infeasible — {len(_txt)} labels need > {_timesteps} "
+                       f"timesteps ({w}x{h}). Page-level image? Needs line segmentation.")
+
+    # Resume: already built AND validated above
+    if lstmf.exists():
+        return str(lstmf.resolve())
+
+    shutil.copy2(img_path, dst_img)
 
     if not gt_text:
         # Every token was filtered (e.g. entire page is ೃ-dense Sanskrit verse).
@@ -341,35 +372,8 @@ def _make_lstmf_impl(img_path_str):
             _line = _chunk + (' ' if _i < len(_chunks) - 1 else '')
             bf.write(f"WordStr 0 0 {w} {h} 0 #{_line}\n")
 
-    # ── CTC feasibility guard ────────────────────────────────────────────────
-    # The LSTM scales every input to 48px height, so the number of timesteps it
-    # can emit is roughly the width at that scale. CTC needs at least one
-    # timestep per label (more in practice, since repeated labels need a blank
-    # between them). When the transcription is longer than the timestep budget,
-    # lstmtraining cannot align it and logs:
-    #
-    #     Compute CTC targets failed for <file>.lstmf!
-    #
-    # This is what happens if a FULL PAGE image is paired with the whole page's
-    # text: an 875x1241 A5 page scales to ~33 timesteps but carries ~700
-    # characters. Such samples are unusable — they never train, and they make
-    # the run look stuck. Skip them here rather than letting them into
-    # list.txt. Line-level images (rendered/, inventory/) pass comfortably.
-    _txt = gt_text.strip()
-
-    # Reject anything the model cannot encode, before Tesseract is invoked.
-    if _txt and not _encodable(_txt):
-        _bad = ''.join(sorted({c for c in _txt if not _encodable(c)}))
-        print(f"  ⊘ {stem}: not encodable in unicharset"
-              f"{f' (offending: {_bad})' if _bad else ''}", flush=True)
-        return None
-
-    _timesteps = int(w * (48.0 / h)) if h else 0
-    if _txt and _timesteps < len(_txt):
-        print(f"  ⊘ {stem}: CTC infeasible — {len(_txt)} labels need > {_timesteps} "
-              f"timesteps ({w}x{h}). Page-level image? Needs line segmentation.",
-              flush=True)
-        return None
+    # (Encodability and CTC-feasibility guards ran before the resume check above,
+    #  so anything reaching this point is known-valid.)
 
     result = subprocess.run(
         ["tesseract", str(dst_img), str(out_path / stem),
