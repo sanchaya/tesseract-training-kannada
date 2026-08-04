@@ -102,20 +102,27 @@ pip install uharfbuzz freetype-py numpy --break-system-packages
 
 ---
 
-## 4. Per-font `aalt` — read from fonts.yml, never hardcoded
+## 4. `aalt` is OFF for every font — and must stay off
 
-GTN, GMP and WMP all store conjunct forms under the `aalt` ("access all alternates") GSUB feature, which
-no shaper enables by default. But the correct setting is **not uniform**:
+`font_features` is empty for all fonts. This is deliberate and was measured, not assumed.
 
-| Font | `aalt` | Reason |
+GTN, GMP and WMP all carry an `aalt` ("access all alternates") GSUB feature, and it was once enabled
+for GTN and WMP on the theory that their ottu forms lived there. In practice `aalt` maps base
+consonants to `*_v` alternates that carry a halant and do not accept vowel signs, so running text
+renders wrong:
+
+| Font | `aalt` ON | `aalt` OFF |
 |---|---|---|
-| GTN | **on** | correct ottu forms live in `aalt` |
-| WMP | **on** | same |
-| GMP | **off** | correct forms are in the base features; `aalt` *breaks* them |
-| Kittel | off | no `aalt` in its GSUB at all |
+| GTN | vowel signs dropped — `ವದ್ಯಥ್ರಗಳಿಗ` | ✓ correct |
+| WMP | halant on nearly every consonant | ✓ correct |
+| GMP, Kittel | (never enabled) | ✓ correct |
 
-This is declared once in `fonts.yml` as `font_features: "'aalt' 1"` and read by every generator. Full
-GSUB analysis in [CONJUNCT_RENDERING.md](CONJUNCT_RENDERING.md).
+It appeared to help because it was masking §3's forced-feature bug. With that fixed, conjuncts form
+correctly unaided — and `ರ್ಕ` regains the proper reph form `aalt` was mangling.
+
+**Rule: adding a font feature requires evidence from RUNNING TEXT, not isolated conjuncts.** The
+original investigation tested only conjuncts, where `aalt` genuinely looks correct. Full analysis in
+[CONJUNCT_RENDERING.md §10](CONJUNCT_RENDERING.md).
 
 ---
 
