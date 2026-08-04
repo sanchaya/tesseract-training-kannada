@@ -306,7 +306,54 @@ hb.shape(font, buf, {})                      # {} or {'aalt': True} only
 
 ---
 
-## 10. Adding a font
+## 10. Troubleshooting encoding & alignment failures
+
+Two error families dominate the training log. They have different causes and
+different fixes.
+
+### `Can't encode transcription: '…' in language ''`
+
+The ground truth contains something the unicharset cannot represent. Tesseract
+rejects the **entire line**, so one bad cluster in a 16-item row loses all 16.
+
+| Cause | Example | Fix |
+|---|---|---|
+| Reserved codepoint (never a real character) | ಩ U+0CA9, ಴ U+0CB4 | `clean-corpus.py` drops the line |
+| Character absent from the unicharset | ೞ, ಌ, ೄ | add via `00c-expand-unicharset.sh` |
+| Cluster-only character used standalone | ಞ before expansion | add it, or avoid standalone use |
+
+Diagnose which character is at fault:
+
+```bash
+tail -4000 logs/training.log | grep -oP "Can't encode transcription: '\K[^']+" \
+  | python3 -c "import sys,collections,unicodedata
+c=collections.Counter(ch for l in sys.stdin for ch in l.strip())
+for ch,n in c.most_common(15):
+    try: nm=unicodedata.name(ch)
+    except ValueError: nm='<UNASSIGNED — mojibake>'
+    print(f'{ch!r} U+{ord(ch):04X} {n:6d}  {nm}')"
+```
+
+### `Compute CTC targets failed for <file>.lstmf!`
+
+Geometry, not characters. The transcription needs more timesteps than the image
+can provide (§8). Almost always a page-level image paired with page-level text —
+re-render with `--lines`.
+
+### Guard placement
+
+Both checks live in `02-make-lstmf.sh` **before** the resume shortcut. This
+ordering is load-bearing: when validation ran after the `if lstmf.exists()`
+early return, cached files from earlier runs were re-admitted unvalidated and
+the guards reported zero rejections while training kept failing.
+
+`scripts/run-pipeline.sh` clears the lstmf cache before rebuilding and gates on
+a validation stage that prints the expected skip ratio — treat anything above
+5% as a reason not to start training.
+
+---
+
+## 11. Adding a font
 
 1. Place files under `fonts/<id>/` — **the directory name must equal the `id` in fonts.yml.**
    Every generator resolves fonts at `fonts/<id>/`; a mismatched folder name makes the font invisible

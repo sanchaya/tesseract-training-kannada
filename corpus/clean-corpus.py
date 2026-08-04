@@ -111,8 +111,63 @@ if not INPUT.exists():
     print("See corpus/download-wiki.py to download Kannada Wikipedia text.")
     sys.exit(1)
 
+# ── Unicharset encodability ──────────────────────────────────────────────────
+# Stripping unassigned codepoints is not enough. A line like
+#     ಹ್ಕ ಹ್ಖ ಹ್ಗ … ಹ್಩ … ಹ್಴
+# (a systematic conjunct grid left in raw_kannada.txt by an early specimen
+# generator) still fails to encode after the reserved characters are removed,
+# because several of the remaining clusters have no unicharset unit either.
+# lstmtraining rejects the whole line — these produced a 60% skip ratio.
+#
+# So: after cleaning, verify the line is actually encodable and drop it if not.
+# Uses the same greedy longest-match segmentation Tesseract's encoder uses.
+def _load_units():
+    """Unicharset units from the traineddata that will be used for training."""
+    root = CORPUS_DIR.parent
+    mode = root / 'output' / '.tessdata_mode'
+    expanded = mode.exists() and 'expanded' in mode.read_text(errors='ignore')
+    td = root / ('tessdata_expanded' if expanded else 'tessdata_best') / 'kan.traineddata'
+    if not td.exists():
+        return None
+    import subprocess, tempfile
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = str(Path(tmp) / 'kan.')
+            subprocess.run(['combine_tessdata', '-u', str(td), prefix],
+                           capture_output=True, check=True)
+            uc = Path(prefix + 'lstm-unicharset')
+            if not uc.exists():
+                return None
+            lines = uc.read_text(encoding='utf-8', errors='replace').split('\n')
+            return {l.split(' ')[0] for l in lines[1:] if l.strip()} or None
+    except Exception:
+        return None
+
+_UNITS = _load_units()
+_MAXU  = max((len(u) for u in _UNITS), default=1) if _UNITS else 1
+# Space and virama are never standalone units but are always encodable: space is
+# a word separator outside the unicharset, and ್ exists only fused into cluster
+# units like ್ನ. Without this exemption every multi-word line would be dropped.
+_EXEMPT = set(' \t\n್')
+
+def encodable(text: str) -> bool:
+    if not _UNITS:
+        return True                      # unicharset unavailable — don't drop
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] in _EXEMPT:
+            i += 1
+            continue
+        for size in range(min(_MAXU, n - i), 0, -1):
+            if text[i:i + size] in _UNITS:
+                i += size
+                break
+        else:
+            return False
+    return True
+
 raw = INPUT.read_text(encoding='utf-8').splitlines()
-out_lines, dropped = [], 0
+out_lines, dropped, unencodable = [], 0, 0
 
 for line in raw:
     cleaned = clean_line(line)
@@ -121,8 +176,12 @@ for line in raw:
             dropped += 1
         continue
     for part in split_at_boundary(cleaned, MAX_CHARS):
-        if kan_count(part) >= MIN_KAN:
-            out_lines.append(part)
+        if kan_count(part) < MIN_KAN:
+            continue
+        if not encodable(part):
+            unencodable += 1
+            continue
+        out_lines.append(part)
 
 # Deduplicate while preserving order
 seen = set()
@@ -136,4 +195,6 @@ OUTPUT.write_text('\n'.join(deduped) + '\n', encoding='utf-8')
 print(f"Input lines:   {len(raw)}")
 print(f"Output lines:  {len(deduped)}")
 print(f"Dropped:       {dropped}  (< {MIN_KAN} Kannada chars)")
+print(f"Unencodable:   {unencodable}  (rejected by unicharset check"
+      f"{'' if _UNITS else ' — SKIPPED, unicharset unavailable'})")
 print(f"Written to:    {OUTPUT}")
