@@ -503,6 +503,20 @@ def _is_registered(p):
 _all = [p for p in Path(src_dir).iterdir()
         if p.suffix.lower() in ('.png', '.tif', '.tiff', '.jpg')
            and p.with_suffix('.gt.txt').exists()]
+
+# ── Superseded page-mode images ──────────────────────────────────────────────
+# A directory rendered in page mode and later re-rendered with --lines holds
+# BOTH pageNNNN.png and pageNNNN_lineNNN.png. The page images are the same text
+# at page scale: always CTC-infeasible, always rejected, and re-checked on every
+# run. Drop them up front when their line-mode replacements exist, so the log
+# reports the situation once instead of once per page.
+_line_stems = {m.group(1) for m in
+               (_re.match(r'(.+)_line\d+$', p.stem) for p in _all) if m}
+_superseded = [p for p in _all if p.stem in _line_stems]
+if _superseded:
+    print(f"  ⊘ {len(_superseded)} page-mode image(s) superseded by line-mode renders "
+          f"— skipping (safe to delete: {src_dir}/page*.png without _line)", flush=True)
+    _all = [p for p in _all if p.stem not in _line_stems]
 _unreg = [p for p in _all if not _is_registered(p)]
 if _unreg:
     print(f"  ⊘ {len(_unreg)} image(s) skipped — font not in fonts.yml "
