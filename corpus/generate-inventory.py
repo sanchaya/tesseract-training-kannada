@@ -149,13 +149,10 @@ def _encodable(text, units):
     """
     if not units:
         return True          # validation unavailable — don't drop anything
-    # Space and the virama are never standalone units but are always encodable:
-    # space is a word separator outside the unicharset, and ್ (U+0CCD) exists
-    # only fused into cluster units like ್ನ. Without this exemption the check
-    # would reject every multi-word line.
-    # Unit matching is tried BEFORE the exemption: ್‌ (virama + ZWNJ) is a real
-    # two-character unit, and skipping the virama first meant it was never tried.
-    exempt = set(' \t\n್')
+    # Only whitespace is exempt — the virama always belongs to a cluster unit.
+    # Unit matching runs BEFORE the exemption so ್‌ (virama + ZWNJ) is tried as a
+    # unit rather than skipped.
+    exempt = set(' \t\n')
     longest = max((len(u) for u in units), default=1)
     i, n = 0, len(text)
     while i < n:

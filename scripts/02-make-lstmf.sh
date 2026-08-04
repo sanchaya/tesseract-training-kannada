@@ -253,11 +253,22 @@ def _load_units():
 _UNITS   = _load_units()
 _MAXUNIT = max((len(u) for u in _UNITS), default=1) if _UNITS else 1
 
-# Whitespace and the virama are never standalone unicharset units, yet both are
-# encodable: Tesseract treats space as a word separator outside the unicharset,
-# and the virama (್ U+0CCD) normally appears fused into a cluster unit such as
-# ್ನ or ್‌. Treating them as failures would reject 96% of valid corpus lines.
-_ENCODE_EXEMPT = set(' \t\n್')
+# Only whitespace is exempt. Tesseract treats space as a word separator outside
+# the unicharset, so it needs no unit.
+#
+# The virama (್ U+0CCD) is NOT exempt, despite having no standalone unit. It
+# always belongs to a cluster unit — ್ನ, ್ಯ, or the half-form ್‌ that _clean_gt()
+# produces for word-final position. Exempting it made this check MORE permissive
+# than Tesseract's own encoder: text containing a cluster with no unit, such as
+# ರ್ಘ in ಅರ್ಘ್ಯ or ಉದ್ಘಾಟನ, passed here and then failed during training with
+# "Can't encode transcription" — the exact class of error this guard exists to
+# prevent. The guard must model the encoder, not approximate it.
+#
+# (The earlier reason for exempting ್ — that not doing so rejected ~96% of
+# lines — was a symptom of checking the exemption before trying multi-character
+# units. That ordering is fixed; with units tried first, ~88% of rendered and
+# ~99.6% of classical lines pass, and the remainder are genuine gaps.)
+_ENCODE_EXEMPT = set(' \t\n')
 
 def _encodable(text):
     """

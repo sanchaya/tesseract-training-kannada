@@ -293,7 +293,22 @@ cat > "$WORK_DIR/new_chars.txt" << 'EOF'
 ನೃಪ ನೃಪತಿ ಮೃತ್ಯು ಕೃತ್ಯ ಕೃಷ್ಣ ತೃಪ್ತಿ ಮೃದು ವೃತ್ತಿ
 ಞಾನ ಅಞ ಮಞ ಪಞ ವಿಜ್ಞಾನ ಸಂಜ್ಞೆ ಆಜ್ಞೆ ಯಜ್ಞ
 ೞ ಪೞ ಕೞ ಮೞ ಎೞ ತೞ ಪೞೆಯ ಕೞಿ ಮೞೆ ಎೞ್ತು
+ಅರ್ಘ್ಯ ಉದ್ಘಾಟನ ಮರ್ಘ ದಿಗ್ಘಾತ ಸಂಘ್ಯ ವಿಘ್ನ
+ಮುಖ್ಯ ಸಂಖ್ಯೆ ದುಃಖ್ಯ ಶಂಖ್ಯ ಲೇಖ್ಯ
+ವಾಙ್ಮಯ ಪ್ರಾಙ್ಮುಖ ಸಙ್ಗ ಅಙ್ಕ ಬಙ್ಗ
+ಝಞ್ಝಾ ಗುಞ್ಝ ಮಞ್ಝು
+ಷಡ್ಢ ಮೂಢ್ಯ ಗಾಢ್ಯ
+ಎೞ್ಱು ಪೞ್ಱ ಕೞ್ಱ ಮಱ್ಱ ಅಱ್ಱ
 EOF
+# The lines above exist to introduce the ್X cluster units that were missing:
+#   ್ಖ ್ಘ ್ಙ ್ಝ ್ಢ ್ಱ
+# Tesseract's LSTM unicharset stores virama+consonant as a SINGLE unit; a bare
+# ್ has no unit of its own. Without ್ಘ, an ordinary word like ಅರ್ಘ್ಯ or
+# ಉದ್ಘಾಟನ cannot be encoded and lstmtraining discards the whole line with
+# "Can't encode transcription". These six gaps accounted for ~12% of rendered
+# corpus lines. They must appear in WORD context — unicharset_extractor rejects
+# bare combining sequences and drops the entire line, taking every other
+# character on it along.
 # IMPORTANT: ೃ (U+0CC3, KANNADA VOWEL SIGN VOCALIC R) must NOT appear
 # standalone here — unicharset_extractor rejects bare combining chars:
 #   "Invalid start of grapheme sequence:M=0xcc3"

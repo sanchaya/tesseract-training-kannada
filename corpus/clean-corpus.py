@@ -145,10 +145,10 @@ def _load_units():
 
 _UNITS = _load_units()
 _MAXU  = max((len(u) for u in _UNITS), default=1) if _UNITS else 1
-# Space and virama are never standalone units but are always encodable: space is
-# a word separator outside the unicharset, and ್ exists only fused into cluster
-# units like ್ನ. Without this exemption every multi-word line would be dropped.
-_EXEMPT = set(' \t\n್')
+# Only whitespace is exempt. The virama is NOT: it always belongs to a cluster
+# unit (್ನ, ್ಯ, or the half-form ್‌), so exempting it would make this check more
+# permissive than Tesseract's encoder and let unencodable lines through.
+_EXEMPT = set(' \t\n')
 
 def encodable(text: str) -> bool:
     """
