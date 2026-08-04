@@ -192,6 +192,12 @@ def main() -> None:
              "and lstmtraining reports 'Compute CTC targets failed'.",
     )
     parser.add_argument(
+        "--force", action="store_true",
+        help="Re-render pages that already exist. Required after a shaping or "
+             "font-feature change — without it the renderer skips existing output "
+             "and the old images survive untouched.",
+    )
+    parser.add_argument(
         "--line-pad", type=int, default=6,
         help="Padding in px around each cropped line (default: 6)",
     )
@@ -339,6 +345,7 @@ def main() -> None:
                         "margin_y": args.margin_y,
                         "lines":    args.lines,
                         "line_pad": args.line_pad,
+                        "force":    args.force,
                     })
                     pages_total += 1
 

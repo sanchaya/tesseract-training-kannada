@@ -410,6 +410,11 @@ async function renderBatch(browser, jobs, label = '') {
       // Line mode: emit one cropped image per visual text line instead of one
       // page image. Required for LSTM training — see the note in renderBatch.
       lines: lineMode = false, line_pad: linePad = 6,
+      // force: re-render even when output exists. Required after a shaping or
+      // font-feature change — otherwise the resume check below preserves every
+      // image rendered under the old settings, and a "re-render" silently does
+      // nothing. This is how aalt-rendered GTN/WMP pages survived a rebuild.
+      force = false,
     } = job;
     const isPage = page_w > 0 && page_h > 0;
 
@@ -417,7 +422,9 @@ async function renderBatch(browser, jobs, label = '') {
     // In line mode the page itself is never written, so completion is judged
     // by the first line's output instead.
     const gtPath = out.replace(/\.png$/, '.gt.txt');
-    if (lineMode) {
+    if (force) {
+      // fall through to render
+    } else if (lineMode) {
       const probe = out.replace(/\.png$/, '_line000.png');
       if (fs.existsSync(probe) && fs.existsSync(probe.replace(/\.png$/, '.gt.txt'))) {
         return 'skip';

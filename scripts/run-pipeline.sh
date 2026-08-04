@@ -184,6 +184,16 @@ if should_run inventory; then
   metric "inventory images: $(find inventory -name '*.png' | wc -l | tr -d ' ')"
 fi
 
+# ── 4b. Portal gallery ───────────────────────────────────────────────────────
+# test-images/ drives the portal's Images page and the 1:1 OCR test. It is not
+# training data, but it is what you LOOK at to judge whether shaping is correct —
+# so a stale gallery hides the very defect a rebuild was meant to fix.
+if should_run inventory; then
+  stage "4b/8 Portal gallery  (test-images/)"
+  python3 -u scripts/gen-char-images.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -3
+  metric "gallery images: $(find test-images -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+fi
+
 # ── 5. Classical (optional, slow) ────────────────────────────────────────────
 if [ $WITH_CLASSICAL -eq 1 ] && should_run classical; then
   stage "5/8  Classical A5 → LINE images  (hours; ~430K files)"
@@ -200,9 +210,12 @@ if [ $WITH_CLASSICAL -eq 1 ] && should_run classical; then
   fi
   say "   corpus: $CLASSICAL_DIR  ($titles source texts)"
 
+  # --force: the renderer skips existing output, so without it a rebuild after a
+  # shaping or font-feature change silently preserves every old image. This is
+  # exactly how aalt-rendered GTN/WMP pages survived earlier rebuilds.
   python3 -u corpus/render-a5-pages.py \
     --corpus-dir "$CLASSICAL_DIR" \
-    --lines --workers 4 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
+    --lines --force --workers 4 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
   metric "classical line images: $(find "$CLASSICAL_A5" -name '*_line*.png' 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
