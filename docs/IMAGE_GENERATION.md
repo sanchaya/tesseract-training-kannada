@@ -353,14 +353,43 @@ a validation stage that prints the expected skip ratio — treat anything above
 
 ---
 
-## 11. Adding a font
+## 11. Adding and removing fonts
+
+### From the portal (recommended)
+
+**Font registry → ＋ Add font.** Place the files in `fonts/<id>/` first, then enter the id and press
+**Scan** — it detects `font_dir` and `font_files`, and reports any other directories containing fonts so
+a multi-width family can be scoped deliberately rather than pulling in every weight.
+
+Two checkboxes carry real consequences:
+
+- **Letterpress simulation** (`degrade: true`) — on for historical revivals, off for modern digital faces (§7)
+- **Needs `aalt`** — only for fonts keeping their ottu forms in the `aalt` GSUB feature, as GTN and WMP
+  do. Wrong in either direction breaks conjuncts, so check the Images gallery after adding (§4)
+
+**Remove** deletes the registry entry and every generated artefact — rendered, inventory, gallery,
+lstmf, classical — after showing the exact file count and locations. Source files in `fonts/<id>/` are
+kept: they are pipeline input, not output.
+
+### By hand
 
 1. Place files under `fonts/<id>/` — **the directory name must equal the `id` in fonts.yml.**
    Every generator resolves fonts at `fonts/<id>/`; a mismatched folder name makes the font invisible
-   to the gallery, the OCR test and training alike.
+   to the gallery, the OCR test and training alike, with no error anywhere.
 2. Add the entry to `fonts.yml`: `id`, `name`, `font_dir`, `font_files`, `degrade`, `max_pages`, and
    `font_features: "'aalt' 1"` if its conjuncts live in `aalt`.
-3. Regenerate: **Prep base** → **Render images**, then `gen-char-images.py` for the gallery.
+3. Regenerate: **Render images** → **Inventory** → `gen-char-images.py` for the gallery.
 
 Fonts installed by download rather than `git clone` (e.g. Google Fonts) are fully supported — presence
-is detected by scanning for font files, not by looking for a `.git` directory.
+is detected by scanning for font files, not by looking for a `.git` directory. Mark such entries
+`clone: false` so `01-prep-base.sh` reports them as manual-download instead of attempting `git clone`
+on a non-git URL.
+
+### The registry is the source of truth
+
+`02-make-lstmf.sh` filters images by `fonts.yml` at collection time. A font that is not registered
+contributes nothing to training, regardless of what remains on disk — so a declined or partial purge,
+or output written after one, cannot let it back in.
+
+`fonts.yml` is edited as text by the portal, never round-tripped through a YAML dumper, so the
+per-font comments explaining the `aalt` asymmetry and the naming rule survive every edit.

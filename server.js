@@ -2334,9 +2334,30 @@ app.get("*", (req, res) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`\n${"━".repeat(52)}`);
   console.log(`  TrainOCR by Sanchaya`);
   console.log(`  http://localhost:${PORT}`);
   console.log(`${"━".repeat(52)}\n`);
+});
+
+// A port clash is a routine situation — usually a portal left running from an
+// earlier session — and does not deserve an unhandled 'error' event and a
+// twenty-line stack trace that says nothing about how to fix it.
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`\n  ✗ Port ${PORT} is already in use.\n`);
+    console.error(`    Most likely an earlier portal is still running. Either stop it:`);
+    console.error(`      lsof -ti:${PORT} | xargs kill -9\n`);
+    console.error(`    or start this one on a different port:`);
+    // Number(): PORT comes from the environment as a string, so `PORT + 1`
+    // concatenates — "3001" + 1 = "30011", suggesting an invalid port.
+    console.error(`      PORT=${Number(PORT) + 1} node server.js\n`);
+  } else if (err.code === "EACCES") {
+    console.error(`\n  ✗ Not permitted to bind port ${PORT}.`);
+    console.error(`    Ports below 1024 need elevated privileges — use PORT=3001 or similar.\n`);
+  } else {
+    console.error(`\n  ✗ Server failed to start: ${err.message}\n`);
+  }
+  process.exit(1);
 });

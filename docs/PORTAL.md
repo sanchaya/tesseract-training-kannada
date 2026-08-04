@@ -116,28 +116,119 @@ Returns up to `n` base64-encoded sample images from `rendered/` (default: 16).
 
 Starts a pipeline step in a background thread. Output is appended to `training.log`.
 
-Valid step values: `expandunichar`, `prep`, `wiki`, `clean`, `specimen`, `render`, `lstmf`, `train`, `package`
+Valid step values: `expandunichar`, `prep`, `wiki`, `clean`, `specimen`, `render`, `inventory`, `lstmf`, `train`, `package`
 
 | Step | Script | Notes |
 |---|---|---|
-| `expandunichar` | `scripts/00c-expand-unicharset.sh` | Adds ಋ ಙ ಝ ಱ to unicharset → `tessdata_expanded/` |
-| `prep` | `scripts/01-prep-base.sh` | Downloads base model, clones fonts |
+| `expandunichar` | `scripts/00c-expand-unicharset.sh` | Adds ಋ ಙ ಝ ಱ ೃ ಞ ೞ to unicharset → `tessdata_expanded/` |
+| `prep` | `scripts/01-prep-base.sh` | Downloads base model, fetches fonts |
 | `wiki` | `corpus/download-wiki.py` | Download Kannada Wikipedia corpus |
-| `clean` | `corpus/clean-corpus.py` | Clean raw corpus |
+| `clean` | `corpus/clean-corpus.py` | Clean corpus; drops unencodable lines |
 | `specimen` | `corpus/generate-specimen.py --merge` | Generate systematic glyph-coverage corpus |
 | `render` | `corpus/render-corpus.py` | Render PNG+gt.txt pairs |
+| `inventory` | `corpus/generate-inventory.py` | Character baselines — required for inventory-first training |
 | `lstmf` | `scripts/02-make-lstmf.sh` | PNG+gt.txt → .lstmf files |
 | `train` | `scripts/03-train.sh` | Fine-tune LSTM |
 | `package` | `scripts/04-package.sh` | Export `kan_hist.traineddata` |
 
+Query parameters:
+
+| Param | Applies to | Effect |
+|---|---|---|
+| `?force=1` | `expandunichar` | passes `--force` |
+| `?force=1` | `render` | passes `--force` — re-render in place after a shaping/corpus change |
+| `?force=1` | `wiki` | re-download even if the corpus exists |
+| `?all_fonts=1` | `inventory` | use every `.ttf`/`.otf` on disk, not just fonts.yml entries |
+| `?mode=fresh\|expand` | `train` | sets `TRAIN_MODE` |
+
+The `lstmf` step auto-detects and passes `CLASSICAL_A5_DIR` and `INVENTORY_DIR`.
+Without the latter the build silently contains **no character baselines**.
+
 ```bash
 curl -X POST http://localhost:3000/api/run/expandunichar
-curl -X POST http://localhost:3000/api/run/train
+curl -X POST "http://localhost:3000/api/run/render?force=1"
+curl -X POST "http://localhost:3000/api/run/train?mode=fresh"
 ```
 
 ```json
 { "ok": true, "step": "train" }
 ```
+
+### Font registry
+
+#### `GET /api/fonts`
+
+Registered fonts with per-font image counts.
+
+```json
+[{ "id": "kan_gtn", "name": "Karnata GTN", "styles": 6, "degrade": false,
+   "cloned": true, "rendered": 3600 }]
+```
+
+`cloned` means *font files are present on disk* — it does not require a `.git`
+directory, since Google Fonts families arrive as downloads.
+
+#### `GET /api/fonts/scan/:id`
+
+Inspects `fonts/<id>/` and suggests `font_dir` + `font_files`. Skips variable
+fonts and `webfonts/`, `Source/`, `Tests/` directories. `all_dirs` lists every
+candidate directory so multi-width families can be scoped deliberately.
+
+```json
+{ "id": "kan_baloo", "font_dir": "fonts",
+  "font_files": ["BalooTamma2-Bold.ttf", "…"],
+  "all_dirs": [{ "dir": "fonts", "count": 5 }] }
+```
+
+#### `POST /api/fonts`
+
+Appends an entry to `fonts.yml`.
+
+```json
+{ "id": "kan_new", "name": "My Face", "font_dir": "ttf",
+  "font_files": ["MyFace-Regular.ttf"], "degrade": true,
+  "max_pages": 600, "font_features": "'aalt' 1", "repo": "" }
+```
+
+Rejects: a missing `fonts/<id>/` directory, listed files that don't exist,
+duplicate ids, and any edit that would produce invalid YAML. Writes
+`fonts.yml.bak` first.
+
+> **`fonts/<id>/` must be named exactly as the id.** Every generator resolves
+> fonts at that path; a mismatch makes the font silently render nothing.
+
+#### `GET /api/fonts/:id/footprint`
+
+Every generated file belonging to a font, without deleting anything — used to
+preview a purge.
+
+```json
+{ "id": "kan_baloo", "files": 7596,
+  "locations": ["test-images/kan_baloo/", "inventory/balootamma2-regular/",
+                "rendered/kan_baloo_* (5721 files)"] }
+```
+
+#### `DELETE /api/fonts/:id[?purge=1]`
+
+Removes the registry entry. With `?purge=1` also deletes every generated
+artefact — rendered, inventory, gallery, lstmf, classical — and prunes
+`lstmf/list.txt`.
+
+Source font files in `fonts/<id>/` are **always kept**: they are pipeline input,
+not output. Delete that folder by hand to remove the font from disk entirely.
+
+Refuses to purge while training is running (`lstmtraining` reads its file list
+throughout the run), and refuses to remove the last remaining font.
+
+```json
+{ "ok": true, "id": "kan_baloo", "purged": true, "files_removed": 7596,
+  "source_kept": "fonts/kan_baloo/", "failures": [] }
+```
+
+> Deletion is not the only defence. `02-make-lstmf.sh` filters by registry at
+> collection time, so images belonging to a font absent from `fonts.yml` are
+> skipped whatever remains on disk — a purge that is declined, fails partway, or
+> misses later output cannot let an unregistered font back into training.
 
 ### Checkpoints
 
