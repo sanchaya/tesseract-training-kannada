@@ -2,9 +2,10 @@
 
 **Project:** `kan_hist.traineddata` — fine-tuned Tesseract 5 LSTM model for 19th-century Kannada letterpress typefaces  
 **Date:** August 2026  
-**Status:** Root cause identified; fix **implemented** — per-font `aalt` is declared in `fonts.yml`
-(`font_features: "'aalt' 1"`) and honoured by every render path. See
-[IMAGE_GENERATION.md](IMAGE_GENERATION.md) for the pipeline as it stands today.  
+**Status:** ⚠ **Superseded — see §10.** `aalt` has been REMOVED from every font. It was
+compensating for a different bug (a forced Indic feature list handed to the shaper); with that fixed,
+`aalt` renders running text with a halant on nearly every consonant. Sections 1–8 record the original
+investigation and remain useful for method, but their conclusion is wrong.  
 **Fonts affected:** Karnata GTN (6 weights), Karnata German Mission Press (GMP), Karnata Wesleyan Mission Press (WMP) — the Sanchaya historical revivals  
 **Reference (correct) font:** Karnata F Kittel
 
@@ -224,3 +225,67 @@ which never forced features, and was unaffected.
 
 *Relevant files: `fonts.yml`, `corpus/browser_render.js`, `corpus/render-a5-pages.py`, `corpus/shaping_render.py`, `server.js`, `public/index.html`.*  
 *Measurement tools: `test_lang2.js`, `test_aalt6.js`, `tmp/cc_analyze.js`, `tmp/ascii_render.js`, `tmp/shapecheck.py`, `tmp/gidmap.py`.*
+
+---
+
+## 10. Correction — `aalt` removed from all fonts (Aug 2026)
+
+The conclusion of §5–§7 was wrong, and this section supersedes it.
+
+### What was observed
+
+Rendering ordinary running text with the production settings:
+
+```
+ವಿದ್ಯಾರ್ಥಿಗಳಿಗೆ ಜ್ಞಾನದ ಮಹತ್ತ್ವ ತಿಳಿಸಬೇಕು
+```
+
+| Font | Setting | Result |
+|---|---|---|
+| GTN | `aalt` ON *(was production)* | ✗ vowel signs dropped — `ವದ್ಯಥ್ರಗಳಿಗ` |
+| GTN | `aalt` OFF | ✓ correct |
+| WMP | `aalt` ON *(was production)* | ✗ halant on nearly every consonant |
+| WMP | `aalt` OFF | ✓ correct |
+| GMP, Kittel | OFF | ✓ correct (never had it) |
+
+### Why
+
+`aalt` is "access all alternates" — designed for a user picking one alternate glyph, not for
+global application. In GTN and WMP it maps base consonants to their `*_v` alternate forms. Applied
+across a whole run it therefore replaces *every* consonant with a form that carries a halant and
+does not accept vowel signs. It looked correct on isolated conjuncts, which is all §6 tested.
+
+### Why it appeared to help originally
+
+The original investigation ran against `shaping_render.py` while it was still passing HarfBuzz a
+forced list of Indic features (`blwf`, `half`, `cjct` …). That broke conjuncts on its own — see
+§9 — and enabling `aalt` masked some of the damage. With the forced features removed, the shaper
+produces correct conjuncts unaided:
+
+```
+GTN  conjuncts  aalt=OFF   ✓   ಕ್ಷ ಜ್ಞ ತ್ತ ದ್ದ ನ್ನ ಮ್ಮ ಲ್ಲ ಸ್ತ ಪ್ರ ರ್ಕ …
+WMP  conjuncts  aalt=OFF   ✓   (ರ್ಕ also gains its proper reph form, which aalt mangled)
+```
+
+Two bugs, one masking the other. Fixing the first made the second visible.
+
+### Consequence for training data
+
+Every image rendered for **GTN (6 weights)** and **WMP** while `aalt` was enabled shows halant-laden
+consonants and missing vowel signs — in `rendered/`, `inventory/`, the classical A5 set, and the
+gallery. Those fonts must be re-rendered before their data is trained on. GMP and Kittel are
+unaffected.
+
+### Rule
+
+`font_features` is empty for every font, and adding a feature needs evidence from **running text**,
+not isolated conjuncts. Verify with:
+
+```bash
+python3 - <<'PY'
+import sys; sys.path.insert(0,'corpus')
+from shaping_render import render_text
+render_text('fonts/kan_gtn/fonts/ttf/KarnataGTN-Regular.ttf',
+            'ವಿದ್ಯಾರ್ಥಿಗಳಿಗೆ ಜ್ಞಾನದ ಮಹತ್ತ್ವ', font_size=40).save('/tmp/check.png')
+PY
+```
