@@ -1,7 +1,7 @@
 # Image Generation — How every PNG in this project is produced
 
 **Scope:** the four render paths, what each one feeds, and the shaping method they share.
-**Companion docs:** [CONJUNCT_RENDERING.md](CONJUNCT_RENDERING.md) (why `aalt` matters), [TRAINING.md](TRAINING.md), [PORTAL.md](PORTAL.md)
+**Companion docs:** [CONJUNCT_RENDERING.md](CONJUNCT_RENDERING.md) (shaping analysis; §10 = why `aalt` is off), [TRAINING.md](TRAINING.md), [PORTAL.md](PORTAL.md)
 
 ---
 
@@ -18,7 +18,7 @@ Every render path in this project therefore runs a real shaping engine. There ar
 
 | Engine | Where | Why this one |
 |---|---|---|
-| **HarfBuzz + FreeType** (Python) | `corpus/shaping_render.py` | Full control over which OpenType features are enabled — required for per-font `aalt` |
+| **HarfBuzz + FreeType** (Python) | `corpus/shaping_render.py` | Deterministic, no browser dependency; full control over which OpenType features reach the shaper |
 | **Headless Chrome** | `corpus/browser_render.js` | Same text stack as fonts.sanchaya.net; handles page layout, line breaking and justification for A5 pages |
 
 ---
@@ -65,7 +65,7 @@ reorders, and the ottu is emitted before its base:
      forced  → kn_t_ottu + uni0CA4     (ottu first — visually broken)
 ```
 
-The only feature this project passes explicitly is `aalt`, per font (§4).
+This project now passes **no** features at all — see §4 for why `aalt` was removed too.
 
 Output is a glyph-ID stream with per-glyph x/y offsets and advances. Note that 2 glyphs is the
 **correct** result for most Kannada conjuncts — base + a separate ottu glyph drawn below-left within
