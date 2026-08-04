@@ -153,19 +153,24 @@ def _encodable(text, units):
     # space is a word separator outside the unicharset, and ್ (U+0CCD) exists
     # only fused into cluster units like ್ನ. Without this exemption the check
     # would reject every multi-word line.
+    # Unit matching is tried BEFORE the exemption: ್‌ (virama + ZWNJ) is a real
+    # two-character unit, and skipping the virama first meant it was never tried.
     exempt = set(' \t\n್')
     longest = max((len(u) for u in units), default=1)
     i, n = 0, len(text)
     while i < n:
-        if text[i] in exempt:
-            i += 1
-            continue
+        matched = False
         for size in range(min(longest, n - i), 0, -1):
             if text[i:i + size] in units:
                 i += size
+                matched = True
                 break
-        else:
-            return False
+        if matched:
+            continue
+        if text[i] in exempt:            # fallback only when no unit matched
+            i += 1
+            continue
+        return False
     return True
 
 

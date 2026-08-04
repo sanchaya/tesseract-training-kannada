@@ -254,27 +254,38 @@ _UNITS   = _load_units()
 _MAXUNIT = max((len(u) for u in _UNITS), default=1) if _UNITS else 1
 
 # Whitespace and the virama are never standalone unicharset units, yet both are
-# perfectly encodable: Tesseract treats space as a word separator outside the
-# unicharset, and the virama (್ U+0CCD) only ever appears fused into cluster
-# units such as ್ನ. Treating them as failures would reject 96% of valid corpus
-# lines — every multi-word sentence — so they are exempt from the check.
+# encodable: Tesseract treats space as a word separator outside the unicharset,
+# and the virama (್ U+0CCD) normally appears fused into a cluster unit such as
+# ್ನ or ್‌. Treating them as failures would reject 96% of valid corpus lines.
 _ENCODE_EXEMPT = set(' \t\n್')
 
 def _encodable(text):
-    """Greedy longest-match segmentation into unicharset units (Tesseract's encoder)."""
+    """
+    Greedy longest-match segmentation into unicharset units (Tesseract's encoder).
+
+    Unit matching is tried BEFORE the exemption. That order matters: ್‌
+    (virama + ZWNJ, U+0CCD U+200C) is a real two-character unit — the half-form
+    slot that _clean_gt() deliberately produces for word-final viramas. Skipping
+    the virama as "exempt" first meant that unit was never tried, so the encoder
+    then hit a bare ZWNJ, found no unit for it, and rejected the whole line.
+    That wrongly discarded every line ending in a half-form consonant.
+    """
     if not _UNITS:
         return True
     i, n = 0, len(text)
     while i < n:
-        if text[i] in _ENCODE_EXEMPT:
-            i += 1
-            continue
+        matched = False
         for size in range(min(_MAXUNIT, n - i), 0, -1):
             if text[i:i + size] in _UNITS:
                 i += size
+                matched = True
                 break
-        else:
-            return False
+        if matched:
+            continue
+        if text[i] in _ENCODE_EXEMPT:   # fallback only when no unit matched
+            i += 1
+            continue
+        return False
     return True
 
 print(f"  Unicharset: {len(_UNITS) if _UNITS else 'UNAVAILABLE — encodability check disabled'}"

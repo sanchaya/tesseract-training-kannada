@@ -151,19 +151,27 @@ _MAXU  = max((len(u) for u in _UNITS), default=1) if _UNITS else 1
 _EXEMPT = set(' \t\n್')
 
 def encodable(text: str) -> bool:
+    """
+    Unit matching is tried BEFORE the exemption: ್‌ (virama + ZWNJ) is a real
+    two-character unit, and skipping the virama as exempt first meant it was
+    never tried — the encoder then failed on the bare ZWNJ and rejected the line.
+    """
     if not _UNITS:
         return True                      # unicharset unavailable — don't drop
     i, n = 0, len(text)
     while i < n:
-        if text[i] in _EXEMPT:
-            i += 1
-            continue
+        matched = False
         for size in range(min(_MAXU, n - i), 0, -1):
             if text[i:i + size] in _UNITS:
                 i += size
+                matched = True
                 break
-        else:
-            return False
+        if matched:
+            continue
+        if text[i] in _EXEMPT:           # fallback only when no unit matched
+            i += 1
+            continue
+        return False
     return True
 
 raw = INPUT.read_text(encoding='utf-8').splitlines()
