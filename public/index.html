@@ -2665,15 +2665,42 @@ async function submitFont() {
 }
 
 async function removeFont(id, name) {
-  if (!confirm(`Remove "${name}" (${id}) from fonts.yml?\n\n`
-             + `The font files in fonts/${id}/ are kept — only the registry entry is removed.\n`
-             + `Training data already generated from this font is not deleted either.`)) return;
+  // Show exactly what will be deleted before asking. The footprint comes from
+  // the same function the server uses to delete, so the dialog can never
+  // disagree with what actually happens.
+  let fp = { files: 0, locations: [] };
   try {
-    const r = await fetch(`/api/fonts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const r = await fetch(`/api/fonts/${encodeURIComponent(id)}/footprint`);
+    if (r.ok) fp = await r.json();
+  } catch (_) {}
+
+  const where = fp.locations.length
+    ? '\n\n' + fp.locations.map(l => '   • ' + l).join('\n')
+    : '\n\n   (none found)';
+
+  const msg =
+    `Remove "${name}" (${id}) and DELETE its generated files?\n\n`
+  + `${fp.files.toLocaleString()} generated file(s) will be permanently deleted:${where}\n\n`
+  + `Kept: the source font files in fonts/${id}/\n`
+  + `This cannot be undone.\n\n`
+  + `OK = remove entry AND delete generated files\n`
+  + `Cancel = keep everything`;
+
+  if (!confirm(msg)) return;
+
+  try {
+    const r = await fetch(`/api/fonts/${encodeURIComponent(id)}?purge=1`, { method: 'DELETE' });
     const d = await r.json();
-    if (!r.ok) { notify(`Error: ${d.error}`, 'error', 8000); return; }
-    notify(`✓ ${name} removed. ${d.note}`, 'info', 9000);
+    if (!r.ok) { notify(`Error: ${d.error}`, 'error', 10000); return; }
+    if (d.failures?.length) {
+      notify(`${name} removed, but some files could not be deleted: ${d.failures.slice(0,2).join('; ')}`,
+             'error', 12000);
+    } else {
+      notify(`✓ ${name} removed — ${d.files_removed.toLocaleString()} generated files deleted. `
+           + `Source kept at ${d.source_kept}`, 'info', 9000);
+    }
     loadFonts();
+    loadFontImageSummary?.();
   } catch (e) { notify(e.message, 'error'); }
 }
 

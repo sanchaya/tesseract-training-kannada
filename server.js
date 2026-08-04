@@ -1183,10 +1183,89 @@ app.post("/api/fonts", express.json(), (req, res) => {
              next: "Run ③ Render images and the Inventory step to generate training data for this font." });
 });
 
+// Every GENERATED artefact belonging to one font: rendered lines, inventory
+// baselines, gallery images, lstmf, and classical page/line output.
+//
+// The source font files in fonts/<id>/ are deliberately NOT included. They are
+// the input, not a product of the pipeline — often hand-placed or downloaded,
+// and re-adding a font you removed by mistake should not mean re-downloading it.
+// Delete that folder by hand if you want the font gone from disk entirely.
+function fontFootprint(id) {
+  const entry  = loadFonts().find(f => f.id === id);
+  // inventory/ is keyed by FONT FILE STEM (e.g. "karnatagtn-regular"), not by
+  // font id — mapping through font_files is the only way to find those dirs.
+  const stems  = (entry?.font_files || []).map(f => f.replace(/\.[^.]+$/, "").toLowerCase());
+
+  const dirs = [];
+  const files = [];
+  const add = (p, list) => { try { if (fs.existsSync(p)) list.push(p); } catch {} };
+
+  add(path.join(ROOT, "test-images", id), dirs);
+  for (const s of stems) add(path.join(ROOT, "inventory", s), dirs);
+
+  // rendered/ and its lstmf mirror are flat, prefixed "<id>_"
+  for (const [dir, pref] of [[P.rendered, `${id}_`], [path.join(P.lstmfDir, "rendered"), `${id}_`]]) {
+    try {
+      for (const f of fs.readdirSync(dir)) if (f.startsWith(pref)) files.push(path.join(dir, f));
+    } catch {}
+  }
+  // lstmf/font-test/<id>/ and classical a5 dirs "<title>/<id>_<style>/"
+  add(path.join(P.lstmfDir, "font-test", id), dirs);
+  add(path.join(P.lstmfDir, "inventory"), null);           // never purge wholesale
+  for (const root of [P.classicalA5, path.join(P.lstmfDir, "classical")]) {
+    try {
+      for (const title of fs.readdirSync(root)) {
+        const tp = path.join(root, title);
+        if (!fs.statSync(tp).isDirectory()) continue;
+        for (const sub of fs.readdirSync(tp)) {
+          if (sub === id || sub.startsWith(`${id}_`)) dirs.push(path.join(tp, sub));
+        }
+      }
+    } catch {}
+  }
+
+  const count = p => {
+    let n = 0;
+    const walk = d => {
+      let es; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+      for (const e of es) e.isDirectory() ? walk(path.join(d, e.name)) : n++;
+    };
+    try { fs.statSync(p).isDirectory() ? walk(p) : n++; } catch {}
+    return n;
+  };
+  const fileCount = dirs.reduce((s, d) => s + count(d), 0) + files.length;
+  return { dirs, files, fileCount };
+}
+
+app.get("/api/fonts/:id/footprint", (req, res) => {
+  const id = req.params.id.replace(/[^\w.-]/g, "");
+  if (!loadFonts().some(f => f.id === id)) return res.status(404).json({ error: `No font with id '${id}'` });
+  const fp = fontFootprint(id);
+  res.json({
+    id,
+    files: fp.fileCount,
+    locations: [...fp.dirs.map(d => path.relative(ROOT, d) + "/"),
+                ...(fp.files.length ? [`rendered/${id}_* (${fp.files.length} files)`] : [])],
+  });
+});
+
 app.delete("/api/fonts/:id", (req, res) => {
   const id = req.params.id.replace(/[^\w.-]/g, "");
+  const purge = req.query.purge === "1";
   const fonts = loadFonts();
   if (!fonts.some(f => f.id === id)) return res.status(404).json({ error: `No font with id '${id}'` });
+
+  // Deleting lstmf/ or rendered/ files out from under a live run would corrupt
+  // it — lstmtraining reads its list lazily throughout training.
+  if (purge && isTrainingRunning()) {
+    return res.status(409).json({
+      error: "Training is running. Stop it before purging font files "
+           + "(lstmtraining reads its file list throughout the run): pkill lstmtraining" });
+  }
+
+  // Compute the footprint BEFORE the registry entry is removed — font_files is
+  // needed to locate the inventory directories, and it lives in that entry.
+  const fp = purge ? fontFootprint(id) : null;
 
   const yml   = fs.readFileSync(P.fontsYml, "utf8");
   const lines = yml.split("\n");
@@ -1226,12 +1305,51 @@ app.delete("/api/fonts/:id", (req, res) => {
   }
   fs.writeFileSync(P.fontsYml, updated);
 
-  // Font FILES are never deleted here. Unregistering is reversible; deleting a
-  // font folder is not, and the same folder may be the source for generated
-  // images still referenced by an in-flight training run.
-  console.log(`  [fonts] removed ${id} from registry (files kept at fonts/${id}/)`);
-  res.json({ ok: true, id, files_kept: `fonts/${id}/`,
-             note: "Removed from the registry. Font files were left on disk; delete fonts/" + id + "/ manually if you want them gone." });
+  // ── Purge generated artefacts ───────────────────────────────────────────
+  let purged = 0;
+  const failures = [];
+  if (purge && fp) {
+    // Containment check: every target must resolve inside ROOT. Guards against
+    // a crafted id ("../..") reaching outside the project even though the id is
+    // already character-filtered.
+    const inside = p => {
+      const r = path.resolve(p);
+      return r.startsWith(path.resolve(ROOT) + path.sep) && r !== path.resolve(ROOT);
+    };
+    for (const d of fp.dirs) {
+      if (!inside(d)) { failures.push(`${d} (outside project — skipped)`); continue; }
+      try { fs.rmSync(d, { recursive: true, force: true }); purged++; }
+      catch (e) { failures.push(`${path.relative(ROOT, d)}: ${e.message}`); }
+    }
+    for (const f of fp.files) {
+      if (!inside(f)) continue;
+      try { fs.rmSync(f, { force: true }); purged++; }
+      catch (e) { failures.push(`${path.relative(ROOT, f)}: ${e.message}`); }
+    }
+
+    // list.txt still references the deleted lstmf files — drop those lines so
+    // training does not fail on missing paths before the next rebuild.
+    try {
+      if (fs.existsSync(P.lstmfList)) {
+        const kept = fs.readFileSync(P.lstmfList, "utf8")
+          .split("\n").filter(l => l.trim() && fs.existsSync(l.trim()));
+        fs.writeFileSync(P.lstmfList, kept.join("\n") + "\n");
+      }
+    } catch (e) { failures.push(`lstmf/list.txt: ${e.message}`); }
+  }
+
+  console.log(`  [fonts] removed ${id} from registry`
+            + (purge ? ` and purged ${fp.fileCount} generated files` : ` (generated files kept)`));
+  res.json({
+    ok: true, id,
+    purged: purge,
+    files_removed: purge ? fp.fileCount : 0,
+    source_kept: `fonts/${id}/`,
+    failures,
+    note: purge
+      ? `Registry entry and ${fp.fileCount} generated files removed. Source font files kept at fonts/${id}/.`
+      : `Removed from the registry. Generated images and font files were left on disk.`,
+  });
 });
 
 // ── OCR quality check ─────────────────────────────────────────────────────

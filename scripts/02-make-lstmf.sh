@@ -434,12 +434,69 @@ def make_lstmf(img_path_str):
                 pass
         return None
 
+# ── Registry filter ──────────────────────────────────────────────────────────
+# fonts.yml is the single source of truth for what trains. Images belonging to a
+# font that is no longer registered are ignored here, whatever is left on disk.
+#
+# Deleting the files is not enough on its own: a purge can be declined, can fail
+# partway, or can miss output written after it ran. Filtering at the point of use
+# means an unregistered font can never re-enter training by accident.
+#
+# Naming conventions this has to match:
+#   rendered/          <id>_<style>_lineNNNN.png
+#   inventory/         <font-file-stem>/char_*.png        (keyed by FILE stem)
+#   classical a5/      <title>/<id>_<style>/pageNNNN*.png
+#   test-images/       <id>/<variant>/*.png
+def _registered():
+    """(font ids, font-file stems) currently declared in fonts.yml."""
+    try:
+        import yaml as _y
+        doc = _y.safe_load(open(os.path.join(tdata, '..', 'fonts.yml'), encoding='utf-8'))
+        entries = (doc or {}).get('fonts', []) or []
+    except Exception:
+        return None, None                      # unreadable — do not filter
+    ids   = {e['id'] for e in entries if e.get('id')}
+    stems = {os.path.splitext(f)[0].lower()
+             for e in entries for f in (e.get('font_files') or [])}
+    return ids, stems
+
+_REG_IDS, _REG_STEMS = _registered()
+
+def _is_registered(p):
+    """False when this path belongs to a font absent from fonts.yml."""
+    if not _REG_IDS:
+        return True
+    p = Path(p)
+    parent = p.parent.name.lower()
+    # inventory/<font-file-stem>/…
+    if parent in _REG_STEMS:
+        return True
+    # <title>/<id>_<style>/…  or  <id>/<variant>/…
+    for part in (parent, p.parent.parent.name.lower() if p.parent.parent else ''):
+        for fid in _REG_IDS:
+            if part == fid or part.startswith(fid + '_'):
+                return True
+    # rendered/<id>_<style>_lineNNNN.png  (flat)
+    name = p.name.lower()
+    if any(name.startswith(fid + '_') for fid in _REG_IDS):
+        return True
+    # A directory that matches no known font at all — only filter when the path
+    # actually looks font-scoped, so unrelated sources (scan/) are not dropped.
+    looks_font_scoped = (
+        'rendered' in p.parts or 'inventory' in p.parts
+        or 'a5-pages' in p.parts or 'test-images' in p.parts
+    )
+    return not looks_font_scoped
+
 # Collect images that have a matching gt.txt
-imgs = sorted(
-    str(p) for p in Path(src_dir).iterdir()
-    if p.suffix.lower() in ('.png', '.tif', '.tiff', '.jpg')
-       and p.with_suffix('.gt.txt').exists()
-)
+_all = [p for p in Path(src_dir).iterdir()
+        if p.suffix.lower() in ('.png', '.tif', '.tiff', '.jpg')
+           and p.with_suffix('.gt.txt').exists()]
+_unreg = [p for p in _all if not _is_registered(p)]
+if _unreg:
+    print(f"  ⊘ {len(_unreg)} image(s) skipped — font not in fonts.yml "
+          f"(e.g. {_unreg[0].name})", flush=True)
+imgs = sorted(str(p) for p in _all if _is_registered(p))
 skipped = sum(
     1 for p in Path(src_dir).iterdir()
     if p.suffix.lower() in ('.png', '.tif', '.tiff', '.jpg')
