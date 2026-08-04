@@ -1995,17 +1995,61 @@ app.post("/api/char-train/start", express.json(), (req, res) => {
               return bcer(a) - bcer(b);
             })[0]
         : null;
-      const startModel = bestCheckpoint
-        ? path.join(outputDir, bestCheckpoint)
-        : path.join(outputDir, "kan.lstm");
-      if (!fs.existsSync(startModel)) throw new Error(`Starting model not found: ${startModel}. Run Step 1 (Prep) first.`);
+      // ── Checkpoint / unicharset compatibility ─────────────────────────────
+      // A checkpoint encodes the recoder it was trained with. When the
+      // unicharset changes, lstmtraining refuses to continue:
+      //
+      //   Code range changed from 117 to 119!
+      //   Must supply the old traineddata for code conversion!
+      //
+      // Remapping needs the EXACT traineddata the checkpoint was built with.
+      // `00c-expand-unicharset.sh --force` overwrites tessdata_expanded in
+      // place, so after a unicharset change that file is gone and older
+      // checkpoints cannot be remapped at all. (00c now archives it — see
+      // output/tessdata_archive/ — but archives only exist from this point on.)
+      //
+      // Heuristic: a checkpoint written AFTER the current traineddata was built
+      // used the current recoder and is safe to continue from. Anything older
+      // is not, and we fall back to the base weights rather than failing.
+      const tdPath  = path.join(tessdata, "kan.traineddata");
+      const tdMtime = fs.existsSync(tdPath) ? fs.statSync(tdPath).mtimeMs : 0;
 
-      addLog(`Starting from: ${path.basename(startModel)}`);
+      const compatible = bestCheckpoint &&
+        fs.statSync(path.join(outputDir, bestCheckpoint)).mtimeMs >= tdMtime;
+
+      let startModel, oldTdArg = [];
+      if (compatible) {
+        startModel = path.join(outputDir, bestCheckpoint);
+        addLog(`Starting from: ${bestCheckpoint}`);
+      } else {
+        // Base LSTM weights extracted from tessdata_best (140 codes). Continuing
+        // from these into an expanded unicharset requires --old_traineddata so
+        // lstmtraining can remap the output layer — the same thing
+        // 03-train.sh does for TRAIN_MODE=expand.
+        startModel = path.join(outputDir, "kan.lstm");
+        const baseTd = path.join(P.tessdataDir, "kan.traineddata");
+        if (tessdata !== P.tessdataDir && fs.existsSync(baseTd)) {
+          oldTdArg = ["--old_traineddata", baseTd];
+        }
+        if (bestCheckpoint) {
+          addLog(`⚠  ${bestCheckpoint} predates the current unicharset — it cannot be`);
+          addLog(`   continued from (code range mismatch, and the traineddata it was`);
+          addLog(`   built with no longer exists).`);
+          addLog(`   Starting from base weights instead: kan.lstm${oldTdArg.length ? " (+ --old_traineddata)" : ""}`);
+        } else {
+          addLog(`Starting from base weights: kan.lstm`);
+        }
+      }
+      if (!fs.existsSync(startModel)) {
+        throw new Error(`Starting model not found: ${startModel}. Run Step 1 (Prep) first.`);
+      }
+
       addLog(`Fine-tuning for ${iterations} iterations…\n`);
 
       await new Promise((resolve, reject) => {
         const proc = spawn("lstmtraining", [
           "--traineddata",    path.join(tessdata, "kan.traineddata"),
+          ...oldTdArg,
           "--model_output",   path.join(outputDir, `kan_hist_chartrain_${fontId}`),
           "--continue_from",  startModel,
           "--train_listfile", listTxt,

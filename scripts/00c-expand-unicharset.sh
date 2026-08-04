@@ -85,6 +85,27 @@ done
 
 mkdir -p "$WORK_DIR" "$LANGDATA_DIR/kan" "$LANGDATA_DIR/Kannada" "$LANGDATA_DIR/Latin" "$OUTPUT_TESSDATA"
 
+# ── Archive the outgoing traineddata ──────────────────────────
+# A checkpoint can only be continued from if the traineddata it was trained with
+# is still available (lstmtraining --old_traineddata). This script overwrites
+# tessdata_expanded/kan.traineddata in place, so without an archive every
+# existing checkpoint becomes permanently uncontinuable the moment the unicharset
+# changes — "Code range changed from 117 to 119! Must supply the old traineddata".
+# The file is ~2.5 MB; keeping copies is far cheaper than losing a training run.
+if [ -f "$OUTPUT_TESSDATA/kan.traineddata" ]; then
+    _ARCHIVE_DIR="$ROOT/output/tessdata_archive"
+    mkdir -p "$_ARCHIVE_DIR"
+    _UNITS=$(combine_tessdata -u "$OUTPUT_TESSDATA/kan.traineddata" "$WORK_DIR/_arch." >/dev/null 2>&1 \
+             && head -1 "$WORK_DIR/_arch.lstm-unicharset" 2>/dev/null || echo "unknown")
+    _STAMP=$(date +%Y%m%d_%H%M%S)
+    _DEST="$_ARCHIVE_DIR/kan_${_UNITS}units_${_STAMP}.traineddata"
+    cp "$OUTPUT_TESSDATA/kan.traineddata" "$_DEST"
+    rm -f "$WORK_DIR/_arch."* 2>/dev/null || true
+    echo "→ Archived outgoing traineddata (${_UNITS} units):"
+    echo "     output/tessdata_archive/$(basename "$_DEST")"
+    echo "   Use it with --old_traineddata to continue an older checkpoint."
+fi
+
 # ── Step 1: Download kan/ langdata from GitHub ────────────────
 if [ "$FORCE" = "1" ]; then
     echo "→ --force: clearing cached downloads and output..."
@@ -307,6 +328,10 @@ cat > "$WORK_DIR/new_chars.txt" << 'EOF'
 ವ಼ ಶ಼ ಷ಼ ಸ಼ ಹ಼ ವಗ್ಘೀಏ ಅಚ್ಛೇದ್ಯೋಽನಂತಸೌಖ್ಯೋSಹಂ ಆನಿರೆಯೆ[ೕ]
 ಕ್ಘ ಕ್ಙ ಕ್ಝ ಕ್ಢ ಕ್ಱ ಖ್ಘ ಖ್ಙ ಖ್ಝ
 ಖ್ಢ ಖ್ಱ ಗ್ಖ ಗ್ಘ
+ಅಚ್ಛೇದ್ಯೋಽನಂತಸೌಖ್ಯೋSಹಂ ಆನಿರೆಯೆ[ೕ] ಧ್ಘೋಷದಿಂದಬ್ಧಿಯಂ ಶಾರ್ಙ್ಗ ಪೆತ್ೞದೆನೆ ನಿರ್ಜ್ಝರಮುಂ ತನುವೊಳ್ದಾರ್ಢ್ಯಂ ಬಿರ್ಱ್ದುದನಱಸಲ್ವೇಡಿ
+ದಕ್ಕೇಽಹಂ ಳದನೆರೞ್ಖಂಡಮಪ್ಪಿನಮಾಖಂಡಳತನಯನಿಸುವುದುಂ
+ಆನಿರೆಯೆ[ೕ] ಧ್ಘೋಷದಿಂದಬ್ಧಿಯಂ ಶಾರ್ಙ್ಗ ಪೆತ್ೞದೆನೆ ನಿರ್ಜ್ಝರಮುಂ ತನುವೊಳ್ದಾರ್ಢ್ಯಂ ಬಿರ್ಱ್ದುದನಱಸಲ್ವೇಡಿ
+ಆನಿರೆಯೆ[ೕ] ಧ್ಘೋಷದಿಂದಬ್ಧಿಯಂ ಶಾರ್ಙ್ಗ ಪೆತ್ೞದೆನೆ ನಿರ್ಜ್ಝರಮುಂ ತನುವೊಳ್ದಾರ್ಢ್ಯಂ ಬಿರ್ಱ್ದುದನಱಸಲ್ವೇಡಿ
 EOF
 # The lines above exist to introduce the ್X cluster units that were missing:
 #   ್ಖ ್ಘ ್ಙ ್ಝ ್ಢ ್ಱ
