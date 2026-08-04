@@ -85,3 +85,17 @@ test-images/**/ocr_history.json
 test-images/manifest.json
 Kannada_OCR_Presentation.pptx
 .autopilot/
+
+# session scratch / generated backups
+# session scratch / generated backups
+fonts.yml.bak
+a5_render_jobs.json
+confirm.txt
+result.txt
+ocr-verification-report.html
+reports/
+corpus/a5-pages/
+corpus/coverage/
+test_aalt*.js
+test_analyze.js
+test_lang*.js
