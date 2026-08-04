@@ -335,6 +335,27 @@ def _make_lstmf_impl(img_path_str):
 
     _txt = gt_text.strip()
 
+    # Guard 0 — the image must actually contain ink.
+    # A crop that is blank, or only a few pixels tall, cannot correspond to its
+    # transcription. These arise from line-measurement failures (a sliver crop
+    # that misses the glyphs) and from stray marks; Tesseract responds with
+    # "Failed to read boxes" or "truncated file", which reads like corruption
+    # and hides the real cause. Reject them here with an accurate reason.
+    if _txt:
+        if h < 16:
+            return _reject(f"image only {h}px tall — cannot contain a text line")
+        try:
+            from PIL import Image as _PILc
+            import numpy as _np
+            with _PILc.open(img_path) as _im:
+                _a = _np.asarray(_im.convert('L'))
+            _ink = float((_a < 128).mean())
+            if _ink < 0.001:                       # < 0.1% dark pixels
+                return _reject(f"image is blank ({_ink*100:.2f}% ink) but "
+                               f"ground truth has {len(_txt)} chars")
+        except Exception:
+            pass                                   # never fail on the check itself
+
     # Guard 1 — encodable in the unicharset actually being used
     if _txt and not _encodable(_txt):
         _bad = ''.join(sorted({c for c in _txt if not _encodable(c)}))

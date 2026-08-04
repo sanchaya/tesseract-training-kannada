@@ -225,26 +225,60 @@ function measureLinesInPage() {
       continue;
     }
 
-    if (!cur || Math.abs(r.top - cur.top) > ROW_TOLERANCE) {
-      cur = { top: r.top, left: r.left, right: r.right, bottom: r.bottom, text: ch };
-      lines.push(cur);
-    } else {
+    // Group by VERTICAL OVERLAP, not by matching rect tops.
+    //
+    // Comparing r.top to cur.top was wrong for Kannada. Glyph rects on one
+    // visual line have wildly different tops: a bare consonant, one carrying an
+    // ascender matra, and a below-base ottu all start at different heights.
+    // Any difference over the tolerance began a NEW line group, so a single
+    // visual line was split into several — each holding part of the text but
+    // only a sliver of the height. The result was 386x10 crops with the full
+    // 16-character transcription and 0% ink: the glyphs were outside the box.
+    //
+    // Characters belonging to the same line always overlap vertically, so
+    // overlap is the reliable test regardless of glyph height.
+    const overlaps = (a, b) =>
+      Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0;
+
+    if (cur && (overlaps(cur, r) || Math.abs(r.top - cur.top) <= ROW_TOLERANCE)) {
       cur.left   = Math.min(cur.left,   r.left);
       cur.right  = Math.max(cur.right,  r.right);
       cur.top    = Math.min(cur.top,    r.top);
       cur.bottom = Math.max(cur.bottom, r.bottom);
       cur.text  += ch;
+    } else {
+      cur = { top: r.top, left: r.left, right: r.right, bottom: r.bottom, text: ch };
+      lines.push(cur);
     }
   }
 
-  return lines
+  // Merge any groups that still overlap vertically. Reading order can revisit a
+  // line (a below-base mark measured after the next base consonant), which would
+  // otherwise leave two fragments of the same visual line.
+  const merged = [];
+  for (const l of lines.sort((a, b) => a.top - b.top)) {
+    const prev = merged[merged.length - 1];
+    if (prev && Math.min(prev.bottom, l.bottom) - Math.max(prev.top, l.top) > 0) {
+      prev.left   = Math.min(prev.left,   l.left);
+      prev.right  = Math.max(prev.right,  l.right);
+      prev.top    = Math.min(prev.top,    l.top);
+      prev.bottom = Math.max(prev.bottom, l.bottom);
+      prev.text  += l.text;
+    } else {
+      merged.push({ ...l });
+    }
+  }
+
+  return merged
     .map(l => ({
       text: l.text.trim(),
       x: l.left, y: l.top,
       w: l.right - l.left,
       h: l.bottom - l.top,
     }))
-    .filter(l => l.text.length > 0 && l.w > 0 && l.h > 0);
+    // A usable line must be tall enough to contain glyphs. Slivers indicate a
+    // measurement failure, not a real line — never emit them as training data.
+    .filter(l => l.text.length > 0 && l.w > 0 && l.h >= 16);
 }
 
 // ── Noise / blur degradation (mimics historical print) ───────────────────────
