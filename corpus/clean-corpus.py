@@ -34,6 +34,7 @@ Lines longer than MAX_CHARS are split at word/space boundaries.
 
 import re
 import sys
+import unicodedata
 from pathlib import Path
 
 CORPUS_DIR = Path(__file__).parent
@@ -47,7 +48,28 @@ KEEP_ASCII = set(' .,;:?!-/()"\'।॥%0123456789')
 # Note: * intentionally excluded — markdown bullets must not appear in GT text
 
 def is_kannada(c: str) -> bool:
-    return 0x0C80 <= ord(c) <= 0x0CFF
+    """
+    True for ASSIGNED characters in the Kannada block.
+
+    The block 0x0C80–0x0CFF contains ~20 reserved codepoints that Unicode has
+    never assigned (U+0C8D, U+0C91, U+0CA9, U+0CB4, U+0CC5, U+0CC9, …). They
+    appear in scraped text as mojibake or encoding damage. A bare range check
+    let them through, they were rendered into training images, and lstmtraining
+    then rejected every line containing one:
+
+        Encoding of string failed! Failure bytes: e0 b2 a9
+        Can't encode transcription: '಩' in language ''
+
+    unicodedata.name() raises for unassigned codepoints, which is the
+    authoritative test and stays correct as Unicode adds characters.
+    """
+    if not (0x0C80 <= ord(c) <= 0x0CFF):
+        return False
+    try:
+        unicodedata.name(c)
+        return True
+    except ValueError:
+        return False
 
 def clean_line(line: str) -> str:
     # Strip HTML/XML tags

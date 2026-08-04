@@ -221,7 +221,38 @@ Python path because full-page rendering needs line breaking, justification and m
 `font_features` from fonts.yml is injected as CSS `font-feature-settings`, so `aalt` behaves identically
 to the Python path. Runs multiple Chrome processes with configurable per-process page concurrency.
 
-**Output:** `classical-corpus-kannada/a5-pages/<title>__<font_tag>/pageNNNN.png` + `.gt.txt`.
+### Always use `--lines` for training data
+
+```bash
+python3 corpus/render-a5-pages.py --lines        # LSTM-ready line images
+python3 corpus/render-a5-pages.py                # page images — NOT trainable
+```
+
+**Page mode output is unusable for LSTM training.** Tesseract needs one image per text line. A full A5
+page paired with the whole page's text cannot be aligned by CTC: the LSTM scales input to 48px height,
+so an 875×1241 page becomes ~33 timesteps while the transcription needs ~700 labels. `lstmtraining`
+then reports:
+
+```
+Compute CTC targets failed for <file>.lstmf!
+```
+
+Every one of the 28,534 pages rendered in page mode failed this way (sampled 200/200 infeasible), while
+`rendered/` and `inventory/` line images passed 200/200.
+
+**How `--lines` works.** After layout, `measureLinesInPage()` walks the text one character at a time
+asking Chrome for each character's client rect, and groups characters sharing a baseline row (3px
+tolerance) into a visual line. That yields the exact pixel box of every wrapped line *and* the text
+that produced it, so the crop and its ground truth cannot drift apart — no OCR or heuristic
+segmentation is involved. The page is screenshotted once and cropped with sharp.
+
+Degradation is applied to the page *before* cropping, so line images keep realistic page-level artefacts.
+
+**Output:** `<title>/<font_tag>/pageNNNN_lineNNN.png` + `.gt.txt`, typically ~15 lines per page at
+875×55 each — about 760 timesteps for ~46 characters, roughly 16× the CTC minimum.
+
+`02-make-lstmf.sh` carries a matching guard that skips any pair whose labels exceed the timestep
+budget, so page-mode leftovers can never silently re-enter `list.txt`.
 
 ---
 

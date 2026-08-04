@@ -12,6 +12,12 @@
 #   ಱ (U+0CB1)  KANNADA LETTER RRA
 #   ೃ (U+0CC3)  KANNADA VOWEL SIGN VOCALIC R  ← very common in Sanskrit-
 #               origin classical Kannada: ನೃಪ ಮೃ ಕೃ ತೃ ಕೃಷ್ಣ ಮೃತ್ಯು…
+#   ಞ (U+0C9E)  KANNADA LETTER NYA  ← present in the base unicharset only
+#               INSIDE cluster units such as ಜ್ಞ; standalone ಞ cannot be
+#               encoded, so any line containing it is skipped (177 corpus lines)
+#   ೞ (U+0CDE)  KANNADA LETTER FA (archaic ḷa) ← appears in 9,610 classical
+#               ground-truth files — the single largest source of encoding
+#               failures in the classical corpus
 #
 # WHY: The tessdata_best unicharset omits these characters.
 # lstmtraining skips any training line that contains them, producing
@@ -56,7 +62,7 @@ WORK_DIR="$ROOT/tmp/unicharset_work"
 LANGDATA_DIR="$ROOT/tmp/langdata_lstm"
 OUTPUT_TESSDATA="$ROOT/tessdata_expanded"
 
-MISSING_CHARS="ಋ ಙ ಝ ಱ ೃ"
+MISSING_CHARS="ಋ ಙ ಝ ಱ ೃ ಞ ೞ"
 BASE_URL="https://raw.githubusercontent.com/tesseract-ocr/langdata_lstm/main/kan"
 
 echo ""
@@ -279,12 +285,14 @@ else:
 echo ""
 echo "→ Step 3: Creating corpus with missing characters..."
 cat > "$WORK_DIR/new_chars.txt" << 'EOF'
-ಋ ಙ ಝ ಱ
+ಋ ಙ ಝ ಱ ಞ ೞ
 ಋಷಿ ಋಣ ಋತು ಋಗ್ವೇದ ಋಜು ಋಕ್ಷ
 ಝರ ಝಲ ಝಳ ಝಂಕ ಝಗ ಝಲಕ
 ಗಾಱ ಅಱ ಕಱ ತಱ ಮಱ
 ಮಙ ಲಙ ಅಙ ಪಙ ಮಙ್ಕ ಪಙ್ಕ
 ನೃಪ ನೃಪತಿ ಮೃತ್ಯು ಕೃತ್ಯ ಕೃಷ್ಣ ತೃಪ್ತಿ ಮೃದು ವೃತ್ತಿ
+ಞಾನ ಅಞ ಮಞ ಪಞ ವಿಜ್ಞಾನ ಸಂಜ್ಞೆ ಆಜ್ಞೆ ಯಜ್ಞ
+ೞ ಪೞ ಕೞ ಮೞ ಎೞ ತೞ ಪೞೆಯ ಕೞಿ ಮೞೆ ಎೞ್ತು
 EOF
 # IMPORTANT: ೃ (U+0CC3, KANNADA VOWEL SIGN VOCALIC R) must NOT appear
 # standalone here — unicharset_extractor rejects bare combining chars:

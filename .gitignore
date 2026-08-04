@@ -83,3 +83,5 @@ test-images/**/*.gt.txt
 test-images/**/manifest.json
 test-images/**/ocr_history.json
 test-images/manifest.json
+Kannada_OCR_Presentation.pptx
+.autopilot/

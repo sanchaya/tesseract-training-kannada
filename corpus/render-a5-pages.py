@@ -185,6 +185,17 @@ def main() -> None:
         help=f"Approximate chars per page chunk (default: {_CHARS_PER_PAGE})",
     )
     parser.add_argument(
+        "--lines", action="store_true",
+        help="Emit one cropped image per TEXT LINE (pageNNNN_lineNNN.png) instead "
+             "of one image per page. Required for LSTM training — a full-page "
+             "image paired with the whole page's text cannot be aligned by CTC "
+             "and lstmtraining reports 'Compute CTC targets failed'.",
+    )
+    parser.add_argument(
+        "--line-pad", type=int, default=6,
+        help="Padding in px around each cropped line (default: 6)",
+    )
+    parser.add_argument(
         "--workers", type=int, default=1,
         help="Number of parallel Chrome processes (default: 1; max useful = number of fonts = 9)",
     )
@@ -235,6 +246,7 @@ def main() -> None:
     print(f"Workers     : {args.workers} Chrome process(es)")
     print(f"Concurrency : {args.concurrency} pages per process")
     print(f"Renderer    : headless Chrome via browser_render.js")
+    print(f"Output mode : {'LINE images (LSTM-ready)' if args.lines else 'PAGE images (not usable for LSTM training)'}")
     print()
 
     # ── Load fonts.yml ────────────────────────────────────────────────────
@@ -325,6 +337,8 @@ def main() -> None:
                         "page_h":   args.page_h,
                         "margin_x": args.margin_x,
                         "margin_y": args.margin_y,
+                        "lines":    args.lines,
+                        "line_pad": args.line_pad,
                     })
                     pages_total += 1
 

@@ -191,6 +191,62 @@ function buildHtml(fontPath, text, fontSize,
 </html>`;
 }
 
+// ── Per-line box measurement (runs inside the page) ──────────────────────────
+// Walks the rendered text one character at a time, asking Chrome for each
+// character's client rect, and groups characters that share a baseline row into
+// a visual line. This gives the exact pixel box of every wrapped line together
+// with the text that produced it — so a cropped line image and its ground truth
+// can never drift apart.
+//
+// Serialised to the browser by page.evaluate(), so it must be self-contained.
+function measureLinesInPage() {
+  const el = document.getElementById('t');
+  if (!el || !el.firstChild) return [];
+  const node = el.firstChild;
+  const text = node.textContent || '';
+  const range = document.createRange();
+
+  const lines = [];
+  let cur = null;
+  const ROW_TOLERANCE = 3;   // px — same line if tops differ by less than this
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '\n') { cur = null; continue; }   // explicit break starts a line
+
+    range.setStart(node, i);
+    range.setEnd(node, i + 1);
+    const r = range.getBoundingClientRect();
+
+    // Zero-area rects are collapsed whitespace — keep the character in the
+    // transcription (word spacing matters) but don't let it define the box.
+    if (!r || (r.width === 0 && r.height === 0)) {
+      if (cur) cur.text += ch;
+      continue;
+    }
+
+    if (!cur || Math.abs(r.top - cur.top) > ROW_TOLERANCE) {
+      cur = { top: r.top, left: r.left, right: r.right, bottom: r.bottom, text: ch };
+      lines.push(cur);
+    } else {
+      cur.left   = Math.min(cur.left,   r.left);
+      cur.right  = Math.max(cur.right,  r.right);
+      cur.top    = Math.min(cur.top,    r.top);
+      cur.bottom = Math.max(cur.bottom, r.bottom);
+      cur.text  += ch;
+    }
+  }
+
+  return lines
+    .map(l => ({
+      text: l.text.trim(),
+      x: l.left, y: l.top,
+      w: l.right - l.left,
+      h: l.bottom - l.top,
+    }))
+    .filter(l => l.text.length > 0 && l.w > 0 && l.h > 0);
+}
+
 // ── Noise / blur degradation (mimics historical print) ───────────────────────
 function deterministicRng(seed) {
   let s = seed >>> 0;
@@ -300,12 +356,22 @@ async function renderBatch(browser, jobs, label = '') {
       font, text, out, size = 36, degrade = false, seed = 0, features = '',
       // A5 page-mode fields (optional)
       page_w = 0, page_h = 0, margin_x = 50, margin_y = 60,
+      // Line mode: emit one cropped image per visual text line instead of one
+      // page image. Required for LSTM training — see the note in renderBatch.
+      lines: lineMode = false, line_pad: linePad = 6,
     } = job;
     const isPage = page_w > 0 && page_h > 0;
 
-    // Resume: skip already rendered
+    // Resume: skip already rendered.
+    // In line mode the page itself is never written, so completion is judged
+    // by the first line's output instead.
     const gtPath = out.replace(/\.png$/, '.gt.txt');
-    if (fs.existsSync(out) && fs.existsSync(gtPath)) {
+    if (lineMode) {
+      const probe = out.replace(/\.png$/, '_line000.png');
+      if (fs.existsSync(probe) && fs.existsSync(probe.replace(/\.png$/, '.gt.txt'))) {
+        return 'skip';
+      }
+    } else if (fs.existsSync(out) && fs.existsSync(gtPath)) {
       return 'skip';
     }
 
@@ -386,6 +452,46 @@ async function renderBatch(browser, jobs, label = '') {
       });
 
       fs.mkdirSync(path.dirname(out), { recursive: true });
+
+      // ── Line mode ────────────────────────────────────────────────
+      // Tesseract LSTM training needs ONE IMAGE PER TEXT LINE. A full page
+      // paired with the whole page's text cannot be aligned by CTC: the image
+      // scales to ~33 timesteps at 48px height while the transcription needs
+      // hundreds, and lstmtraining reports "Compute CTC targets failed".
+      //
+      // Chrome already knows where every line landed after layout, so we ask
+      // it for the per-line boxes and crop the page screenshot accordingly.
+      // The crop is exact and the ground truth is the text of that line —
+      // no OCR or heuristic segmentation involved.
+      if (lineMode) {
+        const boxes = await page.evaluate(measureLinesInPage);
+        if (!boxes.length) return 'fail:no lines measured';
+
+        const sharp = require('sharp');
+        const stem  = out.replace(/\.png$/, '');
+        let written = 0;
+
+        for (let i = 0; i < boxes.length; i++) {
+          const b = boxes[i];
+          if (!b.text) continue;
+          // Pad, then clamp to the page so the crop is always in bounds.
+          const x = Math.max(0, Math.floor(b.x - linePad));
+          const y = Math.max(0, Math.floor(b.y - linePad));
+          const w = Math.min(W - x, Math.ceil(b.w + linePad * 2));
+          const h = Math.min(H - y, Math.ceil(b.h + linePad * 2));
+          if (w < 8 || h < 8) continue;
+
+          const lineOut = `${stem}_line${String(i).padStart(3, '0')}.png`;
+          await sharp(pngBuf)
+            .extract({ left: x, top: y, width: w, height: h })
+            .png()
+            .toFile(lineOut);
+          fs.writeFileSync(lineOut.replace(/\.png$/, '.gt.txt'), b.text, 'utf8');
+          written++;
+        }
+        return written ? 'ok' : 'fail:no usable lines';
+      }
+
       fs.writeFileSync(out, pngBuf);
       fs.writeFileSync(gtPath, text, 'utf8');
       return 'ok';

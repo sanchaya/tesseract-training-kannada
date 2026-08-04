@@ -212,6 +212,65 @@ if _UNSUPPORTED:
           f"(run 00c-expand-unicharset.sh {'--force ' if _has_expanded else ''}to add them)",
           flush=True)
 
+# ── Authoritative encodability check ─────────────────────────────────────────
+# The hardcoded _UNSUPPORTED set above is a guess maintained by hand. This reads
+# the ACTUAL unicharset out of the traineddata being used, so nothing unencodable
+# can reach list.txt regardless of what is stale on disk.
+#
+# Three classes of input fail encoding and used to spam every training epoch with
+# "Can't encode transcription / Encoding of string failed":
+#   • reserved codepoints that aren't characters (U+0C8D, U+0C91, U+0CA9)
+#   • real characters absent from the unicharset (ಌ, ೄ, ೞ)
+#   • characters valid only INSIDE a cluster — ಞ encodes within ಜ್ಞ but not alone
+def _load_units():
+    import subprocess, tempfile
+    td = _exp_tdata if _has_expanded else os.path.join(tdata, 'kan.traineddata')
+    if not os.path.exists(td):
+        return None
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = os.path.join(tmp, 'kan.')
+            subprocess.run(['combine_tessdata', '-u', td, prefix],
+                           capture_output=True, check=True)
+            uc = prefix + 'lstm-unicharset'
+            if not os.path.exists(uc):
+                return None
+            with open(uc, encoding='utf-8', errors='replace') as fh:
+                lines = fh.read().split('\n')
+            return {l.split(' ')[0] for l in lines[1:] if l.strip()} or None
+    except Exception:
+        return None
+
+_UNITS   = _load_units()
+_MAXUNIT = max((len(u) for u in _UNITS), default=1) if _UNITS else 1
+
+# Whitespace and the virama are never standalone unicharset units, yet both are
+# perfectly encodable: Tesseract treats space as a word separator outside the
+# unicharset, and the virama (್ U+0CCD) only ever appears fused into cluster
+# units such as ್ನ. Treating them as failures would reject 96% of valid corpus
+# lines — every multi-word sentence — so they are exempt from the check.
+_ENCODE_EXEMPT = set(' \t\n್')
+
+def _encodable(text):
+    """Greedy longest-match segmentation into unicharset units (Tesseract's encoder)."""
+    if not _UNITS:
+        return True
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] in _ENCODE_EXEMPT:
+            i += 1
+            continue
+        for size in range(min(_MAXUNIT, n - i), 0, -1):
+            if text[i:i + size] in _UNITS:
+                i += size
+                break
+        else:
+            return False
+    return True
+
+print(f"  Unicharset: {len(_UNITS) if _UNITS else 'UNAVAILABLE — encodability check disabled'}"
+      f"{' units' if _UNITS else ''}", flush=True)
+
 def _make_lstmf_impl(img_path_str):
     """
     Convert one PNG+gt.txt pair to an lstmf file.
@@ -297,6 +356,14 @@ def _make_lstmf_impl(img_path_str):
     # the run look stuck. Skip them here rather than letting them into
     # list.txt. Line-level images (rendered/, inventory/) pass comfortably.
     _txt = gt_text.strip()
+
+    # Reject anything the model cannot encode, before Tesseract is invoked.
+    if _txt and not _encodable(_txt):
+        _bad = ''.join(sorted({c for c in _txt if not _encodable(c)}))
+        print(f"  ⊘ {stem}: not encodable in unicharset"
+              f"{f' (offending: {_bad})' if _bad else ''}", flush=True)
+        return None
+
     _timesteps = int(w * (48.0 / h)) if h else 0
     if _txt and _timesteps < len(_txt):
         print(f"  ⊘ {stem}: CTC infeasible — {len(_txt)} labels need > {_timesteps} "
@@ -450,7 +517,7 @@ echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Done. lstmf/list.txt contains $TOTAL files."
 echo ""
-echo "  NEXT: caffeinate -i ./scripts/03-train.sh > training.log 2>&1 &"
-echo "        tail -f training.log"
+echo "  NEXT: caffeinate -i ./scripts/03-train.sh"
+echo "        tail -f logs/training.log"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""

@@ -823,6 +823,7 @@ app.post("/api/run/:step", (req, res) => {
     clean:         ["python3", [path.join(P.corpus,  "clean-corpus.py")]],
     specimen:      ["python3", [path.join(P.corpus,  "generate-specimen.py"), "--merge"]],
     render:        ["python3", [path.join(P.corpus,  "render-corpus.py")]],
+    inventory:     ["python3", [path.join(P.corpus,  "generate-inventory.py")]],
     lstmf:         ["bash",    [path.join(P.scripts, "02-make-lstmf.sh")]],
     train:         ["bash",    [path.join(P.scripts, "03-train.sh")]],
     package:       ["bash",    [path.join(P.scripts, "04-package.sh")]],
@@ -846,6 +847,15 @@ app.post("/api/run/:step", (req, res) => {
   // Pass --force to expand script when requested
   const runArgs = [...args];
   if (step === 'expandunichar' && force) runArgs.push('--force');
+
+  // render-corpus.py skips images that already exist. --force overwrites them
+  // in place, which is what you want after a shaping or font change — no need
+  // to delete rendered/ first.
+  if (step === 'render' && force) runArgs.push('--force');
+
+  // generate-inventory.py defaults to the weights declared in fonts.yml;
+  // ?all_fonts=1 widens it to every .ttf/.otf on disk.
+  if (step === 'inventory' && req.query.all_fonts === '1') runArgs.push('--all-fonts');
 
   // Support TRAIN_MODE variants for the training step
   const runOpts = {};
@@ -878,6 +888,33 @@ app.post("/api/run/:step", (req, res) => {
     }
   }
 
+  // Same treatment for the character inventory. 02-make-lstmf.sh only includes
+  // inventory/ when INVENTORY_DIR is set, so without this the portal silently
+  // built a training set with NO character baselines — the inventory-first
+  // strategy simply didn't happen for portal-driven runs.
+  if (step === 'lstmf') {
+    const invDir = path.join(ROOT, 'inventory');
+    // withFileTypes so a stray file (.DS_Store) can't make readdirSync throw and
+    // mask a perfectly good inventory. Accept PNGs at the top level too.
+    const hasInv = (() => {
+      try {
+        const entries = fs.readdirSync(invDir, { withFileTypes: true });
+        if (entries.some(e => e.isFile() && e.name.endsWith('.png'))) return true;
+        return entries.some(e => {
+          if (!e.isDirectory()) return false;
+          try { return fs.readdirSync(path.join(invDir, e.name)).some(f => f.endsWith('.png')); }
+          catch { return false; }
+        });
+      } catch { return false; }
+    })();
+    if (hasInv) {
+      runOpts.env = { ...runOpts.env, INVENTORY_DIR: invDir };
+      console.log(`  [lstmf] INVENTORY_DIR set: ${invDir}`);
+    } else {
+      console.log(`  [lstmf] inventory/ empty or missing — run the Inventory step first`);
+    }
+  }
+
   runBg(cmd, runArgs, step, runOpts);
   res.json({ ok: true, step });
 });
@@ -893,7 +930,12 @@ let _a5CorpusPath = '';     // last corpus dir used — passed to 02-make-lstmf.
 app.post("/api/render-a5-pages", express.json(), (req, res) => {
   if (_a5Proc) return res.status(409).json({ error: "Already running — stop it first" });
 
-  const { corpus_dir, font_size = 32, workers = 1, concurrency = 2 } = req.body || {};
+  // `lines` defaults to TRUE: page-mode output cannot be used for LSTM training
+  // (a full page paired with the whole page's text is CTC-infeasible — see
+  // docs/IMAGE_GENERATION.md §8). Pass lines:false only to produce page images
+  // for visual inspection.
+  const { corpus_dir, font_size = 32, workers = 1, concurrency = 2,
+          lines = true } = req.body || {};
   if (!corpus_dir) return res.status(400).json({ error: "corpus_dir required" });
 
   // Resolve path: expand ~, resolve relative to ROOT, follow symlinks
@@ -926,6 +968,8 @@ app.post("/api/render-a5-pages", express.json(), (req, res) => {
     "--workers",    String(Math.max(1,  Math.min(9,  parseInt(workers)    || 1))),
     "--concurrency",String(Math.max(1,  Math.min(8,  parseInt(concurrency)|| 2))),
   ];
+  if (lines) args.push("--lines");
+  console.log(`  [a5] mode: ${lines ? "LINE images (LSTM-ready)" : "PAGE images (not trainable)"}`);
 
   rotateLogIfNeeded();
   const logFd = fs.openSync(P.logFile, "a");

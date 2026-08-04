@@ -35,13 +35,21 @@ ROOT="$SCRIPT_DIR/.."
 cd "$ROOT"
 
 # ── Self-logging ──────────────────────────────────────────────────────────────
-# Mirror all output into logs/training.log (the file the portal's Live Log
-# tails) when running on a terminal. Skipped when stdout is already redirected
-# or piped — the caller owns the stream in that case, and teeing would write
-# every line twice.
+# Always mirror output into logs/training.log — the file the portal's Live Log
+# tails — however this script was invoked.
+#
+# Two cases must NOT tee, or every line would be written twice:
+#   • the portal, which already points the child's stdout at that same file
+#     (it sets TRAINOCR_NO_TEE=1);
+#   • a caller that redirected to logs/training.log explicitly, detected with
+#     `-ef` (same device + inode).
+#
+# A caller redirecting somewhere else — e.g. the old `> training.log` habit that
+# dropped the log in the repo root — still gets logs/training.log populated, so
+# the portal keeps working regardless.
 TRAIN_LOG="$ROOT/logs/training.log"
-if [ -z "$TRAINOCR_NO_TEE" ] && [ -t 1 ]; then
-  mkdir -p "$ROOT/logs"
+mkdir -p "$ROOT/logs"
+if [ -z "$TRAINOCR_NO_TEE" ] && ! [ /dev/stdout -ef "$TRAIN_LOG" ] 2>/dev/null; then
   echo "[trainocr] logging to logs/training.log"
   exec > >(tee -a "$TRAIN_LOG") 2>&1
 fi

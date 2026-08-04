@@ -778,9 +778,14 @@ footer a:hover { text-decoration: underline; }
     <button class="btn btn-primary step-run-btn" onclick="run('clean')"              id="sb-clean">    Clean corpus</button>
     <button class="btn btn-primary step-run-btn" onclick="run('specimen', true)"      id="sb-specimen" title="Generate systematic character coverage text and merge into corpus">Specimen</button>
     <button class="btn btn-primary step-run-btn" onclick="runWithPreflight('render')" id="sb-render">  ③ Render images</button>
+    <button class="btn step-run-btn" onclick="run('render', true)" id="sb-force-render"
+      title="Re-render every image in place, overwriting existing files. Use after a shaping, font, or corpus change — no need to delete rendered/ first."
+      style="background:var(--card);color:#b45309;border:1.5px dashed #fde68a;font-size:0.8em;padding:4px 8px">↺ Force re-render</button>
     <button class="btn step-run-btn" onclick="clearAndRerender()" id="sb-clear-render"
       title="Delete all rendered/ PNGs and .gt.txt files, then re-render from corpus"
       style="background:var(--card);color:#b45309;border:1.5px solid #fde68a">↺ Clear &amp; re-render</button>
+    <button class="btn btn-primary step-run-btn" onclick="run('inventory')" id="sb-inventory"
+      title="Generate the character inventory — systematic vowel / consonant / conjunct baselines for every font declared in fonts.yml. Required for inventory-first training; ④ Make lstmf includes it automatically once generated.">Inventory</button>
     <button class="btn step-run-btn" onclick="showA5Panel()" id="sb-a5"
       title="Render A5 page images from a classical corpus directory using headless Chrome — correct conjunct shaping for all fonts"
       style="background:var(--card);color:#065f46;border:1.5px solid #6ee7b7;font-size:0.8em;padding:4px 8px">🌐 A5 Browser Render</button>
@@ -835,6 +840,17 @@ footer a:hover { text-decoration: underline; }
             style="width:100%;margin-top:3px;padding:5px 7px;border:1.5px solid var(--border2);border-radius:6px;font-size:.8rem;background:var(--bg)">
         </label>
       </div>
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding:8px 10px;
+                    background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;cursor:pointer">
+        <input id="a5-lines" type="checkbox" checked style="margin-top:2px">
+        <span style="font-size:.78rem;line-height:1.5">
+          <strong>Line images (required for training)</strong><br>
+          <span style="color:var(--mute)">Crops each page into one image per text line. Tesseract
+          cannot train on full-page images — a page paired with its whole text is CTC-infeasible and
+          logs <em>“Compute CTC targets failed”</em>. Uncheck only to produce page images for visual
+          inspection.</span>
+        </span>
+      </label>
     </div>
     <!-- Progress bar (shown while running or after stop) -->
     <div id="a5-progress-wrap" style="display:none;margin-bottom:10px">
@@ -2385,7 +2401,7 @@ async function loadStatus() {
   // Update proc-badge
   if (running) {
     const stepNames = { prep:'Prep base', expandunichar:'Expanding unicharset', wiki:'Downloading corpus', clean:'Cleaning corpus',
-      render:'Rendering images', lstmf:'Building lstmf', train:'Training', package:'Packaging' };
+      render:'Rendering images', inventory:'Generating inventory', lstmf:'Building lstmf', train:'Training', package:'Packaging' };
     badge.style.display = 'inline-flex';
     badge.textContent = `⚙ ${stepNames[running] || running}…`;
     badge.className = 'pill pill-brand';
@@ -2627,7 +2643,8 @@ let dashLogSrc = null;
 
 async function run(step, force, mode) {
   const names = { prep:'Prep base', expandunichar:'Expanding unicharset', wiki:'Download corpus', clean:'Clean corpus',
-                  specimen:'Generate specimen', render:'Render images',
+                  specimen:'Generate specimen', render: force ? 'Re-render images (force)' : 'Render images',
+                  inventory:'Character inventory',
                   lstmf:'Make lstmf', train: mode === 'fresh' ? 'Train (fresh+expanded)' : 'Train', package:'Package' };
   if (STATIC_MODE) { toast('Training unavailable in static mode — run the Node.js server'); return; }
 
@@ -4211,6 +4228,7 @@ async function startA5Render() {
   const fontSize    = parseInt(document.getElementById('a5-font-size').value)   || 32;
   const workers     = parseInt(document.getElementById('a5-workers').value)     || 1;
   const concurrency = parseInt(document.getElementById('a5-concurrency').value) || 2;
+  const lines       = document.getElementById('a5-lines')?.checked !== false;
 
   if (!corpusDir) {
     _a5SetState('error', 'Enter the corpus folder path first');
@@ -4218,12 +4236,13 @@ async function startA5Render() {
   }
 
   _a5CorpusDir = corpusDir;
-  _a5SetState('running', 'Starting Chrome workers…');
+  _a5SetState('running', lines ? 'Starting Chrome workers — line mode…'
+                               : 'Starting Chrome workers — PAGE mode (not trainable)…');
 
   try {
     const r = await fetch('/api/render-a5-pages', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ corpus_dir: corpusDir, font_size: fontSize, workers, concurrency })
+      body: JSON.stringify({ corpus_dir: corpusDir, font_size: fontSize, workers, concurrency, lines })
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Failed to start');

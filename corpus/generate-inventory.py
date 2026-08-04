@@ -89,6 +89,86 @@ def _declared_stems():
     return set(_aalt_map().keys())
 
 
+# ── Unicharset validation ──────────────────────────────────────────────────────
+
+_UNITS_CACHE = None
+
+def _unicharset_units():
+    """
+    The set of unichars the training model can actually encode.
+
+    Returns None when the unicharset cannot be read, in which case validation is
+    skipped (with a warning) rather than silently dropping everything.
+    """
+    global _UNITS_CACHE
+    if _UNITS_CACHE is not None:
+        return _UNITS_CACHE or None
+
+    mode_file = ROOT / 'output' / '.tessdata_mode'
+    expanded  = mode_file.exists() and 'expanded' in mode_file.read_text(errors='ignore')
+    td = ROOT / ('tessdata_expanded' if expanded else 'tessdata_best') / 'kan.traineddata'
+    if not td.exists():
+        _UNITS_CACHE = set()
+        return None
+
+    import subprocess, tempfile
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = str(Path(tmp) / 'kan.')
+            subprocess.run(['combine_tessdata', '-u', str(td), prefix],
+                           capture_output=True, check=True)
+            uc = Path(prefix + 'lstm-unicharset')
+            if not uc.exists():
+                _UNITS_CACHE = set()
+                return None
+            lines = uc.read_text(encoding='utf-8', errors='replace').split('\n')
+            # Format: first line is the count, then "<unichar> <props...>" per line.
+            _UNITS_CACHE = {l.split(' ')[0] for l in lines[1:] if l.strip()}
+    except Exception:
+        _UNITS_CACHE = set()
+        return None
+    return _UNITS_CACHE or None
+
+
+def _encodable(text, units):
+    """
+    True when *text* can be segmented entirely into unicharset units.
+
+    Mirrors Tesseract's greedy longest-match encoder. Catches three classes of
+    unusable input that this generator used to emit blindly by iterating raw
+    Unicode ranges:
+
+      • reserved codepoints that are not characters at all
+        (U+0C8D, U+0C91, U+0CA9 fall inside the vowel/consonant ranges)
+      • real characters absent from the unicharset (ಌ U+0C8C, ೄ U+0CC4, ೞ U+0CDE)
+      • characters that exist only INSIDE clusters and cannot stand alone —
+        ಞ (U+0C9E) is encodable within ಜ್ಞ but not on its own
+
+    Each of these produced an image whose ground truth lstmtraining then rejected
+    with "Can't encode transcription / Encoding of string failed".
+    """
+    if not units:
+        return True          # validation unavailable — don't drop anything
+    # Space and the virama are never standalone units but are always encodable:
+    # space is a word separator outside the unicharset, and ್ (U+0CCD) exists
+    # only fused into cluster units like ್ನ. Without this exemption the check
+    # would reject every multi-word line.
+    exempt = set(' \t\n್')
+    longest = max((len(u) for u in units), default=1)
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] in exempt:
+            i += 1
+            continue
+        for size in range(min(longest, n - i), 0, -1):
+            if text[i:i + size] in units:
+                i += size
+                break
+        else:
+            return False
+    return True
+
+
 def find_fonts(pattern=None, all_fonts=False):
     """
     Locate Kannada fonts under fonts/.
@@ -222,6 +302,23 @@ def generate_inventory(fonts, dpi=150, limit=None):
 
     # Numerals
     combinations.extend([(n, f'numeral_{ord(n):04x}') for n in KANNADA_NUMERALS])
+
+    # ── Drop combinations the model cannot encode ────────────────────────────
+    # Without this the generator renders images whose ground truth lstmtraining
+    # rejects at every epoch ("Can't encode transcription: 'ಖೄ'"), inflating the
+    # skip ratio and wasting the image entirely.
+    units = _unicharset_units()
+    if units is None:
+        print("  ⚠  unicharset unavailable — skipping encodability validation")
+    else:
+        before = len(combinations)
+        rejected = [(t, cid) for t, cid in combinations if not _encodable(t, units)]
+        combinations = [(t, cid) for t, cid in combinations if _encodable(t, units)]
+        if rejected:
+            print(f"  ⊘ {before - len(combinations)} of {before} combinations are not "
+                  f"encodable in the unicharset — skipping")
+            shown = ', '.join(repr(t) for t, _ in rejected[:8])
+            print(f"    e.g. {shown}{' …' if len(rejected) > 8 else ''}")
 
     if limit:
         combinations = combinations[:limit]
