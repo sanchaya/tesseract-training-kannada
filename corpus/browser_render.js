@@ -535,9 +535,24 @@ async function renderBatch(browser, jobs, label = '') {
           // Pad, then clamp to the page so the crop is always in bounds.
           const x = Math.max(0, Math.floor(b.x - linePad));
           const y = Math.max(0, Math.floor(b.y - linePad));
-          const w = Math.min(W - x, Math.ceil(b.w + linePad * 2));
-          const h = Math.min(H - y, Math.ceil(b.h + linePad * 2));
-          if (w < 8 || h < 8) continue;
+          const wantW = Math.ceil(b.w + linePad * 2);
+          const wantH = Math.ceil(b.h + linePad * 2);
+          const w = Math.min(W - x, wantW);
+          const h = Math.min(H - y, wantH);
+
+          // Drop lines cut off by the page fold.
+          //
+          // The page is `overflow:hidden`, so the last line of a chunk is often
+          // only partly rendered. Its measured box still reports the FULL line
+          // height, and clamping to the page then yields a sliver — typically
+          // 10px — while the ground truth still describes the whole line. That
+          // is a mismatched pair: the transcription names text the image does
+          // not show. One per page, ~5% of all crops, all at the highest line
+          // index (line020/line021 in a 21-line page).
+          //
+          // Losing the tail of a page costs almost nothing; training on an image
+          // whose GT does not match it is actively harmful.
+          if (h < wantH * 0.7 || h < 16 || w < 8) continue;
 
           const lineOut = `${stem}_line${String(i).padStart(3, '0')}.png`;
           await sharp(pngBuf)
