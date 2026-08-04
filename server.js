@@ -194,27 +194,65 @@ function lineCount(file) {
 }
 
 // ── Classical corpus helpers ────────────────────────────────────────────────
-// Count PNG files recursively in a directory tree (cached 60 s).
-let _classicalCache = { count: 0, ts: 0 };
-function classicalImgCount() {
-  const now = Date.now();
-  if (now - _classicalCache.ts < 60_000) return _classicalCache.count;
-  let count = 0;
-  function walk(dir) {
-    if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir)) {
-      const full = path.join(dir, entry);
-      try {
-        const st = fs.statSync(full);
-        if (st.isDirectory()) walk(full);
-        else if (entry.endsWith(".png")) count++;
-      } catch { /* skip permission errors */ }
+// Count PNG files under the classical A5 tree.
+//
+// This tree is BIG: line-mode rendering produces roughly 15 line images per page
+// across ~28.5K pages per font family — 1.4M+ files in practice. The original
+// implementation walked it synchronously with a statSync per entry on every
+// cache miss, which blocked /api/status for minutes. Since the dashboard polls
+// status every few seconds, the whole portal appeared dead.
+//
+// Two changes:
+//   • withFileTypes — one syscall per directory instead of one per entry
+//   • stale-while-revalidate — never block a request. Return the last known
+//     count immediately and refresh in the background.
+//
+// `count` is null until the first walk finishes; callers render that as
+// "counting…" rather than a misleading 0.
+let _classicalCache = { count: null, ts: 0, running: false };
+const CLASSICAL_TTL = 10 * 60 * 1000;
+
+// Genuinely asynchronous walk. A sync walk wrapped in setImmediate is NOT
+// enough: once it starts it owns the event loop until it finishes, so the first
+// request after boot still waited the full duration. Using fs.promises means
+// every readdir yields, and requests are served while the count proceeds.
+async function _walkCountPng(dir) {
+  let n = 0;
+  const stack = [dir];
+  while (stack.length) {
+    const d = stack.pop();
+    let entries;
+    try { entries = await fs.promises.readdir(d, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      if (e.isDirectory()) stack.push(path.join(d, e.name));
+      else if (e.name.endsWith(".png")) n++;
     }
   }
-  walk(P.classicalA5);
-  _classicalCache = { count, ts: now };
-  return count;
+  return n;
 }
+
+async function refreshClassicalCount() {
+  if (_classicalCache.running) return;
+  _classicalCache.running = true;
+  const t0 = Date.now();
+  try {
+    const count = fs.existsSync(P.classicalA5) ? await _walkCountPng(P.classicalA5) : 0;
+    _classicalCache = { count, ts: Date.now(), running: false };
+    const secs = ((Date.now() - t0) / 1000).toFixed(1);
+    if (secs > 2) console.log(`  [status] classical images counted: ${count.toLocaleString()} in ${secs}s`);
+  } catch {
+    _classicalCache.running = false;          // keep the previous value
+  }
+}
+
+function classicalImgCount() {
+  if (Date.now() - _classicalCache.ts > CLASSICAL_TTL) refreshClassicalCount();
+  return _classicalCache.count;      // may be null on first call — never blocks
+}
+
+// Warm the cache at boot so the first dashboard load already has a number.
+refreshClassicalCount();
 
 // Break lstmf/list.txt into source buckets: rendered / classical / font-test / scan / other.
 function lstmfBreakdown() {
@@ -355,8 +393,9 @@ function corpusStats() {
     }
   }
 
-  // Classical rendered page count (ground truth for training)
-  const classicalPages = classicalImgCount();
+  // Classical rendered image count. null while the background count is still
+  // running — surfaced as 0 here so downstream arithmetic stays safe.
+  const classicalPages = classicalImgCount() ?? 0;
 
   return {
     total_lines:      modernLines + classicalLines,   // grand total
@@ -611,14 +650,16 @@ app.get("/api/status", (req, res) => {
 
   const renderDetail = [
     rendered  ? `${rendered.toLocaleString()} rendered lines` : null,
-    classical ? `${classical.toLocaleString()} classical pages` : null,
+    // classical is null while the first background count is still running
+    classical === null ? "counting classical images…"
+                       : classical ? `${classical.toLocaleString()} classical images` : null,
   ].filter(Boolean).join(" · ") || "No images yet";
 
   res.json({
     "00_unichar": { label: "Expand unicharset", done: fs.existsSync(path.join(ROOT, "tessdata_expanded", "kan.traineddata")), detail: fs.existsSync(path.join(ROOT, "tessdata_expanded", "kan.traineddata")) ? "Expanded (ಋ ಙ ಝ ಱ added)" : "Not done — ಋ ಙ ಝ ಱ missing" },
     "01_prep":   { label: "1. Prep base",      done: fs.existsSync(path.join(P.tessdataDir, "kan.traineddata")) && cloned === fonts.length, detail: `kan.traineddata ${fs.existsSync(path.join(P.tessdataDir,"kan.traineddata"))?"✓":"✗"}  fonts ${cloned}/${fonts.length}` },
     "02_corpus": { label: "2. Corpus",         done: corpN > 0,      detail: `${corpN.toLocaleString()} lines` },
-    "03_render": { label: "3. Render images",  done: rendered > 0 || classical > 0, detail: renderDetail },
+    "03_render": { label: "3. Render images",  done: rendered > 0 || (classical || 0) > 0, detail: renderDetail },
     "04_lstmf":  { label: "4. Make lstmf",     done: lstmfN > 0,     detail: `${lstmfN.toLocaleString()} .lstmf files (${bdStr})` },
     "05_train":  { label: "5. Train",          done: cps.length > 0, detail: cps.length ? `${cps.length} checkpoints` : "Not started" },
     "06_package":{ label: "6. Package",        done: bestOk,         detail: bestOk ? "kan_hist.traineddata ready" : "Not done" },
@@ -658,6 +699,12 @@ app.get("/api/fonts", (req, res) => {
     repo:     f.repo,
     styles:   (f.font_files || []).length,
     degrade:  !!f.degrade,
+    // Needed by the live preview: GTN and WMP keep their conjunct (ottu) forms
+    // in the 'aalt' GSUB feature, which browsers do not enable by default. The
+    // portal read `font_features` from this payload but it was never sent, so
+    // the value was always empty and the preview showed detached ottus for
+    // exactly the fonts the fix was written for.
+    font_features: f.font_features || "",
     // Presence of font files, not a .git dir — fonts installed by download
     // (Google Fonts) are legitimately present without ever being cloned.
     cloned:   hasFontFiles(f.id),

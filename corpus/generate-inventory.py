@@ -261,9 +261,132 @@ def render_char(text, font_path, dpi=150, height=80, aalt=False):
 
     return img
 
-def generate_inventory(fonts, dpi=150, limit=None):
+def complete_combinations():
+    """
+    The COMPLETE systematic inventory of Kannada orthographic units.
+
+    Built so coverage gaps cannot recur. Every gap chased individually this week
+    — ೞ, ಞ standalone, ್ಘ, ರ್ಖ — was a member of one of these families that
+    happened not to appear in the sampled corpus. Enumerating the families
+    closes the whole class instead of one instance at a time.
+
+        vowels                    15   ಅ ಆ ಇ …
+        consonants                34   ಕ ಖ ಗ …
+        consonant × vowel sign   476   ಕಾ ಕಿ ಕೀ …   (34 × 14)
+        conjunct C+virama+C    1,156   ಕ್ಕ ಕ್ಖ ರ್ಖ … (34 × 34)
+        half forms                34   ಕ್‌ ಖ್‌ …     (word-final, needs ZWNJ)
+        anusvara / visarga        68   ಕಂ ಕಃ …
+        numerals                  10   ೦ ೧ ೨ …
+
+    ~1,790 units. Only ASSIGNED codepoints are used — the reserved slots inside
+    the Kannada block (U+0C8D, U+0CA9, U+0CB4 …) are not characters and were a
+    bug source in their own right.
+
+    NOTE ON SIZE: adding every conjunct to the unicharset enlarges the LSTM
+    output layer, which slows training and can hurt accuracy for clusters that
+    never occur in real text. `--attested-only` restricts the set to clusters
+    actually present in the corpus, which is the recommended default for
+    training data; the full set is most useful for generating the unicharset
+    word list.
+    """
+    import unicodedata
+
+    def assigned(ch):
+        try:
+            unicodedata.name(ch)
+            return True
+        except ValueError:
+            return False
+
+    vowels     = [c for c in KANNADA_VOWELS if assigned(c)]
+    consonants = [c for c in KANNADA_CONSONANTS if assigned(c)] + [c for c in 'ೞ' if assigned(c)]
+    signs      = [c for c in KANNADA_VOWEL_SIGNS if assigned(c)]
+    numerals   = [c for c in KANNADA_NUMERALS if assigned(c)]
+
+    combos = []
+    for v in vowels:
+        combos.append((v, f'vowel_{ord(v):04x}'))
+    for c in consonants:
+        combos.append((c, f'consonant_{ord(c):04x}'))
+    for c in consonants:
+        for s in signs:
+            combos.append((c + s, f'cv_{ord(c):04x}_{ord(s):04x}'))
+    for c1 in consonants:
+        for c2 in consonants:
+            combos.append((c1 + KANNADA_VIRAMA + c2,
+                           f'conj_{ord(c1):04x}_{ord(c2):04x}'))
+    for c in consonants:
+        combos.append((c + KANNADA_VIRAMA + '‌', f'half_{ord(c):04x}'))
+    for c in consonants:
+        combos.append((c + KANNADA_ANUSVARA, f'anu_{ord(c):04x}'))
+        combos.append((c + KANNADA_VISARGA,  f'vis_{ord(c):04x}'))
+    for n in numerals:
+        combos.append((n, f'numeral_{ord(n):04x}'))
+    return combos
+
+
+def attested_clusters():
+    """Clusters that actually occur in the corpus — used by --attested-only."""
+    seen = set()
+    sources = [ROOT / 'corpus' / 'kan_corpus.txt']
+    cls = ROOT / 'classical-corpus-kannada'
+    if cls.exists():
+        sources += sorted(cls.glob('*/*.txt'))
+    for p in sources:
+        if not p.exists():
+            continue
+        try:
+            t = p.read_text(encoding='utf-8', errors='ignore')
+        except Exception:
+            continue
+        for i, ch in enumerate(t):
+            if ch == KANNADA_VIRAMA and 0 < i < len(t) - 1:
+                seen.add(t[i - 1] + ch + t[i + 1])
+    return seen
+
+
+def generate_inventory(fonts, dpi=150, limit=None, complete=False,
+                       attested_only=False, emit_wordlist=None):
     """Generate all character combinations."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    if complete:
+        combinations = complete_combinations()
+        print(f"  Enumerated coverage set: {len(combinations)} orthographic units")
+
+        # Enumeration alone is NOT complete. A 2-consonant grid cannot produce
+        # the 3-consonant clusters real Kannada uses (ರ್ಘ್ಯ, ಸ್ತ್ರೀ), nor
+        # conjunct+matra forms. Mining the corpus finds those; the union is the
+        # actual coverage set. This is why chasing gaps one at a time never
+        # converged — each fix addressed an instance, not the family.
+        att = attested_clusters()
+        have = {t for t, _ in combinations}
+        extra = [(c, f'attested_{i:05x}') for i, c in enumerate(sorted(att - have))]
+        if extra:
+            combinations += extra
+            print(f"  + {len(extra)} attested cluster(s) from the corpus that "
+                  f"enumeration misses → {len(combinations)} total")
+
+        if attested_only:
+            att = attested_clusters()
+            before = len(combinations)
+            combinations = [(t, cid) for t, cid in combinations
+                            if KANNADA_VIRAMA not in t or '‌' in t or t in att]
+            print(f"  --attested-only: {before} → {len(combinations)} "
+                  f"({len(att)} conjuncts seen in the corpus)")
+        if emit_wordlist:
+            # One unit per line, in context-free form. 00c-expand-unicharset.sh
+            # needs these to build unicharset entries; unicharset_extractor
+            # rejects bare combining sequences, so each cluster is padded into a
+            # minimal pseudo-word that keeps it in consonant context.
+            lines = []
+            for text, _ in combinations:
+                lines.append(text if not text.startswith(KANNADA_VIRAMA) else 'ಕ' + text)
+            Path(emit_wordlist).write_text(
+                '\n'.join(' '.join(lines[i:i + 12]) for i in range(0, len(lines), 12)) + '\n',
+                encoding='utf-8')
+            print(f"  ✓ word list written: {emit_wordlist} ({len(lines)} units)")
+        return _render_combinations(combinations, fonts, dpi, limit)
 
     combinations = []
 
@@ -305,6 +428,11 @@ def generate_inventory(fonts, dpi=150, limit=None):
     # Numerals
     combinations.extend([(n, f'numeral_{ord(n):04x}') for n in KANNADA_NUMERALS])
 
+    return _render_combinations(combinations, fonts, dpi, limit)
+
+
+def _render_combinations(combinations, fonts, dpi, limit):
+    """Validate, then render every (text, id) pair for every font."""
     # ── Drop combinations the model cannot encode ────────────────────────────
     # Without this the generator renders images whose ground truth lstmtraining
     # rejects at every epoch ("Can't encode transcription: 'ಖೄ'"), inflating the
@@ -365,6 +493,17 @@ def main():
     parser.add_argument('--limit', type=int, help='Limit combinations (for testing)')
     parser.add_argument('--all-fonts', action='store_true',
                         help='Use every .ttf on disk, not just the weights declared in fonts.yml')
+    parser.add_argument('--complete', action='store_true',
+                        help='Generate the COMPLETE Kannada coverage set (~1790 units): every '
+                             'vowel, consonant, consonant x vowel-sign, conjunct, half form, '
+                             'anusvara/visarga and numeral. Closes coverage gaps by construction.')
+    parser.add_argument('--attested-only', action='store_true',
+                        help='With --complete: keep only conjuncts that actually occur in the '
+                             'corpus. Recommended for training data — the full 1156-conjunct set '
+                             'enlarges the LSTM output layer with clusters real text never uses.')
+    parser.add_argument('--emit-wordlist', metavar='FILE',
+                        help='With --complete: write the unit list for 00c-expand-unicharset.sh '
+                             'so the unicharset covers every unit before images are generated.')
     args = parser.parse_args()
 
     font_patterns = args.fonts.split(',') if args.fonts else [None]
@@ -374,7 +513,10 @@ def main():
                                     all_fonts=args.all_fonts))
 
     print(f"Found {len(all_fonts)} fonts: {', '.join(sorted(all_fonts.keys())[:5])}...")
-    inventory_dir = generate_inventory(all_fonts, dpi=args.dpi, limit=args.limit)
+    inventory_dir = generate_inventory(all_fonts, dpi=args.dpi, limit=args.limit,
+                                       complete=args.complete,
+                                       attested_only=args.attested_only,
+                                       emit_wordlist=args.emit_wordlist)
 
     print(f"\nNext steps:")
     print(f"  1. Convert inventory to lstmf:")

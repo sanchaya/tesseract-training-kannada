@@ -4727,13 +4727,21 @@ function renderUnicodeGrid() {
   const selFont        = fontRegistry?.find(f => f.id === uFontId);
   const fontFeatures   = (selFont && selFont.font_features) || '';
   const fontFamily     = uVariant ? `'${CSS.escape(uVariant)}', 'Noto Sans Kannada', serif` : 'inherit';
-  const conjunctFontFamily = "'Noto Sans Kannada', 'Kannada Sangam MN', serif";
 
+  // Conjuncts use the SELECTED font, like every other row.
+  //
+  // They were previously pinned to "'Noto Sans Kannada', 'Kannada Sangam MN'" —
+  // a workaround from when virama conjuncts rendered detached in the historical
+  // fonts. That cause is understood now: GTN and WMP keep their correct ottu
+  // forms in the OpenType 'aalt' feature, which browsers do not enable by
+  // default (docs/CONJUNCT_RENDERING.md). The workaround silently showed a
+  // system font instead of the font under test — precisely the comparison this
+  // panel exists to make — and hid whether the real font shapes correctly.
   const groups = [
     { id:'unicode-vowels',     items:KANNADA_VOWELS,     type:'vowel',    ff: fontFamily, fs: fontFeatures },
     { id:'unicode-consonants', items:KANNADA_CONSONANTS, type:'consonant',ff: fontFamily, fs: fontFeatures },
-    { id:'unicode-conjuncts',  items:KANNADA_CONJUNCTS,  type:'conjunct', ff: conjunctFontFamily, fs: '' },
-    { id:'unicode-digits',     items:KANNADA_DIGITS,     type:'digit',    ff: fontFamily },
+    { id:'unicode-conjuncts',  items:KANNADA_CONJUNCTS,  type:'conjunct', ff: fontFamily, fs: fontFeatures },
+    { id:'unicode-digits',     items:KANNADA_DIGITS,     type:'digit',    ff: fontFamily, fs: fontFeatures },
   ];
 
   groups.forEach(({ id, items, type, ff, fs }) => {
