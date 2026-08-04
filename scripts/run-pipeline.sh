@@ -73,6 +73,24 @@ snapshot() {
   say "   inventory=$inv  rendered=$rend  classical-lines=$cls  lstmf-list=$lst"
 }
 
+# ── Preflight: fail fast on a toolchain that cannot produce valid output ─────
+# Checked up front rather than at the lstmf stage, so a wrong Tesseract is
+# caught before spending minutes on rendering.
+TESS_VER="$(tesseract --version 2>&1 | head -1 || echo 'not found')"
+case "$TESS_VER" in
+  "tesseract 5."*) say "Tesseract   : $TESS_VER  ✓" ;;
+  "tesseract 4."*)
+      say ""
+      say "✗ $TESS_VER — Tesseract 4 cannot encode the Kannada virama (್)."
+      say "  It writes .lstmf files that only fail later, during training."
+      say "  Install Tesseract 5:  brew install tesseract"
+      exit 1 ;;
+  *)
+      say ""
+      say "✗ Tesseract not found. Install version 5:  brew install tesseract"
+      exit 1 ;;
+esac
+
 say ""
 say "Current state:"; snapshot
 

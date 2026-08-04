@@ -50,17 +50,26 @@ if echo "$TESS_VER" | grep -qE "^tesseract [45]\."; then
     echo "  Tesseract: $TESS_VER"
     if echo "$TESS_VER" | grep -q "^tesseract 4\."; then
         echo ""
-        echo "  ⚠  WARNING: Tesseract 4 detected."
-        echo "     Tesseract 4 cannot encode the Kannada virama (U+0CCD / ್)"
-        echo "     in LSTM training — causes 'Encoding of string failed' errors."
+        echo "  ✗ ERROR: Tesseract 4 detected — refusing to build lstmf."
         echo ""
-        echo "     Upgrade to Tesseract 5 first:"
+        echo "     Tesseract 4 cannot encode the Kannada virama (U+0CCD / ್),"
+        echo "     which appears in virtually every conjunct in this corpus."
+        echo "     It does not fail loudly: it writes .lstmf files that look"
+        echo "     fine and then fail during training with"
+        echo "     'Encoding of string failed', wasting the whole run."
+        echo ""
+        echo "     This used to be an interactive 'continue anyway?' prompt. It"
+        echo "     is now a hard failure — answering yes could only ever produce"
+        echo "     a corrupt training set, and the prompt also hung unattended"
+        echo "     runs (portal, pipeline script, CI) waiting on stdin."
+        echo ""
+        echo "     Install Tesseract 5:"
         echo "       macOS:  brew install tesseract"
         echo "       Ubuntu: sudo add-apt-repository ppa:alex-p/tesseract-ocr5"
         echo "               sudo apt update && sudo apt install tesseract-ocr"
         echo ""
-        read -r -p "  Continue anyway? [y/N] " reply
-        [[ "${reply,,}" == "y" ]] || exit 1
+        echo "     Then confirm:  tesseract --version   # must report 5.x"
+        exit 1
     fi
 else
     echo "ERROR: Tesseract not found. Install Tesseract 5 first."
