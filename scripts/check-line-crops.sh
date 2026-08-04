@@ -36,6 +36,17 @@ cd "$ROOT"
 
 PAGES="${1:-3}"
 FONT_ID="${2:-}"
+
+# Validate rather than trust: a pasted trailing comment ("./check-line-crops.sh
+# 6   # more thorough") arrives as a literal '#' argument in some shells, which
+# then blew up deep inside the checker with an unrelated int() error.
+case "$PAGES" in
+  ''|*[!0-9]*) echo "✗ page count must be a number, got: '$PAGES'"
+               echo "  usage: $0 [pages] [font_id]"; exit 1 ;;
+esac
+case "$FONT_ID" in
+  *[!A-Za-z0-9_.-]*) echo "✗ font id looks wrong: '$FONT_ID' — ignoring it"; FONT_ID="" ;;
+esac
 OUT="$(mktemp -d /tmp/linecheck.XXXXXX)"
 CORPUS="${CLASSICAL_CORPUS_DIR:-$ROOT/classical-corpus-kannada}"
 

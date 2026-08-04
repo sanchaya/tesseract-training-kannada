@@ -235,10 +235,24 @@ function measureLinesInPage() {
     // only a sliver of the height. The result was 386x10 crops with the full
     // 16-character transcription and 0% ink: the glyphs were outside the box.
     //
-    // Characters belonging to the same line always overlap vertically, so
-    // overlap is the reliable test regardless of glyph height.
-    const overlaps = (a, b) =>
-      Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 0;
+    // Characters belonging to the same line overlap vertically — but ANY
+    // overlap is far too loose a test. Consecutive lines touch: a descender or
+    // below-base ottu on one line reaches into the ascender zone of the next.
+    // With "> 0" the groups chain transitively (line 1 touches 2, 2 touches 3…)
+    // and the whole page collapses into one block. That produced crops carrying
+    // 240+ characters, which are CTC-infeasible for the same reason a full page
+    // is: far more labels than the timestep budget.
+    //
+    // Require the overlap to cover most of the SHORTER box instead. Two glyphs
+    // on one line overlap almost completely relative to the shorter of the two;
+    // glyphs on adjacent lines graze each other by a few pixels out of ~40.
+    const OVERLAP_FRAC = 0.5;
+    const overlaps = (a, b) => {
+      const inter = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (inter <= 0) return false;
+      const shorter = Math.min(a.bottom - a.top, b.bottom - b.top);
+      return shorter > 0 && inter / shorter >= OVERLAP_FRAC;
+    };
 
     if (cur && (overlaps(cur, r) || Math.abs(r.top - cur.top) <= ROW_TOLERANCE)) {
       cur.left   = Math.min(cur.left,   r.left);
@@ -252,13 +266,16 @@ function measureLinesInPage() {
     }
   }
 
-  // Merge any groups that still overlap vertically. Reading order can revisit a
-  // line (a below-base mark measured after the next base consonant), which would
-  // otherwise leave two fragments of the same visual line.
+  // Merge fragments of the same visual line that reading order left separate
+  // (a below-base mark measured after the following base consonant). Uses the
+  // same majority-overlap rule — a plain "> 0" test here would re-chain the
+  // whole page into a single block.
   const merged = [];
   for (const l of lines.sort((a, b) => a.top - b.top)) {
     const prev = merged[merged.length - 1];
-    if (prev && Math.min(prev.bottom, l.bottom) - Math.max(prev.top, l.top) > 0) {
+    const inter = prev ? Math.min(prev.bottom, l.bottom) - Math.max(prev.top, l.top) : 0;
+    const shorter = prev ? Math.min(prev.bottom - prev.top, l.bottom - l.top) : 0;
+    if (prev && shorter > 0 && inter / shorter >= 0.5) {
       prev.left   = Math.min(prev.left,   l.left);
       prev.right  = Math.max(prev.right,  l.right);
       prev.top    = Math.min(prev.top,    l.top);
