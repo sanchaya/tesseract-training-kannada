@@ -331,6 +331,76 @@ main { max-width: 1080px; margin: 0 auto; padding: 22px 16px; }
 }
 .metric .val { font-size: 1.05rem; font-weight: 800; color: var(--brand-d); display: block; }
 
+/* ── OCR single-mode 3-column layout ─────────────────────────── */
+.ocr-3col {
+  display: grid;
+  grid-template-columns: 200px 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+@media(max-width:860px) {
+  .ocr-3col { grid-template-columns: 1fr; }
+}
+.ocr-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  min-height: 240px;
+}
+.ocr-panel-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: .82rem;
+  font-weight: 700;
+  color: var(--ink2);
+}
+/* Output / Correction tab strip */
+.ocr-tabs { display: flex; gap: 2px; background: var(--border); border-radius: 6px; padding: 2px; }
+.ocr-tab-btn {
+  flex: 1;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 4px;
+  font-size: .76rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+  color: var(--mute);
+  transition: background .15s, color .15s;
+}
+.ocr-tab-btn.active { background: var(--card); color: var(--brand-d); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+
+/* Stats / confidence bar */
+.ocr-stat-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--brand-xxl);
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+}
+.ocr-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 10px;
+  border-right: 1px solid var(--border2);
+  min-width: 80px;
+}
+.ocr-stat:last-child { border-right: none; }
+.ocr-stat .sv { font-size: .95rem; font-weight: 800; color: var(--brand-d); line-height: 1.2; }
+.ocr-stat .sl { font-size: .65rem; color: var(--mute); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+
+/* Character-level diff */
+.diff-match { color: var(--ink2); }
+.diff-wrong { background: #fee2e2; color: #991b1b; border-radius: 2px; padding: 0 1px; }
+.diff-ins   { background: #dcfce7; color: #166534; border-radius: 2px; padding: 0 1px; }
+
 /* ── Progress bar ────────────────────────────────────────────── */
 .prog { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 8px 0; }
 .prog-bar { height: 100%; background: var(--brand); border-radius: 3px; transition: width .3s; }
@@ -627,12 +697,12 @@ footer a:hover { text-decoration: underline; }
     <div class="card">
       <div class="card-label">Training images</div>
       <div class="card-big" id="st-imgs">—</div>
-      <div class="card-sub">PNG + gt.txt pairs</div>
+      <div class="card-sub" id="st-imgs-sub">PNG + gt.txt pairs</div>
     </div>
     <div class="card">
       <div class="card-label">Corpus lines</div>
       <div class="card-big" id="st-corp">—</div>
-      <div class="card-sub">training text lines</div>
+      <div class="card-sub" id="st-corp-sub">training text lines</div>
     </div>
   </div>
 
@@ -665,6 +735,8 @@ footer a:hover { text-decoration: underline; }
   <div class="sec" style="margin-top:22px">
     <h2>ಕನ್ನಡ Font images</h2>
     <button class="btn btn-outline" onclick="loadFontImageSummary()" id="fi-refresh-btn">↺ Refresh</button>
+    <button class="btn btn-primary" onclick="genTestImages(true,true).then(()=>loadFontImageSummary())" id="fi-gen-btn"
+      title="Regenerate all character PNG images for all font variants (clears existing images first)">🖼 Regenerate all</button>
     <button class="btn btn-primary" onclick="syncAndConfirm()" id="fi-sync-btn" style="display:none">⟳ Sync to pipeline</button>
   </div>
   <div id="fi-summary" style="margin-bottom:18px">
@@ -672,6 +744,23 @@ footer a:hover { text-decoration: underline; }
   </div>
 
   <div class="sec" style="margin-top:22px"><h2>Run steps</h2></div>
+
+  <!-- Training-active warning (shown when lstmtraining is running in background) -->
+  <div id="training-active-banner" style="display:none;margin-bottom:14px;padding:12px 16px;
+       background:#fef9c3;border:1.5px solid #fde047;border-radius:10px;
+       display:none;align-items:center;gap:12px">
+    <span style="font-size:1.4rem;animation:spin .7s linear infinite;display:inline-block">⚙</span>
+    <div style="flex:1">
+      <div style="font-weight:700;color:#92400e;font-size:.9rem">Training is running in the background</div>
+      <div style="font-size:.78rem;color:#78350f;margin-top:2px">
+        Do not start another step — it will interrupt the current training run.
+        Watch progress in the Live Log tab or scroll down to the log panel.
+      </div>
+    </div>
+    <button class="btn" onclick="tab('log',this)" style="background:#fde047;color:#78350f;border:none;font-size:.78rem;white-space:nowrap">
+      View live log →
+    </button>
+  </div>
 
   <!-- Step runner cards -->
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px">
@@ -683,17 +772,26 @@ footer a:hover { text-decoration: underline; }
       title="Re-download all langdata and rebuild tessdata_expanded/kan.traineddata from scratch"
       style="background:var(--card);color:#6d28d9;border:1.5px dashed #c4b5fd;font-size:0.8em;padding:4px 8px">↺ Force re-expand</button>
     <button class="btn btn-primary step-run-btn" onclick="run('wiki')"               id="sb-wiki">     ② Download corpus</button>
+    <button class="btn step-run-btn" onclick="run('wiki', true)"
+      title="Force re-download corpus even if it already exists"
+      style="background:var(--card);color:#0369a1;border:1.5px dashed #7dd3fc;font-size:0.8em;padding:4px 8px">↺ Force re-download</button>
     <button class="btn btn-primary step-run-btn" onclick="run('clean')"              id="sb-clean">    Clean corpus</button>
     <button class="btn btn-primary step-run-btn" onclick="run('specimen', true)"      id="sb-specimen" title="Generate systematic character coverage text and merge into corpus">Specimen</button>
     <button class="btn btn-primary step-run-btn" onclick="runWithPreflight('render')" id="sb-render">  ③ Render images</button>
     <button class="btn step-run-btn" onclick="clearAndRerender()" id="sb-clear-render"
       title="Delete all rendered/ PNGs and .gt.txt files, then re-render from corpus"
       style="background:var(--card);color:#b45309;border:1.5px solid #fde68a">↺ Clear &amp; re-render</button>
+    <button class="btn step-run-btn" onclick="showA5Panel()" id="sb-a5"
+      title="Render A5 page images from a classical corpus directory using headless Chrome — correct conjunct shaping for all fonts"
+      style="background:var(--card);color:#065f46;border:1.5px solid #6ee7b7;font-size:0.8em;padding:4px 8px">🌐 A5 Browser Render</button>
     <button class="btn btn-primary step-run-btn" onclick="runWithPreflight('lstmf')"  id="sb-lstmf">   ④ Make lstmf</button>
     <button class="btn btn-primary step-run-btn" onclick="runWithPreflight('train')"  id="sb-train">   ⑤ Train</button>
+    <button class="btn step-run-btn" onclick="runWithPreflight('train','expand')"
+      title="Continue from existing checkpoint AND switch to tessdata_expanded (ಋ ಙ ಝ ಱ). Output-layer remapping is applied automatically. Named checkpoints are preserved. Run once after Expand chars — future Resume runs will also use expanded chars."
+      style="background:var(--card);color:#6d28d9;border:1.5px solid #c4b5fd;font-size:0.8em;padding:4px 8px">Train (continue+expanded)</button>
     <button class="btn step-run-btn" onclick="runWithPreflight('train','fresh')"
-      title="Start from base kan.lstm weights using tessdata_expanded — includes ಋ ಙ ಝ ಱ but does NOT continue from existing checkpoint"
-      style="background:var(--card);color:#6d28d9;border:1.5px dashed #c4b5fd;font-size:0.8em;padding:4px 8px">Train (fresh+expanded)</button>
+      title="⚠ Destructive: backs up ALL existing checkpoints and restarts training from base kan.lstm weights using tessdata_expanded. Use only when you want a completely clean run."
+      style="background:var(--card);color:#b45309;border:1.5px dashed #fde68a;font-size:0.8em;padding:4px 8px">Train (fresh+expanded)</button>
     <button class="btn btn-primary step-run-btn" onclick="run('package')"            id="sb-package">  ⑥ Package</button>
   </div>
 
@@ -707,6 +805,54 @@ footer a:hover { text-decoration: underline; }
     </div>
     <div id="dash-log-box" style="font-family:monospace;font-size:.73rem;line-height:1.6;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;max-height:280px;overflow-y:auto;color:var(--ink2)"></div>
     <p style="font-size:.75rem;color:var(--mute);margin-top:6px">Output streams live. When the step finishes, run the next one.</p>
+  </div>
+
+  <!-- ── A5 Browser Render panel ────────────────────────────────────────── -->
+  <div id="a5-panel" style="display:none;background:var(--card);border:1.5px solid #6ee7b7;border-radius:12px;padding:16px 18px;margin-top:10px">
+    <div style="font-weight:700;font-size:.9rem;margin-bottom:10px;color:#065f46">🌐 A5 Browser Render — correct conjunct shaping</div>
+    <p style="font-size:.8rem;color:var(--mute);margin-bottom:12px;line-height:1.5">
+      Renders a classical Kannada corpus as A5 page images using headless Chrome — the same
+      text pipeline as fonts.sanchaya.net.  Conjuncts form correctly even for historical fonts
+      (GMP, WMP, GTN) whose GSUB tables are incomplete.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <label style="font-size:.8rem;font-weight:600">
+        Classical corpus folder
+        <input id="a5-corpus-dir" type="text" placeholder="classical-corpus-kannada  (relative to project root, or full path)"
+          style="width:100%;margin-top:3px;padding:6px 9px;border:1.5px solid var(--border2);border-radius:6px;font-size:.82rem;background:var(--bg)">
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <label style="font-size:.78rem;font-weight:600">Font size px
+          <input id="a5-font-size" type="number" value="32" min="16" max="72"
+            style="width:100%;margin-top:3px;padding:5px 7px;border:1.5px solid var(--border2);border-radius:6px;font-size:.8rem;background:var(--bg)">
+        </label>
+        <label style="font-size:.78rem;font-weight:600">Workers
+          <input id="a5-workers" type="number" value="1" min="1" max="9"
+            style="width:100%;margin-top:3px;padding:5px 7px;border:1.5px solid var(--border2);border-radius:6px;font-size:.8rem;background:var(--bg)">
+        </label>
+        <label style="font-size:.78rem;font-weight:600">Pages/worker
+          <input id="a5-concurrency" type="number" value="2" min="1" max="8"
+            style="width:100%;margin-top:3px;padding:5px 7px;border:1.5px solid var(--border2);border-radius:6px;font-size:.8rem;background:var(--bg)">
+        </label>
+      </div>
+    </div>
+    <!-- Progress bar (shown while running or after stop) -->
+    <div id="a5-progress-wrap" style="display:none;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:.75rem;color:var(--mute);margin-bottom:4px">
+        <span id="a5-progress-label">Rendering…</span>
+        <span id="a5-count" style="font-weight:700;color:#065f46"></span>
+      </div>
+      <div style="background:var(--border2);border-radius:4px;height:6px;overflow:hidden">
+        <div id="a5-progress-bar" style="height:100%;background:#6ee7b7;width:0%;transition:width .4s ease;border-radius:4px"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="startA5Render()" id="a5-start-btn">▶ Start</button>
+      <button class="btn" onclick="stopA5Render()" id="a5-stop-btn"
+        style="display:none;background:#fff1f2;color:#b91c1c;border:1.5px solid #fca5a5;padding:5px 14px">⏹ Stop</button>
+      <button class="btn btn-outline" onclick="document.getElementById('a5-panel').style.display='none'" style="padding:5px 12px">Close</button>
+      <span id="a5-status" style="font-size:.8rem;color:var(--mute);margin-left:8px"></span>
+    </div>
   </div>
 </div>
 
@@ -1180,76 +1326,171 @@ footer a:hover { text-decoration: underline; }
     </button>
   </div>
 
+  <!-- ══ LIVE FONT PREVIEW ══ -->
+  <div style="background:var(--card);border:1.5px solid var(--border2);border-radius:12px;padding:18px 20px;margin-bottom:18px">
+    <div style="font-weight:700;font-size:.95rem;margin-bottom:12px">🖊 Live Font Preview</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end">
+      <div style="flex:1;min-width:200px">
+        <label style="font-size:.75rem;color:var(--mute);display:block;margin-bottom:4px">Text to render</label>
+        <input id="preview-text" type="text" value="ಕನ್ನಡ ಸಾಹಿತ್ಯ"
+          style="width:100%;padding:8px 10px;font-size:1.1rem;border:1.5px solid var(--border2);border-radius:7px;background:var(--bg);color:var(--ink);font-family:inherit"
+          placeholder="Type Kannada text…" oninput="schedulePreview()">
+      </div>
+      <div style="min-width:180px">
+        <label style="font-size:.75rem;color:var(--mute);display:block;margin-bottom:4px">Font</label>
+        <select id="preview-font" onchange="runPreview()"
+          style="width:100%;padding:7px 8px;font-size:.82rem;border:1.5px solid var(--border2);border-radius:7px;background:var(--bg);color:var(--ink)">
+          <option value="">— loading fonts —</option>
+        </select>
+      </div>
+      <div style="min-width:120px">
+        <label style="font-size:.75rem;color:var(--mute);display:block;margin-bottom:4px">Size: <span id="preview-size-val">48</span>px</label>
+        <input id="preview-size" type="range" min="16" max="96" value="48" step="4"
+          style="width:100%" oninput="document.getElementById('preview-size-val').textContent=this.value; schedulePreview()">
+      </div>
+      <button class="btn btn-primary" onclick="runPreview()" style="white-space:nowrap;padding:7px 14px">▶ Render</button>
+    </div>
+    <!-- Output grid: one card per font when "All fonts" toggled, or single card -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <label style="font-size:.75rem;color:var(--mute)">
+        <input type="checkbox" id="preview-all" onchange="runPreview()" style="margin-right:4px">
+        Compare all fonts
+      </label>
+      <span id="preview-status" style="font-size:.75rem;color:var(--mute)"></span>
+    </div>
+    <div id="preview-results" style="display:flex;flex-wrap:wrap;gap:10px;min-height:80px;align-items:flex-start">
+      <div style="font-size:.82rem;color:var(--mute);padding:20px 0">Enter text above and click Render</div>
+    </div>
+  </div>
+
   <!-- ══ SINGLE IMAGE MODE ══ -->
   <div id="ocr-single">
-    <div class="g2">
-      <div>
-        <div class="drop" id="ocr-drop" onclick="document.getElementById('ocr-file').click()">
-          <span class="drop-icon">🖼</span>
-          <strong>Drop image here</strong>
-          <p>or click to browse</p>
-          <small>PNG, TIFF, JPG — historical Kannada scans</small>
-        </div>
-        <input type="file" id="ocr-file" accept="image/*" style="display:none" onchange="loadOcrImage(this)">
-        <img id="ocr-preview" class="img-preview" style="display:none">
+
+    <!-- ── Training confidence stats bar ─────────────────────── -->
+    <div class="ocr-stat-bar">
+      <div class="ocr-stat">
+        <span class="sv" id="stat-bcer">—</span>
+        <span class="sl">Training BCER</span>
       </div>
-      <div>
-        <div style="margin-bottom:12px">
-          <label for="ocr-gt">Ground truth (optional — for CER/WER)</label>
-          <textarea id="ocr-gt" rows="5" placeholder="Paste the correct Kannada text here…"></textarea>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
-          <label for="ocr-psm" style="display:inline;margin:0">PSM</label>
-          <select id="ocr-psm" style="width:auto;padding:6px 10px">
-            <option value="3">3 — Auto</option>
-            <option value="6" selected>6 — Block</option>
-            <option value="7">7 — Single line</option>
-            <option value="11">11 — Sparse</option>
-          </select>
-          <button class="btn btn-primary" onclick="runOcr()" id="ocr-btn">Run OCR</button>
-          <button class="btn btn-outline" onclick="exportSingleResult()" id="export-single-btn" style="display:none">⬇ Export</button>
-        </div>
-        <div>
-          <label style="font-size:.8rem;font-weight:600;margin-bottom:6px">Preprocessing</label>
-          <div style="display:flex;gap:14px;flex-wrap:wrap">
-            <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
-              <input type="checkbox" id="pp-binarize"> Binarize
-            </label>
-            <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
-              <input type="checkbox" id="pp-denoise"> Denoise
-            </label>
-            <label style="display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:400">
-              <input type="checkbox" id="pp-contrast"> Enhance contrast
-            </label>
-          </div>
-        </div>
+      <div class="ocr-stat">
+        <span class="sv" id="stat-iters">—</span>
+        <span class="sl">Iterations</span>
+      </div>
+      <div class="ocr-stat">
+        <span class="sv" id="stat-images">—</span>
+        <span class="sl">Training images</span>
+      </div>
+      <div class="ocr-stat">
+        <span class="sv" id="stat-fonts">—</span>
+        <span class="sl">Font variants</span>
+      </div>
+      <div class="ocr-stat" id="stat-conf-wrap" style="display:none">
+        <span class="sv" id="stat-conf-val">—</span>
+        <span class="sl">OCR confidence</span>
+      </div>
+      <div class="ocr-stat" id="stat-impr-wrap" style="display:none">
+        <span class="sv" id="stat-impr-val">—</span>
+        <span class="sl">CER improvement</span>
+      </div>
+      <div class="ocr-stat" id="stat-chars-wrap" style="display:none">
+        <span class="sv" id="stat-chars-val">—</span>
+        <span class="sl">Chars recognised</span>
       </div>
     </div>
 
-    <div id="ocr-prog" style="display:none;margin-top:14px">
+    <!-- ── Top controls row ───────────────────────────────────── -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <label for="ocr-psm" style="display:inline;margin:0;font-size:.82rem">PSM</label>
+      <select id="ocr-psm" style="width:auto;padding:5px 8px;font-size:.82rem">
+        <option value="3">3 — Auto</option>
+        <option value="6" selected>6 — Block</option>
+        <option value="7">7 — Single line</option>
+        <option value="11">11 — Sparse</option>
+      </select>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;font-weight:400">
+        <input type="checkbox" id="pp-binarize"> Binarize
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;font-weight:400">
+        <input type="checkbox" id="pp-denoise"> Denoise
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;font-weight:400">
+        <input type="checkbox" id="pp-contrast"> Contrast
+      </label>
+      <button class="btn btn-primary" onclick="runOcr()" id="ocr-btn">Run OCR</button>
+      <button class="btn btn-outline" onclick="exportSingleResult()" id="export-single-btn" style="display:none">⬇ Export</button>
+    </div>
+
+    <div id="ocr-prog" style="display:none;margin-bottom:10px">
       <div class="prog"><div class="prog-bar" id="ocr-prog-bar" style="width:0%"></div></div>
       <p id="ocr-prog-txt" style="font-size:.78rem;color:var(--mute)">Initialising…</p>
     </div>
 
-    <div class="ocr-grid" id="ocr-results" style="display:none">
-      <div>
-        <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
-          kan <span style="font-weight:400;color:var(--mute)">(base model)</span>
-          <span id="kan-time" style="font-size:.72rem;color:var(--mute);font-weight:400;margin-left:6px"></span>
+    <!-- ── 3-column results row ───────────────────────────────── -->
+    <div class="ocr-3col" id="ocr-results">
+
+      <!-- Col 1: image -->
+      <div class="ocr-panel" style="min-height:180px;display:flex;flex-direction:column;gap:8px">
+        <div class="drop" id="ocr-drop" onclick="document.getElementById('ocr-file').click()"
+             style="flex:1;min-height:130px;padding:14px">
+          <span class="drop-icon" style="font-size:1.6rem">🖼</span>
+          <strong style="font-size:.82rem">Drop image</strong>
+          <p style="font-size:.72rem">or click to browse</p>
         </div>
-        <div class="ocr-result" id="kan-out">—</div>
+        <input type="file" id="ocr-file" accept="image/*" style="display:none" onchange="loadOcrImage(this)">
+        <img id="ocr-preview" class="img-preview" style="display:none;max-height:200px;object-fit:contain">
+      </div>
+
+      <!-- Col 2: kan base model -->
+      <div class="ocr-panel">
+        <div class="ocr-panel-hdr">
+          <span>kan <span style="font-weight:400;color:var(--mute)">(base)</span></span>
+          <span id="kan-time" style="font-size:.7rem;color:var(--mute);font-weight:400"></span>
+        </div>
+        <div class="ocr-result" id="kan-out" style="min-height:160px">—</div>
         <div class="metric-row" id="kan-metrics"></div>
       </div>
-      <div>
-        <div style="font-size:.82rem;font-weight:700;margin-bottom:8px;color:var(--ink2)">
-          kan_hist
-          <span id="hist-badge" class="pill" style="margin-left:4px"></span>
-          <span id="hist-time" style="font-size:.72rem;color:var(--mute);font-weight:400;margin-left:6px"></span>
+
+      <!-- Col 3: kan_hist with Output / Correction tabs -->
+      <div class="ocr-panel">
+        <div class="ocr-panel-hdr">
+          <span>kan_hist <span id="hist-badge" class="pill" style="margin-left:4px;font-size:.68rem"></span>
+            <span id="hist-time" style="font-size:.7rem;color:var(--mute);font-weight:400;margin-left:4px"></span>
+          </span>
+          <div class="ocr-tabs">
+            <button class="ocr-tab-btn active" id="ocr-tab-output"     onclick="setHistTab('output')">Output</button>
+            <button class="ocr-tab-btn"         id="ocr-tab-correction" onclick="setHistTab('correction')">Correction</button>
+          </div>
         </div>
-        <div class="ocr-result" id="hist-out">—</div>
-        <div class="metric-row" id="hist-metrics"></div>
+
+        <!-- Output tab -->
+        <div id="hist-tab-output">
+          <div class="ocr-result" id="hist-out" style="min-height:160px">—</div>
+          <div class="metric-row" id="hist-metrics"></div>
+        </div>
+
+        <!-- Correction tab -->
+        <div id="hist-tab-correction" style="display:none">
+          <div style="margin-bottom:8px">
+            <label for="ocr-gt" style="font-size:.76rem;font-weight:600;margin-bottom:4px;display:block">
+              Ground truth <span style="font-weight:400;color:var(--mute)">(paste correct text for CER/WER + diff)</span>
+            </label>
+            <textarea id="ocr-gt" rows="4"
+              placeholder="Paste the correct Kannada text here…"
+              oninput="updateMetricsLive()"
+              style="font-size:.82rem"></textarea>
+          </div>
+          <div id="hist-diff" style="display:none">
+            <div style="font-size:.72rem;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">
+              Character diff — <span class="diff-wrong" style="padding:0 4px">red = error</span>
+              &nbsp;<span class="diff-ins" style="padding:0 4px">green = missing</span>
+            </div>
+            <div id="hist-diff-body" class="ocr-result" style="min-height:80px;font-size:.82rem;line-height:1.9"></div>
+            <div class="metric-row" id="hist-metrics-corr"></div>
+          </div>
+        </div>
       </div>
-    </div>
+
+    </div><!-- /ocr-3col -->
   </div>
 
   <!-- ══ BATCH TEST MODE ══ -->
@@ -1676,36 +1917,40 @@ footer a:hover { text-decoration: underline; }
 
 <!-- ── Live OCR test (Tesseract.js) ─────────────────────────────────────── -->
 <div id="pg-tjs" class="page">
-<div style="max-width:860px;margin:0 auto;padding:28px 24px">
+<div style="max-width:1100px;margin:0 auto;padding:28px 24px">
 
   <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px">🔬 Live OCR — <code>kan_hist.traineddata</code></h2>
-  <p style="color:var(--mute);font-size:.8rem;margin:0 0 22px">Runs in your browser via Tesseract.js. Loads the trained model directly from the server.</p>
+  <p style="color:var(--mute);font-size:.8rem;margin:0 0 16px">Runs in your browser via Tesseract.js. Recognise text · verify confidence · correct and save as training pair.</p>
 
-  <!-- Drop zone -->
-  <div id="tjs-drop" onclick="document.getElementById('tjs-file').click()"
-    style="border:2px dashed var(--border2);border-radius:12px;padding:40px 24px;text-align:center;cursor:pointer;
-           transition:border-color .2s,background .2s;margin-bottom:14px;background:var(--card)">
-    <div style="font-size:2.4rem;margin-bottom:10px">📂</div>
-    <div style="font-size:.95rem;font-weight:600;color:var(--ink2)">Click to upload or drag &amp; drop an image</div>
-    <div style="font-size:.78rem;color:var(--mute);margin-top:5px">PNG · JPG · TIFF — any scan or synthetic image</div>
-    <input type="file" id="tjs-file" accept="image/*" style="display:none" onchange="tjsRunOcr(this.files[0])">
+  <!-- ── Training stats bar ───────────────────────────────────────── -->
+  <div class="ocr-stat-bar" style="margin-bottom:14px">
+    <div class="ocr-stat"><span class="sv" id="tjs-stat-bcer">—</span><span class="sl">Training BCER</span></div>
+    <div class="ocr-stat"><span class="sv" id="tjs-stat-iters">—</span><span class="sl">Iterations</span></div>
+    <div class="ocr-stat"><span class="sv" id="tjs-stat-images">—</span><span class="sl">Training images</span></div>
+    <div class="ocr-stat"><span class="sv" id="tjs-stat-fonts">—</span><span class="sl">Font variants</span></div>
+    <div class="ocr-stat" id="tjs-stat-conf-wrap" style="display:none">
+      <span class="sv" id="tjs-stat-conf-val">—</span><span class="sl">Avg confidence</span>
+    </div>
+    <div class="ocr-stat" id="tjs-stat-words-wrap" style="display:none">
+      <span class="sv" id="tjs-stat-words-val">—</span><span class="sl">Words found</span>
+    </div>
   </div>
 
-  <!-- URL row -->
-  <div style="display:flex;gap:8px;margin-bottom:28px">
-    <input id="tjs-url" type="text" placeholder="Or paste an image URL…"
-      style="flex:1;font-size:.84rem;padding:8px 12px;border:1px solid var(--border2);border-radius:7px;
+  <!-- ── URL input row ────────────────────────────────────────────── -->
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <input id="tjs-url" type="text" placeholder="Paste an image URL and click Run OCR…"
+      style="flex:1;font-size:.84rem;padding:7px 12px;border:1px solid var(--border2);border-radius:7px;
              background:var(--card);color:var(--ink);outline:none">
     <button onclick="tjsRunOcrUrl()"
-      style="font-size:.84rem;padding:8px 20px;background:var(--brand);color:#fff;border:none;
+      style="font-size:.84rem;padding:7px 18px;background:var(--brand);color:#fff;border:none;
              border-radius:7px;cursor:pointer;white-space:nowrap;font-weight:600">
       Run OCR
     </button>
   </div>
 
-  <!-- Progress -->
-  <div id="tjs-progress" style="display:none;margin-bottom:24px">
-    <div style="display:flex;justify-content:space-between;margin-bottom:7px">
+  <!-- ── Progress bar ─────────────────────────────────────────────── -->
+  <div id="tjs-progress" style="display:none;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:5px">
       <span id="tjs-status" style="font-size:.82rem;color:var(--mute)">Initialising…</span>
       <span id="tjs-pct" style="font-size:.82rem;font-weight:700;color:var(--brand)">0%</span>
     </div>
@@ -1714,99 +1959,104 @@ footer a:hover { text-decoration: underline; }
     </div>
   </div>
 
-  <!-- Image + annotated result side by side -->
-  <div id="tjs-image-section" style="display:none;margin-bottom:16px">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start">
+  <!-- ── 3-column layout ──────────────────────────────────────────── -->
+  <div class="ocr-3col" style="grid-template-columns:200px 1fr 1fr">
 
-      <!-- Left: input image -->
-      <div>
-        <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
-                    color:var(--mute);margin-bottom:8px">Input image</div>
-        <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#f5f5f5">
-          <img id="tjs-preview" style="width:100%;height:auto;display:block;object-fit:contain;max-height:740px">
-        </div>
+    <!-- Col 1: Image / drop zone -->
+    <div class="ocr-panel" style="display:flex;flex-direction:column;gap:8px;min-height:200px">
+      <div class="ocr-panel-hdr">Image</div>
+      <div id="tjs-drop" onclick="document.getElementById('tjs-file').click()"
+           style="flex:1;min-height:140px;border:2px dashed var(--border2);border-radius:8px;
+                  padding:14px 10px;text-align:center;cursor:pointer;background:var(--bg);
+                  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+                  transition:border-color .2s,background .2s">
+        <span style="font-size:1.8rem">📂</span>
+        <span style="font-size:.76rem;font-weight:600;color:var(--ink2)">Drop image</span>
+        <span style="font-size:.68rem;color:var(--mute)">or click to browse</span>
+        <span style="font-size:.65rem;color:var(--mute)">PNG · JPG · TIFF</span>
       </div>
-
-      <!-- Right: OCR output + correction -->
-      <div id="tjs-result-section" style="display:none;flex-direction:column;gap:14px">
-
-        <!-- Confidence-highlighted output -->
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-            <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--mute)">
-              OCR output <span style="font-weight:400;text-transform:none;letter-spacing:0">(hover word for % confidence)</span>
-            </div>
-            <span id="tjs-conf" style="font-size:.74rem;color:var(--mute)"></span>
-          </div>
-          <div style="border:1px solid var(--border);border-radius:10px;background:var(--card);
-                      padding:16px 18px;max-height:280px;overflow-y:auto">
-            <div id="tjs-words" lang="kn"
-              style="font-family:'Noto Sans Kannada','Kannada Sangam MN',serif;
-                     font-size:1.1rem;line-height:2.4;word-break:break-word"></div>
-          </div>
-          <div style="margin-top:8px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-            <span style="font-size:.7rem;color:var(--mute)">Thresholds:</span>
-            <label style="font-size:.72rem;color:var(--mute);display:flex;align-items:center;gap:4px">
-              <span style="background:#fee2e2;color:#991b1b;padding:1px 6px;border-radius:3px">red below</span>
-              <input type="number" id="tjs-thresh-red" value="60" min="0" max="100" oninput="tjsRecolor()"
-                style="width:44px;font-size:.72rem;padding:2px 4px;border:1px solid var(--border2);
-                       border-radius:4px;background:var(--card);color:var(--ink)">%
-            </label>
-            <label style="font-size:.72rem;color:var(--mute);display:flex;align-items:center;gap:4px">
-              <span style="background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:3px">green above</span>
-              <input type="number" id="tjs-thresh-green" value="90" min="0" max="100" oninput="tjsRecolor()"
-                style="width:44px;font-size:.72rem;padding:2px 4px;border:1px solid var(--border2);
-                       border-radius:4px;background:var(--card);color:var(--ink)">%
-            </label>
-            <span style="font-size:.7rem;color:var(--mute)">between = <span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:3px">amber</span></span>
-          </div>
-        </div>
-
-        <!-- Correction panel -->
-        <div style="border:1.5px solid var(--border2);border-radius:10px;padding:14px 16px;background:var(--bg)">
-          <div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
-                      color:var(--mute);margin-bottom:8px">
-            ✏️ Correct &amp; save as training pair
-          </div>
-          <textarea id="tjs-correction" lang="kn" spellcheck="false"
-            placeholder="OCR result will appear here — fix any errors, then save"
-            style="width:100%;box-sizing:border-box;min-height:140px;
-                   font-family:'Noto Sans Kannada','Kannada Sangam MN',serif;
-                   font-size:1.05rem;line-height:1.9;padding:10px 12px;
-                   border:1px solid var(--border2);border-radius:7px;
-                   background:var(--card);color:var(--ink);resize:vertical;
-                   outline:none"></textarea>
-          <!-- Unsupported char warning -->
-          <div id="tjs-char-warning" style="display:none;margin-top:8px;padding:8px 12px;
-               background:#fef3c7;border:1px solid #fde68a;border-radius:7px;
-               font-size:.78rem;color:#92400e;line-height:1.5">
-            ⚠️ Unsupported characters detected: <strong id="tjs-bad-chars"></strong><br>
-            These are missing from <code>kan.traineddata</code>'s unicharset (ಋ ಙ ಝ ಞ ಱ).
-            Words containing them will be removed automatically on save.
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
-            <button onclick="tjsSaveGroundTruth()"
-              style="font-size:.82rem;padding:7px 18px;background:#7c3aed;color:#fff;
-                     border:none;border-radius:7px;cursor:pointer;font-weight:600">
-              💾 Save as training pair
-            </button>
-            <button onclick="navigator.clipboard.writeText(window._tjsPlainText||'').then(()=>toast('Copied'))"
-              style="font-size:.8rem;padding:7px 14px;background:var(--card);
-                     border:1px solid var(--border2);border-radius:7px;cursor:pointer;color:var(--ink2)">
-              Copy text
-            </button>
-            <span id="tjs-save-status" style="font-size:.78rem;color:var(--mute)"></span>
-          </div>
-          <div style="font-size:.71rem;color:var(--mute);margin-top:8px;line-height:1.5">
-            Saved pairs go to <code>scan-input/</code> and are picked up by <strong>⑤ Make lstmf → ⑥ Train</strong>.
-            Each corrected real scan is worth ~10× the equivalent synthetic image.
-          </div>
-        </div>
-
-      </div>
-
+      <input type="file" id="tjs-file" accept="image/*" style="display:none"
+             onchange="tjsRunOcr(this.files[0])">
+      <img id="tjs-preview" style="display:none;width:100%;height:auto;object-fit:contain;
+                                    max-height:320px;border-radius:6px;border:1px solid var(--border)">
     </div>
-  </div>
+
+    <!-- Col 2: Confidence-coloured OCR output -->
+    <div class="ocr-panel">
+      <div class="ocr-panel-hdr">
+        <span>OCR output</span>
+        <span id="tjs-conf" style="font-size:.7rem;color:var(--mute);font-weight:400"></span>
+      </div>
+      <div style="border:1px solid var(--border);border-radius:8px;background:var(--bg);
+                  padding:12px 14px;min-height:160px;max-height:340px;overflow-y:auto">
+        <div id="tjs-words" lang="kn"
+          style="font-family:'Noto Sans Kannada','Kannada Sangam MN',serif;
+                 font-size:1rem;line-height:2.6;word-break:break-word;color:var(--mute)">
+          —
+        </div>
+      </div>
+      <!-- Threshold controls -->
+      <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:.68rem;color:var(--mute)">Confidence:</span>
+        <label style="font-size:.68rem;color:var(--mute);display:flex;align-items:center;gap:3px">
+          <span style="background:#fee2e2;color:#991b1b;padding:1px 5px;border-radius:3px">red &lt;</span>
+          <input type="number" id="tjs-thresh-red" value="60" min="0" max="100" oninput="tjsRecolor()"
+            style="width:38px;font-size:.68rem;padding:2px 3px;border:1px solid var(--border2);
+                   border-radius:4px;background:var(--card);color:var(--ink)">%
+        </label>
+        <label style="font-size:.68rem;color:var(--mute);display:flex;align-items:center;gap:3px">
+          <span style="background:#d1fae5;color:#065f46;padding:1px 5px;border-radius:3px">green &gt;</span>
+          <input type="number" id="tjs-thresh-green" value="90" min="0" max="100" oninput="tjsRecolor()"
+            style="width:38px;font-size:.68rem;padding:2px 3px;border:1px solid var(--border2);
+                   border-radius:4px;background:var(--card);color:var(--ink)">%
+        </label>
+        <span style="font-size:.68rem;color:var(--mute)"><span style="background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px">amber</span> between</span>
+      </div>
+    </div>
+
+    <!-- Col 3: Correct & save as training pair -->
+    <div class="ocr-panel" style="display:flex;flex-direction:column;gap:8px">
+      <div class="ocr-panel-hdr">✏️ Correct &amp; save</div>
+
+      <textarea id="tjs-correction" lang="kn" spellcheck="false"
+        placeholder="OCR result will appear here — fix any errors, then save as a training pair"
+        style="flex:1;width:100%;box-sizing:border-box;min-height:160px;
+               font-family:'Noto Sans Kannada','Kannada Sangam MN',serif;
+               font-size:.95rem;line-height:1.9;padding:10px 12px;
+               border:1px solid var(--border2);border-radius:7px;
+               background:var(--bg);color:var(--ink);resize:vertical;
+               outline:none"></textarea>
+
+      <!-- Unsupported char warning -->
+      <div id="tjs-char-warning" style="display:none;padding:8px 10px;
+           background:#fef3c7;border:1px solid #fde68a;border-radius:7px;
+           font-size:.74rem;color:#92400e;line-height:1.5">
+        ⚠️ Unsupported chars: <strong id="tjs-bad-chars"></strong><br>
+        Missing from <code>kan.traineddata</code> unicharset (ಋ ಙ ಝ ಞ ಱ).
+        Removed automatically on save.
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button onclick="tjsSaveGroundTruth()"
+          style="font-size:.82rem;padding:7px 16px;background:#7c3aed;color:#fff;
+                 border:none;border-radius:7px;cursor:pointer;font-weight:600;white-space:nowrap">
+          💾 Save training pair
+        </button>
+        <button onclick="navigator.clipboard.writeText(window._tjsPlainText||'').then(()=>toast('Copied'))"
+          style="font-size:.78rem;padding:7px 12px;background:var(--card);
+                 border:1px solid var(--border2);border-radius:7px;cursor:pointer;color:var(--ink2)">
+          Copy
+        </button>
+        <span id="tjs-save-status" style="font-size:.74rem;color:var(--mute)"></span>
+      </div>
+
+      <div style="font-size:.68rem;color:var(--mute);line-height:1.5">
+        Saved to <code>scan-input/</code> · picked up by <strong>⑤ Make lstmf → ⑥ Train</strong>.<br>
+        Each corrected scan is worth ~10× a synthetic image.
+      </div>
+    </div>
+
+  </div><!-- /ocr-3col -->
 
 </div>
 </div>
@@ -1977,6 +2227,8 @@ async function loadSyscheck() {
       { name:'combine_tessdata',         ok:null, detail:'bundled with Tesseract training tools' },
       { name:'Python 3.8+',             ok:null, detail:'python3 --version' },
       { name:'Pillow (PIL)',             ok:null, detail:'pip install Pillow' },
+      { name:'uharfbuzz',               ok:null, detail:'pip install uharfbuzz — required for Kannada conjunct rendering' },
+      { name:'freetype-py',             ok:null, detail:'pip install freetype-py — required for glyph rasterisation' },
       { name:'Node.js 18+ (for portal)',ok:null, detail:'node --version' },
     ];
     const dataItems = [
@@ -2065,8 +2317,70 @@ async function loadStatus() {
   const done  = steps.filter(s => s.done).length;
   document.getElementById('st-steps').textContent = done;
 
+  // ── Training images stat card (rendered + classical) ────────────
+  if (d._rendered !== undefined || d._classical !== undefined) {
+    const rendered  = d._rendered  || 0;
+    const classical = d._classical || 0;
+    const total     = rendered + classical;
+    document.getElementById('st-imgs').textContent = total.toLocaleString();
+    const subParts = [];
+    if (rendered)  subParts.push(`${rendered.toLocaleString()} rendered`);
+    if (classical) subParts.push(`${classical.toLocaleString()} classical`);
+    document.getElementById('st-imgs-sub').textContent =
+      subParts.length ? subParts.join(' · ') : 'PNG + gt.txt pairs';
+  }
+
   const badge = document.getElementById('proc-badge');
   const running = d._runningStep;
+
+  // ── Training-active banner + button lock ────────────────────────
+  const isTraining = d._training || running === 'train';
+  const trainBanner = document.getElementById('training-active-banner');
+  if (trainBanner) trainBanner.style.display = isTraining ? 'flex' : 'none';
+
+  // ── Restore the inline log panel for runs we did not start ──────
+  // The panel is normally opened by run(), so it stayed hidden and empty when a
+  // step was launched from the CLI, or when the page was reloaded mid-run —
+  // the banner told you to watch the live log while showing you nothing.
+  if (isTraining || running) {
+    attachDashLog(running || 'train');
+  } else if (dashLogAttached) {
+    // Run finished — release the stream so a later run can re-attach cleanly.
+    dashLogAttached = false;
+    if (dashLogSrc) { dashLogSrc.close(); dashLogSrc = null; }
+    const s = document.getElementById('dash-log-stat');
+    const l = document.getElementById('dash-running-step');
+    if (s) { s.textContent = 'Idle'; s.className = 'pill pill-amber'; }
+    if (l) l.textContent = '✓ finished';
+  }
+
+  // Lock all step buttons except ⑥ Package when training is active
+  const trainBtn = document.getElementById('sb-train');
+  document.querySelectorAll('.step-run-btn').forEach(btn => {
+    if (btn.id === 'sb-train') return; // handled separately below
+    if (isTraining) {
+      btn.disabled = true;
+      btn.style.opacity = '0.4';
+      btn.title = 'Training in progress — wait until training stops before running another step';
+    } else {
+      btn.disabled = false;
+      btn.style.opacity = '';
+      // restore title if we cleared it
+    }
+  });
+  // ⑤ Train button — show spinner when running
+  if (trainBtn) {
+    if (isTraining && !running) {
+      // Background training not started via this session — show pulsing state
+      trainBtn.classList.add('running');
+      trainBtn.disabled = true;
+      trainBtn.innerHTML = '<span class="spin">⚙</span> Training…';
+    } else if (!isTraining && trainBtn.dataset.origLabel) {
+      trainBtn.classList.remove('running');
+      trainBtn.disabled = false;
+      trainBtn.textContent = trainBtn.dataset.origLabel;
+    }
+  }
 
   // Update proc-badge
   if (running) {
@@ -2194,8 +2508,6 @@ async function loadFonts() {
       '<tr><td colspan="5" style="color:var(--mute);padding:12px">Server not running.</td></tr>';
     return;
   }
-  document.getElementById('st-imgs').textContent =
-    d.reduce((s,f)=>s+f.rendered,0).toLocaleString();
   document.getElementById('font-tbody').innerHTML = d.map(f => `
     <tr>
       <td><strong>${f.name}</strong></td>
@@ -2265,25 +2577,49 @@ async function loadCorpusStats() {
     document.getElementById('st-corp').textContent = '—';
     return;
   }
-  document.getElementById('st-corp').textContent = d.total_lines.toLocaleString();
-  const w = Math.round(d.coverage_pct);
+  const totalLines = d.total_lines || 0;
+  document.getElementById('st-corp').textContent = totalLines.toLocaleString();
+  // Dashboard sub-text: show breakdown if we have it
+  const corpSubEl = document.getElementById('st-corp-sub');
+  if (corpSubEl) {
+    const parts = [];
+    if (d.modern_lines)   parts.push(`${d.modern_lines.toLocaleString()} modern`);
+    if (d.classical_lines) parts.push(`${d.classical_lines.toLocaleString()} classical`);
+    corpSubEl.textContent = parts.length ? parts.join(' · ') : 'training text lines';
+  }
+
+  const w = Math.round(d.coverage_pct || 0);
   const barColor = w > 80 ? 'var(--green)' : w > 50 ? 'var(--amber)' : 'var(--red)';
+
+  // Build classical titles list if present
+  let classicalHtml = '';
+  if (d.classical_lines) {
+    const titles = (d.classical_titles || []).slice(0, 8);
+    const titlesStr = titles.map(t =>
+      `<span style="opacity:.8">${t.title}</span> <span style="opacity:.5">${t.lines.toLocaleString()}</span>`
+    ).join(' · ');
+    const moreCount = (d.classical_titles || []).length - titles.length;
+    classicalHtml = `
+    <div style="margin:12px 0 6px;border-top:1px solid var(--border);padding-top:10px">
+      <div style="font-size:.7rem;color:var(--mute);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Classical corpus — ${(d.classical_titles||[]).length} texts · ${d.classical_lines.toLocaleString()} source lines · ${(d.classical_pages||0).toLocaleString()} rendered pages</div>
+      <div style="font-size:.73rem;color:var(--mute);line-height:1.8">${titlesStr}${moreCount > 0 ? ` · <em>+${moreCount} more</em>` : ''}</div>
+    </div>`;
+  }
+
   el.innerHTML = `
     <div class="g3" style="margin-bottom:14px">
-      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Lines</div>
-        <strong>${d.total_lines.toLocaleString()}</strong></div>
-      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Kannada characters</div>
-        <strong>${d.kan_chars.toLocaleString()}</strong></div>
-      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Unicode block coverage</div>
-        <strong>${d.coverage_pct}%</strong></div>
+      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Total lines</div>
+        <strong>${totalLines.toLocaleString()}</strong></div>
+      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Modern (Wikipedia)</div>
+        <strong>${(d.modern_lines||0).toLocaleString()}</strong></div>
+      <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Classical texts</div>
+        <strong>${(d.classical_lines||0).toLocaleString()}</strong></div>
     </div>
-    <div style="font-size:.76rem;color:var(--mute);margin-bottom:4px">
-      Coverage (${d.unique_kan} / 128 Kannada codepoints)
-    </div>
+    <div style="font-size:.7rem;color:var(--mute);margin-bottom:2px;margin-top:4px">Modern corpus — Kannada character coverage (${d.unique_kan||0} / 128 codepoints · ${d.kan_chars ? d.kan_chars.toLocaleString() : '—'} chars)</div>
     <div class="prog"><div class="prog-bar" style="width:${w}%;background:${barColor}"></div></div>
-    <div style="font-size:.73rem;color:var(--mute);margin-top:8px">
-      Most frequent: ${d.top_chars.map(c => `<span title="${c.count.toLocaleString()}">${c.ch}</span>`).join(' ')}
-    </div>`;
+    <div style="font-size:.73rem;color:var(--mute);margin-top:6px">
+      ${d.coverage_pct}% · Most frequent: ${(d.top_chars||[]).map(c => `<span title="${c.count.toLocaleString()}">${c.ch}</span>`).join(' ')}
+    </div>${classicalHtml}`;
 }
 
 // ── Run step ─────────────────────────────────────────────────────
@@ -2370,6 +2706,51 @@ async function run(step, force, mode) {
   setTimeout(loadStatus, 3000);
 }
 
+// ── Attach the dashboard log panel to an already-running step ────────────
+// run() opens the panel for steps started from this page. This does the same
+// for a step that is already in flight — training launched from the terminal,
+// or a page reload during a long run — so the panel is never empty while the
+// "training is running" banner is telling you to watch it.
+let dashLogAttached = false;
+async function attachDashLog(step) {
+  if (dashLogAttached) return;          // already streaming
+  const panel = document.getElementById('dash-log-panel');
+  const box   = document.getElementById('dash-log-box');
+  const stat  = document.getElementById('dash-log-stat');
+  const label = document.getElementById('dash-running-step');
+  if (!panel || !box) return;
+  dashLogAttached = true;
+
+  panel.style.display = 'block';
+  label.textContent = `▶ Running: ${step}`;
+  stat.textContent = 'Live'; stat.className = 'pill pill-green';
+
+  const append = line => {
+    const el = document.createElement('div');
+    el.textContent = line;
+    if (/error|fail|✗/i.test(line))                  el.style.color = 'var(--red)';
+    else if (/BCER|bcer/i.test(line))                el.style.color = '#10b981';
+    else if (/✓|done|complete|success/i.test(line)) { el.style.color = 'var(--green)'; el.style.fontWeight = '600'; }
+    else if (/warning|warn/i.test(line))             el.style.color = 'var(--amber)';
+    else if (/\[trainocr\]/i.test(line))             el.style.color = 'var(--brand)';
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+  };
+
+  if (!box.children.length) {
+    try {
+      const tail = await (await fetch('/api/log/tail?lines=40')).json();
+      if (tail.exists) tail.lines.forEach(append);
+      else append('(training log is empty)');
+    } catch (_) { append('Could not load log tail — is the server running?'); }
+  }
+
+  if (dashLogSrc) dashLogSrc.close();
+  dashLogSrc = new EventSource('/api/log/stream');
+  dashLogSrc.onmessage = e => append(JSON.parse(e.data));
+  dashLogSrc.onerror   = () => { stat.textContent = 'Disconnected'; stat.className = 'pill pill-amber'; };
+}
+
 // ── Font image summary on dashboard ──────────────────────────────────────
 async function loadFontImageSummary() {
   const panel = document.getElementById('fi-summary');
@@ -2442,6 +2823,15 @@ async function syncAndConfirm() {
 
 // ── Pre-flight check before training stages ───────────────────────────────
 async function runWithPreflight(step, mode) {
+  // Block if training is already running in background
+  try {
+    const st = await apiGet('/api/status');
+    if (st._training || st._runningStep === 'train') {
+      notify('⚠ Training is already running — stop it before starting another step.', 'error', 6000);
+      return;
+    }
+  } catch(_) {}
+
   const needsPreflight = ['render','lstmf','train'];
   if (!needsPreflight.includes(step)) { run(step, null, mode); return; }
 
@@ -2449,27 +2839,41 @@ async function runWithPreflight(step, mode) {
   try { pf = await (await fetch('/api/preflight')).json(); }
   catch(e) { run(step); return; }
 
-  const { fontVariants: fv, synced, rendered, kanExists } = pf;
+  const { fontVariants: fv, synced, rendered, kanExists, a5Pages } = pf;
 
   // Build preflight modal content
-  const check = (ok, label) =>
-    `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:1rem">${ok ? '✅' : '❌'}</span>
-      <span style="font-size:.82rem;color:var(--ink)">${label}</span>
+  const check = (ok, label, info = '') =>
+    `<div style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:1rem;flex-shrink:0">${ok === true ? '✅' : ok === 'info' ? 'ℹ️' : '❌'}</span>
+      <span style="font-size:.82rem;color:var(--ink)">${label}${info ? `<span style="color:var(--mute);display:block;font-size:.75rem;margin-top:1px">${info}</span>` : ''}</span>
     </div>`;
 
   const imgsOk   = fv.ready > 0;
   const syncOk   = synced.count > 0;
   const rendOk   = rendered.count > 0 || syncOk;
+  const a5Ok     = a5Pages && a5Pages.count > 0;
 
   const html = `
     <div style="font-size:.85rem;color:var(--ink);margin-bottom:12px;font-weight:600">
-      Pre-flight check — before running <strong>${{render:'④ Render images',lstmf:'⑤ Make lstmf',train:'⑥ Train'}[step]}</strong>
+      Pre-flight check — before running <strong>${{render:'③ Render images',lstmf:'④ Make lstmf',train:'⑤ Train (LSTM fine-tune)'}[step]}</strong>
     </div>
     ${check(kanExists, `Base model: tessdata_best/kan.traineddata ${kanExists?'found':'MISSING — run ① Prep base first'}`)}
     ${check(imgsOk, `Font images: ${fv.ready}/${fv.total} variants ready (${fv.trainImages} line images)`)}
     ${check(syncOk, `Synced to pipeline: ${synced.count} images in rendered/font-test/ ${syncOk?'':'— click Sync below'}`)}
     ${check(rendOk, `rendered/ directory: ${rendered.count} corpus images ${rendered.count===0?'(will use font images only)':''}`)}
+    ${(step === 'lstmf' || step === 'train') ? (() => {
+        const noun = (a5Pages && a5Pages.lstmfReady && step === 'train')
+          ? `${a5Pages.count.toLocaleString()} lstmf files`
+          : `${(a5Pages && a5Pages.count || 0).toLocaleString()} pages`;
+        return check(a5Ok ? true : 'info',
+          step === 'lstmf'
+            ? (a5Ok ? `Classical A5 corpus: ${noun} — will be converted to lstmf`
+                    : `Classical A5 corpus: not found — only synthetic images will be used`)
+            : (a5Ok ? `Classical A5 corpus: ${noun} ready — included in training`
+                    : `Classical A5 corpus: not found — training on synthetic images only`),
+          a5Ok ? a5Pages.dir : 'Run 🌐 A5 Browser Render then ④ Make lstmf to include classical corpus'
+        );
+    })() : ''}
     ${!imgsOk ? `<p style="margin-top:10px;font-size:.78rem;color:var(--amber);background:#fffbeb;padding:8px 10px;border-radius:6px">
       ⚠ No font training images found. Go to <strong>OCR test → Kannada Unicode Reference</strong> and click <strong>🖼 All fonts</strong> first.</p>` : ''}
     ${imgsOk && !syncOk ? `<p style="margin-top:10px;font-size:.78rem;color:var(--brand);background:var(--brand-xl);padding:8px 10px;border-radius:6px">
@@ -2560,7 +2964,11 @@ async function runOcr() {
   const btn = document.getElementById('ocr-btn');
   btn.disabled = true;
   document.getElementById('ocr-prog').style.display = 'block';
-  document.getElementById('ocr-results').style.display = 'none';
+  // Reset outputs (don't hide #ocr-results — it holds the image drop zone too)
+  document.getElementById('kan-out').textContent   = '…';
+  document.getElementById('hist-out').textContent  = '…';
+  document.getElementById('kan-metrics').innerHTML  = '';
+  document.getElementById('hist-metrics').innerHTML = '';
 
   const setP = (pct, msg) => {
     document.getElementById('ocr-prog-bar').style.width = pct + '%';
@@ -2594,48 +3002,145 @@ async function runOcr() {
 
   // Run kan
   setP(10, 'Loading kan model…');
-  const t0 = Date.now(); let kanText = '(error)';
+  const t0 = Date.now(); let kanText = '(error)', kanConf = null;
   try {
     const w = await Tesseract.createWorker('kan', 1, {
       langPath: LANG,
       logger: m => { if (m.status==='recognizing text') setP(10+m.progress*40, 'Running kan…'); },
     });
     await w.setParameters({ tessedit_pageseg_mode: parseInt(psm) });
-    const { data: { text } } = await w.recognize(imgSrc);
-    kanText = text.trim(); await w.terminate();
+    const { data } = await w.recognize(imgSrc);
+    kanText = data.text.trim(); kanConf = data.confidence; await w.terminate();
   } catch(e) { kanText = 'Error: ' + e.message; }
   const t1 = Date.now();
-  document.getElementById('kan-out').textContent    = kanText || '(no text)';
-  document.getElementById('kan-time').textContent   = `${((t1-t0)/1000).toFixed(1)}s`;
-  document.getElementById('kan-metrics').innerHTML  = metricsHtml(kanText, gt);
+  document.getElementById('kan-out').textContent   = kanText || '(no text)';
+  document.getElementById('kan-time').textContent  = `${((t1-t0)/1000).toFixed(1)}s`;
+  document.getElementById('kan-metrics').innerHTML = metricsHtml(kanText, gt);
   setP(55, 'kan done — running kan_hist…');
 
   // Run kan_hist
-  let histText = '', histOk = false;
+  let histText = '', histOk = false, histConf = null;
   try {
     const w2 = await Tesseract.createWorker('kan_hist', 1, {
       langPath: LANG,
       logger: m => { if (m.status==='recognizing text') setP(55+m.progress*40, 'Running kan_hist…'); },
     });
     await w2.setParameters({ tessedit_pageseg_mode: parseInt(psm) });
-    const { data: { text } } = await w2.recognize(imgSrc);
-    histText = text.trim(); histOk = true; await w2.terminate();
+    const { data } = await w2.recognize(imgSrc);
+    histText = data.text.trim(); histConf = data.confidence; histOk = true; await w2.terminate();
   } catch(e) {
-    histText = 'Model not available yet.\nComplete the Package step (⑦) to create kan_hist.traineddata.';
+    histText = 'Model not available yet.\nComplete the Package step (⑥) to create kan_hist.traineddata.';
   }
   const t2 = Date.now();
-  document.getElementById('hist-out').textContent    = histText || '(no text)';
-  document.getElementById('hist-time').textContent   = histOk ? `${((t2-t1)/1000).toFixed(1)}s` : '';
+  document.getElementById('hist-out').textContent   = histText || '(no text)';
+  document.getElementById('hist-time').textContent  = histOk ? `${((t2-t1)/1000).toFixed(1)}s` : '';
   const hb = document.getElementById('hist-badge');
-  hb.textContent = histOk ? '✓ Ready' : 'Not packaged yet';
+  hb.textContent = histOk ? '✓ Ready' : 'Not packaged';
   hb.className   = 'pill ' + (histOk ? 'pill-green' : 'pill-amber');
-  document.getElementById('hist-metrics').innerHTML  = histOk ? metricsHtml(histText, gt) : '';
+  document.getElementById('hist-metrics').innerHTML = histOk ? metricsHtml(histText, gt) : '';
+
+  // ── Populate stats bar ────────────────────────────────────────
+  if (histConf !== null) {
+    document.getElementById('stat-conf-val').textContent  = Math.round(histConf) + '%';
+    document.getElementById('stat-conf-wrap').style.display = '';
+  }
+  const charCount = histText.replace(/\s/g,'').length;
+  document.getElementById('stat-chars-val').textContent  = charCount.toLocaleString();
+  document.getElementById('stat-chars-wrap').style.display = '';
+
+  if (gt.trim() && histOk) {
+    const kanCer  = parseFloat(cer(kanText,  gt));
+    const histCer = parseFloat(cer(histText, gt));
+    if (!isNaN(kanCer) && !isNaN(histCer) && kanCer > 0) {
+      const impr = ((kanCer - histCer) / kanCer * 100).toFixed(0);
+      const el   = document.getElementById('stat-impr-val');
+      el.textContent = (impr >= 0 ? '+' : '') + impr + '%';
+      el.style.color = impr >= 0 ? 'var(--green)' : 'var(--red)';
+      document.getElementById('stat-impr-wrap').style.display = '';
+    }
+    renderDiff(histText, gt);
+  }
+
+  // Refresh training stats (shared loader handles both OCR Test + Live OCR bars)
+  loadTrainingStats();
 
   setP(100, 'Done');
   setTimeout(() => { document.getElementById('ocr-prog').style.display='none'; }, 700);
-  document.getElementById('ocr-results').style.display = 'grid';
   document.getElementById('export-single-btn').style.display = '';
   btn.disabled = false;
+}
+
+// ── kan_hist Output / Correction tab switching ───────────────────
+function setHistTab(tab) {
+  ['output','correction'].forEach(t => {
+    document.getElementById('hist-tab-'+t).style.display = t===tab ? '' : 'none';
+    const btn = document.getElementById('ocr-tab-'+t);
+    btn.classList.toggle('active', t===tab);
+  });
+  if (tab === 'correction') updateMetricsLive();
+}
+
+// ── Live metric update when GT changes ───────────────────────────
+function updateMetricsLive() {
+  const gt      = (document.getElementById('ocr-gt') || {}).value || '';
+  const kanText = document.getElementById('kan-out').textContent;
+  const histText= document.getElementById('hist-out').textContent;
+  if (!kanText || kanText === '—' || kanText === '…' ||
+      !histText || histText === '—' || histText === '…') return;
+  document.getElementById('kan-metrics').innerHTML  = metricsHtml(kanText,  gt);
+  document.getElementById('hist-metrics').innerHTML = metricsHtml(histText, gt);
+  if (gt.trim()) {
+    renderDiff(histText, gt);
+    // Update improvement stat
+    const kanCer  = parseFloat(cer(kanText,  gt));
+    const histCer = parseFloat(cer(histText, gt));
+    if (!isNaN(kanCer) && !isNaN(histCer) && kanCer > 0) {
+      const impr = ((kanCer - histCer) / kanCer * 100).toFixed(0);
+      const el = document.getElementById('stat-impr-val');
+      el.textContent = (impr >= 0 ? '+' : '') + impr + '%';
+      el.style.color = impr >= 0 ? 'var(--green)' : 'var(--red)';
+      document.getElementById('stat-impr-wrap').style.display = '';
+    }
+  }
+}
+
+// ── Character-level diff: prediction vs ground-truth ────────────
+function renderDiff(pred, gt) {
+  const diffEl = document.getElementById('hist-diff');
+  const bodyEl = document.getElementById('hist-diff-body');
+  const corrMetrics = document.getElementById('hist-metrics-corr');
+  if (!gt.trim()) { diffEl.style.display = 'none'; return; }
+
+  // Align pred to gt with character-level LCS diff
+  const a = [...pred], b = [...gt];
+  // Build DP table
+  const m = Math.min(a.length, 200), n = Math.min(b.length, 200); // cap for perf
+  const dp = Array.from({length:m+1}, (_,i) => Array.from({length:n+1}, (_,j) => i||j));
+  for (let i=1;i<=m;i++) for (let j=1;j<=n;j++)
+    dp[i][j] = a[i-1]===b[j-1] ? dp[i-1][j-1] : 1+Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+
+  // Backtrack
+  let i=m, j=n, ops=[];
+  while (i>0 || j>0) {
+    if (i>0 && j>0 && a[i-1]===b[j-1]) { ops.push({t:'m',c:a[i-1]}); i--; j--; }
+    else if (j>0 && (i===0 || dp[i][j-1]<=dp[i-1][j])) { ops.push({t:'i',c:b[j-1]}); j--; }
+    else { ops.push({t:'d',c:a[i-1]}); i--; }
+  }
+  ops.reverse();
+
+  let html = '';
+  for (const op of ops) {
+    const ch = op.c === ' ' ? '&nbsp;' : op.c === '\n' ? '<br>' : op.c;
+    if      (op.t==='m') html += `<span class="diff-match">${ch}</span>`;
+    else if (op.t==='d') html += `<span class="diff-wrong" title="predicted, not in GT">${ch}</span>`;
+    else                 html += `<span class="diff-ins"   title="in GT, not predicted">${ch}</span>`;
+  }
+  if (a.length > 200 || b.length > 200)
+    html += ' <span style="color:var(--mute);font-size:.7rem">(truncated to 200 chars)</span>';
+
+  bodyEl.innerHTML = html;
+  corrMetrics.innerHTML = metricsHtml(pred, gt);
+  diffEl.style.display = '';
 }
 
 // ── OCR mode switching ───────────────────────────────────────────
@@ -3159,18 +3664,54 @@ async function loadImgs() {
   const g = document.getElementById('imgs-grid');
   if (_imgMode === 'corpus') {
     g.innerHTML = '<p style="color:var(--mute)">Loading corpus samples…</p>';
-    let d;
-    try { d = await apiGet('/api/images?n=20'); } catch(e) {
+    let rendered, classical;
+    try {
+      [rendered, classical] = await Promise.all([
+        apiGet('/api/images?n=16'),
+        apiGet('/api/classical-samples?n=6'),
+      ]);
+    } catch(e) {
       g.innerHTML = '<p style="color:var(--mute)">Server not running.</p>'; return;
     }
+
+    const totalShown = rendered.length + classical.length;
     document.getElementById('img-count').textContent =
-      d.length ? `Showing ${d.length} corpus samples` : 'No rendered images yet';
-    if (!d.length) { g.innerHTML='<p style="color:var(--mute)">No rendered images yet.</p>'; return; }
-    g.innerHTML = '<div class="imgs-g">' + d.map(i => `
-      <div class="img-card">
-        <img src="data:image/png;base64,${i.b64}" loading="lazy" alt="${i.name}">
-        <div class="img-gt" title="${i.gt}">${i.gt || '(no gt)'}</div>
-      </div>`).join('') + '</div>';
+      totalShown ? `${rendered.length} rendered lines · ${classical.length} classical pages` : 'No training images yet';
+
+    let html = '';
+
+    if (rendered.length) {
+      html += `<div style="font-size:.78rem;font-weight:700;color:var(--mute);text-transform:uppercase;
+                            letter-spacing:.05em;margin:0 0 8px">
+                 Rendered lines (${rendered.length} shown)
+               </div>
+               <div class="imgs-g" style="margin-bottom:20px">` +
+        rendered.map(i => `
+          <div class="img-card">
+            <img src="data:image/png;base64,${i.b64}" loading="lazy" alt="${i.name}">
+            <div class="img-gt" title="${i.gt}">${i.gt || '(no gt)'}</div>
+          </div>`).join('') + '</div>';
+    }
+
+    if (classical.length) {
+      html += `<div style="font-size:.78rem;font-weight:700;color:var(--mute);text-transform:uppercase;
+                            letter-spacing:.05em;margin:0 0 8px">
+                 Classical corpus pages (${classical.length} shown)
+               </div>
+               <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px">` +
+        classical.map(i => `
+          <div class="img-card" style="max-width:100%">
+            <img src="${i.url}" loading="lazy" alt="${i.name}" style="max-height:280px;width:100%;object-fit:contain;background:#fff">
+            <div class="img-gt" title="${i.gt}" style="font-size:.72rem">
+              <strong>${i.title.replace(/_/g,' ')}</strong>
+              <span style="color:var(--mute)"> · ${i.font}</span><br>
+              ${i.gt || '(no gt)'}
+            </div>
+          </div>`).join('') + '</div>';
+    }
+
+    if (!html) html = '<p style="color:var(--mute)">No training images yet.</p>';
+    g.innerHTML = html;
     return;
   }
 
@@ -3464,8 +4005,50 @@ setupDrop('scan-drop', f => {
   });
 });
 
+// ── Training stats for OCR Test + Live OCR stat bars ──────────
+// Uses an iteration cap so the displayed BCER reflects the PACKAGED
+// model's checkpoint (not the fully-overfit 0.000% late checkpoint).
+const STAT_MAX_ITER = 150000;
+
+async function loadTrainingStats() {
+  try {
+    const [bcerHistory, st, fonts] = await Promise.all([
+      apiGet('/api/bcer').catch(() => null),
+      apiGet('/api/status').catch(() => null),
+      apiGet('/api/fonts').catch(() => null),
+    ]);
+
+    // Best BCER within the generalisation window (≤ STAT_MAX_ITER)
+    if (bcerHistory && bcerHistory.length) {
+      const capped = bcerHistory.filter(p => p.iter <= STAT_MAX_ITER);
+      const pool   = capped.length ? capped : bcerHistory;
+      const best   = pool.reduce((b, c) => c.bcer < b.bcer ? c : b);
+      ['stat-bcer',  'tjs-stat-bcer' ].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = best.bcer.toFixed(3) + '%'; });
+      ['stat-iters', 'tjs-stat-iters'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = best.iter.toLocaleString(); });
+    }
+
+    // Training images — rendered + classical total
+    if (st && (st._rendered !== undefined || st._classical !== undefined)) {
+      const total = (st._rendered || 0) + (st._classical || 0);
+      ['stat-images', 'tjs-stat-images'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = total.toLocaleString(); });
+    } else if (st && st['03_render']) {
+      // fallback: parse first number from detail string (older server)
+      const n = parseInt((st['03_render'].detail || '').replace(/,/g, ''));
+      if (!isNaN(n)) {
+        ['stat-images', 'tjs-stat-images'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = n.toLocaleString(); });
+      }
+    }
+
+    // Font variants — total font files across all families
+    if (fonts && fonts.length) {
+      const total = fonts.reduce((s, f) => s + (f.styles || 1), 0);
+      ['stat-fonts', 'tjs-stat-fonts'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = total; });
+    }
+  } catch(e) { /* server offline — dashes remain */ }
+}
+
 async function loadAll() {
-  await Promise.all([loadStatus(), loadFonts(), loadBcer(), loadFontImageSummary()]);
+  await Promise.all([loadStatus(), loadFonts(), loadBcer(), loadFontImageSummary(), loadTrainingStats()]);
 }
 loadAll();
 setInterval(loadStatus, 20000);
@@ -3528,10 +4111,221 @@ async function loadFontRegistry() {
     const d = await r.json();
     fontRegistry = d.fonts || [];
     renderFontTabs();
+    populatePreviewFontSelect();
     if (fontRegistry.length) selectFont(fontRegistry[0].id);
   } catch(e) {
     console.warn('Font registry unavailable:', e);
   }
+}
+
+// ── Live Font Preview ──────────────────────────────────────────
+let _previewTimer = null;
+
+// ── A5 Browser Render ────────────────────────────────────────────────────
+function showA5Panel() {
+  document.getElementById('a5-panel').style.display = 'block';
+  document.getElementById('a5-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── A5 render: Start / Stop / Resume ─────────────────────────────────────
+let _a5PollTimer  = null;
+let _a5CorpusDir  = '';
+let _a5PeakCount  = 0;   // highest PNG count seen — used for indeterminate bar
+
+function _a5SetState(state, msg = '') {
+  // state: 'idle' | 'running' | 'stopped' | 'done' | 'error'
+  const startBtn = document.getElementById('a5-start-btn');
+  const stopBtn  = document.getElementById('a5-stop-btn');
+  const statusEl = document.getElementById('a5-status');
+  const wrapEl   = document.getElementById('a5-progress-wrap');
+  const labelEl  = document.getElementById('a5-progress-label');
+  const barEl    = document.getElementById('a5-progress-bar');
+
+  if (state === 'running') {
+    startBtn.style.display = 'none';
+    stopBtn.style.display  = '';
+    wrapEl.style.display   = 'block';
+    labelEl.textContent    = 'Rendering — see live log for detail';
+    statusEl.textContent   = msg || '';
+    // Indeterminate shimmer: oscillate bar between 10 % and 90 %
+    barEl.style.transition = 'none';
+    barEl.style.width      = '10%';
+    setTimeout(() => { barEl.style.transition = 'width 2.5s ease'; barEl.style.width = '85%'; }, 50);
+  } else if (state === 'stopped') {
+    startBtn.textContent   = '▶ Resume';
+    startBtn.style.display = '';
+    stopBtn.style.display  = 'none';
+    labelEl.textContent    = 'Stopped — safe to resume';
+    barEl.style.width      = '0%';
+    statusEl.textContent   = msg || '';
+  } else if (state === 'done') {
+    startBtn.textContent   = '▶ Run again';
+    startBtn.style.display = '';
+    stopBtn.style.display  = 'none';
+    labelEl.textContent    = '✓ Complete';
+    barEl.style.width      = '100%';
+    statusEl.textContent   = msg || '';
+  } else if (state === 'error') {
+    startBtn.textContent   = '▶ Retry';
+    startBtn.style.display = '';
+    stopBtn.style.display  = 'none';
+    wrapEl.style.display   = 'none';
+    statusEl.textContent   = '✗ ' + (msg || 'Error');
+    statusEl.style.color   = 'var(--red)';
+    return;
+  } else { // idle
+    startBtn.textContent   = '▶ Start';
+    startBtn.style.display = '';
+    stopBtn.style.display  = 'none';
+    wrapEl.style.display   = 'none';
+    statusEl.textContent   = msg || '';
+  }
+  statusEl.style.color = '';
+}
+
+function _a5StartPoll() {
+  if (_a5PollTimer) clearInterval(_a5PollTimer);
+  _a5PollTimer = setInterval(async () => {
+    try {
+      const pr = await fetch(`/api/render-a5-pages/progress?corpus_dir=${encodeURIComponent(_a5CorpusDir)}`);
+      const pd = await pr.json();
+      const count = pd.count || 0;
+      if (count > _a5PeakCount) _a5PeakCount = count;
+      document.getElementById('a5-count').textContent = `${count} pages`;
+
+      if (!pd.running) {
+        clearInterval(_a5PollTimer);
+        _a5PollTimer = null;
+        if (pd.stopped) {
+          _a5SetState('stopped', `Paused at ${count} pages — Resume picks up where it left off`);
+        } else {
+          _a5SetState('done', `${count} pages → ${pd.a5_dir}`);
+        }
+      }
+    } catch (_) {}
+  }, 2500);
+}
+
+async function startA5Render() {
+  const corpusDir   = document.getElementById('a5-corpus-dir').value.trim();
+  const fontSize    = parseInt(document.getElementById('a5-font-size').value)   || 32;
+  const workers     = parseInt(document.getElementById('a5-workers').value)     || 1;
+  const concurrency = parseInt(document.getElementById('a5-concurrency').value) || 2;
+
+  if (!corpusDir) {
+    _a5SetState('error', 'Enter the corpus folder path first');
+    return;
+  }
+
+  _a5CorpusDir = corpusDir;
+  _a5SetState('running', 'Starting Chrome workers…');
+
+  try {
+    const r = await fetch('/api/render-a5-pages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ corpus_dir: corpusDir, font_size: fontSize, workers, concurrency })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Failed to start');
+    _a5StartPoll();
+  } catch (e) {
+    _a5SetState('error', e.message);
+  }
+}
+
+async function stopA5Render() {
+  document.getElementById('a5-stop-btn').disabled = true;
+  try {
+    await fetch('/api/render-a5-pages/stop', { method: 'POST' });
+    // Poll will detect running=false and transition to 'stopped'
+  } catch (_) {
+    _a5SetState('stopped', 'Stopped');
+  } finally {
+    document.getElementById('a5-stop-btn').disabled = false;
+  }
+}
+
+function schedulePreview() {
+  clearTimeout(_previewTimer);
+  _previewTimer = setTimeout(runPreview, 350);
+}
+
+async function runPreview() {
+  const text    = document.getElementById('preview-text')?.value?.trim();
+  const fontSel = document.getElementById('preview-font');
+  const size    = parseInt(document.getElementById('preview-size')?.value || 48);
+  const all     = document.getElementById('preview-all')?.checked;
+  const results = document.getElementById('preview-results');
+  const status  = document.getElementById('preview-status');
+  if (!text || !results) return;
+
+  // Collect which fonts to render
+  let targets = []; // [{label, font_path}]
+  if (all && fontRegistry) {
+    fontRegistry.forEach(f => {
+      f.variants.forEach(v => {
+        if (v.fontUrl) targets.push({ label: `${f.name} — ${v.name}`, font_path: v.fontUrl.replace(/^\//, '') });
+      });
+    });
+  } else if (fontSel?.value) {
+    targets = [{ label: fontSel.options[fontSel.selectedIndex]?.text || fontSel.value, font_path: fontSel.value }];
+  }
+  if (!targets.length) { status.textContent = 'No font selected'; return; }
+
+  results.innerHTML = '<div style="font-size:.82rem;color:var(--mute)">Rendering…</div>';
+  status.textContent = `Rendering ${targets.length} font(s)…`;
+
+  const cards = await Promise.all(targets.map(async ({ label, font_path }) => {
+    try {
+      const r = await fetch('/api/render-preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, font_path, font_size: size })
+      });
+      const d = await r.json();
+      if (d.png) {
+        const badge = d.renderer === 'browser'
+          ? '<span style="background:#d1fae5;color:#065f46;font-size:.65rem;padding:1px 5px;border-radius:3px;margin-left:4px">🌐 browser</span>'
+          : '<span style="background:#fef3c7;color:#92400e;font-size:.65rem;padding:1px 5px;border-radius:3px;margin-left:4px">🐍 python (conjuncts may be wrong)</span>';
+        const warn = (d.renderer !== 'browser' && d.warning)
+          ? `<div style="font-size:.65rem;color:#92400e;margin-top:5px;word-break:break-word">⚠ ${d.warning}</div>`
+          : '';
+        return `<div style="background:white;border:1.5px solid var(--border2);border-radius:8px;padding:10px;min-width:160px;max-width:100%">
+          <div style="font-size:.7rem;color:#666;margin-bottom:6px;font-family:monospace">${label}${badge}</div>
+          <img src="data:image/png;base64,${d.png}" style="max-width:100%;display:block;border-radius:4px">
+          ${warn}
+        </div>`;
+      } else {
+        return `<div style="background:white;border:1.5px solid var(--border2);border-radius:8px;padding:10px;min-width:160px;color:red;font-size:.78rem">
+          <div style="font-weight:600;margin-bottom:4px">${label}</div>
+          ${d.error || 'Render failed'}
+        </div>`;
+      }
+    } catch(e) {
+      return `<div style="color:red;font-size:.78rem;padding:8px">${label}: ${e.message}</div>`;
+    }
+  }));
+
+  results.innerHTML = cards.join('');
+  status.textContent = `${targets.length} font(s) rendered`;
+}
+
+function populatePreviewFontSelect() {
+  const sel = document.getElementById('preview-font');
+  if (!sel || !fontRegistry) return;
+  sel.innerHTML = '';
+  fontRegistry.forEach(f => {
+    const grp = document.createElement('optgroup');
+    grp.label = f.name;
+    f.variants.forEach(v => {
+      if (!v.fontUrl) return;
+      const o = document.createElement('option');
+      o.value = v.fontUrl.replace(/^\//, '');
+      o.textContent = v.name;
+      grp.appendChild(o);
+    });
+    if (grp.children.length) sel.appendChild(grp);
+  });
+  if (!sel.value && sel.options.length) sel.selectedIndex = 0;
 }
 
 // ── Font family tabs ───────────────────────────────────────────
@@ -3742,17 +4536,22 @@ function renderUnicodeGrid() {
   // Historical Karnata fonts render virama as a visible halanta mark — correct for print,
   // but useless as a character reference. Conjuncts always use Noto Sans Kannada so the
   // reference is legible. Other sections use the selected font for live comparison.
-  const fontFamily         = uVariant ? `'${CSS.escape(uVariant)}', 'Noto Sans Kannada', serif` : 'inherit';
+  // Historical fonts (GTN/WMP) store their correct conjunct forms in the GSUB
+  // aalt feature, which browsers do not enable by default — apply it for the
+  // selected font so the live preview matches the training images.
+  const selFont        = fontRegistry?.find(f => f.id === uFontId);
+  const fontFeatures   = (selFont && selFont.font_features) || '';
+  const fontFamily     = uVariant ? `'${CSS.escape(uVariant)}', 'Noto Sans Kannada', serif` : 'inherit';
   const conjunctFontFamily = "'Noto Sans Kannada', 'Kannada Sangam MN', serif";
 
   const groups = [
-    { id:'unicode-vowels',     items:KANNADA_VOWELS,     type:'vowel',    ff: fontFamily },
-    { id:'unicode-consonants', items:KANNADA_CONSONANTS, type:'consonant',ff: fontFamily },
-    { id:'unicode-conjuncts',  items:KANNADA_CONJUNCTS,  type:'conjunct', ff: conjunctFontFamily },
+    { id:'unicode-vowels',     items:KANNADA_VOWELS,     type:'vowel',    ff: fontFamily, fs: fontFeatures },
+    { id:'unicode-consonants', items:KANNADA_CONSONANTS, type:'consonant',ff: fontFamily, fs: fontFeatures },
+    { id:'unicode-conjuncts',  items:KANNADA_CONJUNCTS,  type:'conjunct', ff: conjunctFontFamily, fs: '' },
     { id:'unicode-digits',     items:KANNADA_DIGITS,     type:'digit',    ff: fontFamily },
   ];
 
-  groups.forEach(({ id, items, type, ff }) => {
+  groups.forEach(({ id, items, type, ff, fs }) => {
     const container = document.getElementById(id);
     if (!container) return;
 
@@ -3765,7 +4564,9 @@ function renderUnicodeGrid() {
     // Apply font + mode to each cell
     Array.from(container.children).forEach((cell, i) => {
       const item = items[i];
-      cell.querySelector('.uc-char').style.fontFamily = ff;
+      const span = cell.querySelector('.uc-char');
+      span.style.fontFamily = ff;
+      span.style.fontFeatureSettings = fs || '';
 
       if (uViewMode === 'png') {
         cell.classList.add('png-mode');
@@ -3822,39 +4623,23 @@ async function clearAndRegenImages() {
   const st  = document.getElementById('gen-images-status');
   if (!confirm('Delete all generated PNGs and regenerate from scratch?')) return;
 
-  btn.disabled = true;
-  st.style.color = 'var(--mute)';
-  st.textContent = '⏳ Clearing existing PNGs…';
+  // Reset UI state before regen
+  document.getElementById('run-char-test-btn').style.display = 'none';
+  const rp = document.getElementById('run-char-test-pending');
+  if (rp) rp.style.display = 'block';
+  document.getElementById('export-char-csv-btn').style.display = 'none';
+  document.getElementById('btn-char-train').style.display      = 'none';
+  const tp = document.getElementById('char-train-pending');
+  if (tp) tp.style.display = 'block';
+  window._lastCharOcrCsv = null;
 
-  try {
-    // Clear all test images on the server
-    const dr = await fetch('/api/test-images', { method: 'DELETE' });
-    const dd = await dr.json();
-    if (!dr.ok) throw new Error(dd.error || 'Clear failed');
-
-    st.textContent = `✓ Cleared ${dd.deleted} entr${dd.deleted === 1 ? 'y' : 'ies'} — regenerating…`;
-
-    // Reset UI state
-    document.getElementById('run-char-test-btn').style.display = 'none';
-    const rp = document.getElementById('run-char-test-pending');
-    if (rp) rp.style.display = 'block';
-    document.getElementById('export-char-csv-btn').style.display = 'none';
-    document.getElementById('btn-char-train').style.display      = 'none';
-    const tp = document.getElementById('char-train-pending');
-    if (tp) tp.style.display = 'block';
-    window._lastCharOcrCsv = null;
-
-    // Regenerate for all fonts
-    await genTestImages(true);
-  } catch(e) {
-    st.style.color = 'var(--red)';
-    st.textContent = `✗ ${e.message}`;
-  }
+  // force=true tells the server to wipe and regenerate — no separate DELETE call needed
+  await genTestImages(true, true);
   btn.disabled = false;
 }
 
 // ── Generate test images (per-font or all) ────────────────────
-async function genTestImages(all = false) {
+async function genTestImages(all = false, force = false) {
   const st     = document.getElementById('gen-images-status');
   const btn    = document.getElementById('btn-gen-imgs');
   const btnAll = document.getElementById('btn-gen-all');
@@ -3862,11 +4647,12 @@ async function genTestImages(all = false) {
   [btn, btnAll, btnCR].forEach(b => b && (b.disabled = true));
   st.style.color = 'var(--mute)';
   const label = all ? 'all fonts' : (uFontId ? uFontId : 'selected font');
-  st.textContent = `⏳ Generating images for ${label}…`;
+  st.textContent = `⏳ ${force ? 'Re-generating' : 'Generating'} images for ${label}…`;
   document.getElementById('png-hint').style.display = 'none';
   try {
-    // If all=true, omit fontId so server generates every font
-    const body = (!all && uFontId) ? JSON.stringify({ fontId: uFontId }) : '{}';
+    const payload = { force };
+    if (!all && uFontId) payload.fontId = uFontId;
+    const body = JSON.stringify(payload);
     const r = await fetch('/api/generate-test-images', {
       method: 'POST', headers:{'Content-Type':'application/json'}, body
     });
@@ -4254,16 +5040,22 @@ async function tjsRunOcrUrl() {
 }
 
 function tjsShowPreview(url) {
-  const img = document.getElementById('tjs-preview');
+  const img  = document.getElementById('tjs-preview');
+  const drop = document.getElementById('tjs-drop');
   img.src = url;
-  document.getElementById('tjs-image-section').style.display = 'block';
+  img.style.display  = 'block';
+  drop.style.display = 'none';
 }
 
 async function tjsOcr(src) {
-  // Reset — keep image visible, hide result until ready
-  document.getElementById('tjs-result-section').style.display = 'none';
-  document.getElementById('tjs-words').innerHTML               = '';
-  document.getElementById('tjs-progress').style.display        = 'block';
+  // Reset output columns, show progress
+  document.getElementById('tjs-words').innerHTML                = '';
+  document.getElementById('tjs-correction').value               = '';
+  document.getElementById('tjs-save-status').textContent        = '';
+  document.getElementById('tjs-char-warning').style.display     = 'none';
+  document.getElementById('tjs-stat-conf-wrap').style.display   = 'none';
+  document.getElementById('tjs-stat-words-wrap').style.display  = 'none';
+  document.getElementById('tjs-progress').style.display         = 'block';
   tjsSetStatus('Loading model…', 0);
 
   try {
@@ -4282,6 +5074,10 @@ async function tjsOcr(src) {
     // Overall confidence — store for recolor updates
     window._tjsAvgConf = Math.round(data.confidence);
     tjsUpdateConfLabel();
+
+    // Populate stats bar
+    document.getElementById('tjs-stat-conf-val').textContent  = window._tjsAvgConf + '%';
+    document.getElementById('tjs-stat-conf-wrap').style.display = '';
 
     // Build inline word-confidence view
     const wordsEl = document.getElementById('tjs-words');
@@ -4305,24 +5101,26 @@ async function tjsOcr(src) {
         if (w.bbox) lastY = w.bbox.y0;
 
         const sp = document.createElement('span');
-        sp.textContent      = w.text + ' ';
         sp.lang             = 'kn';
-        sp.title            = `${Math.round(c)}%`;
         sp.dataset.conf     = c;
         sp.style.cssText    = `display:inline;background:${bg};color:${fg};
                                padding:2px 4px;border-radius:4px;cursor:default;
-                               margin-right:2px`;
+                               margin-right:2px;position:relative`;
+        sp.innerHTML = w.text.replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+          `<sup style="font-size:.6em;opacity:.65;font-family:system-ui;font-weight:700;` +
+          `margin-left:2px;user-select:none">${Math.round(c)}%</sup> `;
         wordsEl.appendChild(sp);
       });
     } else {
       wordsEl.textContent = '(no text recognised)';
     }
 
-    document.getElementById('tjs-result-section').style.display = 'flex';
+    // Update words-found stat
+    document.getElementById('tjs-stat-words-val').textContent  = words.length;
+    document.getElementById('tjs-stat-words-wrap').style.display = '';
 
   } catch(e) {
     document.getElementById('tjs-progress').style.display = 'none';
-    document.getElementById('tjs-result-section').style.display = 'flex';
     document.getElementById('tjs-words').textContent = '✗ ' + e.message;
     document.getElementById('tjs-words').style.color = 'var(--red)';
     _tjsWorker = null;

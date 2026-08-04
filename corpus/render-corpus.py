@@ -14,15 +14,34 @@ Historical/letterpress fonts (degrade: true in fonts.yml) get:
 
 Modern fonts (degrade: false) get clean rendering.
 
+Rendering engine:
+  Uses uharfbuzz + freetype-py for full OpenType shaping so that Kannada
+  conjunct characters (e.g. ಕ್ಷ, ಜ್ಞ, ಶ್ರ) render as single fused glyphs
+  rather than broken sequences of isolated codepoints.  Pillow's
+  ImageDraw.text() does NOT apply GSUB rules and will always produce broken
+  conjuncts for Kannada — the shaped renderer fixes this.
+
+  If uharfbuzz / freetype-py are not installed the script warns and falls
+  back to Pillow (conjuncts will be visually broken).  Fix with:
+      pip install uharfbuzz freetype-py numpy --break-system-packages
+
+Parallelism:
+  Uses multiprocessing.Pool (fork) to render all images in parallel.
+  Defaults to os.cpu_count() workers; override with --workers N.
+  Already-rendered files are skipped automatically (safe to resume).
+
 Output:
     rendered/<font_id>_<style>_line<N>.png
     rendered/<font_id>_<style>_line<N>.gt.txt
 
 Run from the repo root:
     python3 corpus/render-corpus.py
+    python3 corpus/render-corpus.py --workers 4
 """
 
-import random
+import argparse
+import multiprocessing
+import os
 import sys
 import yaml
 from pathlib import Path
@@ -32,6 +51,11 @@ try:
 except ImportError:
     print("ERROR: Pillow not installed. Run: pip install Pillow")
     sys.exit(1)
+
+# ── Shaping renderer (HarfBuzz + FreeType) ────────────────────────────────
+# Ensure corpus/ is on the path so the import works from any cwd.
+sys.path.insert(0, str(Path(__file__).parent))
+from shaping_render import SHAPING_AVAILABLE, render_text, check_and_warn
 
 ROOT       = Path(__file__).parent.parent
 FONTS_YML  = ROOT / "fonts.yml"
@@ -47,79 +71,82 @@ PAD_Y     = 12
 MIN_H     = 60        # Tesseract minimum image height
 DPI       = 150       # metadata DPI saved in PNG
 
-random.seed(42)
 
+# ── Parallel worker ────────────────────────────────────────────────────────
+# Must be a module-level function for multiprocessing (fork) to pickle it.
+# With fork, all module globals (SHAPING_AVAILABLE, render_text, etc.) are
+# inherited by child processes — no need to re-import inside the worker.
 
-def add_degradation(img: Image.Image) -> Image.Image:
-    """Simulate letterpress ink spread: blur + noise + tiny rotation."""
-    # Gaussian blur (ink spread)
-    img = img.filter(ImageFilter.GaussianBlur(radius=0.6))
+def _render_task(args):
+    """
+    Render one (font_path, text, idx) pair and write PNG + gt.txt.
+    Returns 'ok', 'skip' (already exists), or 'fail:<reason>'.
+    """
+    font_path_str, text, idx, tag, degrade, out_dir_str, seed, aalt, force = args
+    import random as _rng_mod
+    from PIL import ImageFilter as _IF
 
-    # Salt-and-pepper noise
-    import struct
-    pixels = img.load()
-    w, h = img.size
-    n_noise = int(w * h * 0.003)   # 0.3% of pixels
-    for _ in range(n_noise):
-        x = random.randint(0, w - 1)
-        y = random.randint(0, h - 1)
-        pixels[x, y] = random.choice([0, 255])
+    out_dir  = Path(out_dir_str)
+    stem     = out_dir / f"{tag}_line{idx:04d}"
+    png_path = Path(str(stem) + ".png")
+    gt_path  = Path(str(stem) + ".gt.txt")
 
-    # Tiny rotation (±0.8°)
-    angle = random.uniform(-0.8, 0.8)
-    img = img.rotate(angle, expand=False, fillcolor=255)
-
-    return img
-
-
-def render_font(font_id: str, font_file: str, font_path: Path,
-                lines: list[str], degrade: bool, max_pages: int) -> int:
-    if not font_path.exists():
-        print(f"  WARNING: font not found: {font_path}")
-        print(f"    Run ./scripts/01-prep-base.sh first.")
-        return 0
+    # Resume support: skip already-rendered images.
+    # --force overwrites in place, which is how you re-render after a shaping
+    # change without needing to delete the output directory first.
+    if not force and png_path.exists() and gt_path.exists():
+        return 'skip'
 
     try:
-        font = ImageFont.truetype(str(font_path), FONT_SIZE)
+        if SHAPING_AVAILABLE:
+            img = render_text(
+                font_path_str, text,
+                font_size=FONT_SIZE, padding_x=PAD_X, padding_y=PAD_Y,
+                min_height=MIN_H, bg_color=255, ink_color=0,
+                aalt=aalt,
+            )
+        else:
+            from PIL import ImageDraw
+            pil_font = ImageFont.truetype(font_path_str, FONT_SIZE)
+            dummy = Image.new("L", (1, 1))
+            bbox  = ImageDraw.Draw(dummy).textbbox((0, 0), text, font=pil_font)
+            w = bbox[2] - bbox[0] + PAD_X * 2
+            h = max(bbox[3] - bbox[1] + PAD_Y * 2, MIN_H)
+            img = Image.new("L", (w, h), 255)
+            ImageDraw.Draw(img).text((PAD_X, PAD_Y), text, font=pil_font, fill=0)
     except Exception as e:
-        print(f"  WARNING: cannot load {font_path}: {e}")
-        return 0
+        return f'fail:{e}'
 
-    # Style tag from filename: KarnataGTN-Bold.ttf → bold
-    style = Path(font_file).stem.lower().replace('-', '_')
-    # Strip font family prefix if present (e.g. karnatagtn_bold → bold)
-    # Keep the last underscore-separated segment that isn't a number
-    parts = style.split('_')
-    style_tag = parts[-1] if len(parts) > 1 else style
+    if degrade:
+        # Deterministic degradation: seed is hash(tag, idx) so reruns match
+        rng = _rng_mod.Random(seed)
+        img = img.filter(_IF.GaussianBlur(radius=0.6))
+        w, h = img.size
+        pixels = img.load()
+        for _ in range(int(w * h * 0.003)):
+            pixels[rng.randint(0, w - 1), rng.randint(0, h - 1)] = rng.choice([0, 255])
+        img = img.rotate(rng.uniform(-0.8, 0.8), expand=False, fillcolor=255)
 
-    tag    = f"{font_id}_{style_tag}"
-    subset = lines[:max_pages]
-    count  = 0
-
-    for idx, text in enumerate(subset):
-        # Measure
-        dummy = Image.new("L", (1, 1))
-        bbox  = ImageDraw.Draw(dummy).textbbox((0, 0), text, font=font)
-        w = bbox[2] - bbox[0] + PAD_X * 2
-        h = max(bbox[3] - bbox[1] + PAD_Y * 2, MIN_H)
-
-        img  = Image.new("L", (w, h), 255)
-        draw = ImageDraw.Draw(img)
-        draw.text((PAD_X, PAD_Y), text, font=font, fill=0)
-
-        if degrade:
-            img = add_degradation(img)
-
-        stem = OUTDIR / f"{tag}_line{idx:04d}"
-        img.save(str(stem) + ".png", dpi=(DPI, DPI))
-        (stem.parent / (stem.name + ".gt.txt")).write_text(
-            text, encoding='utf-8')
-        count += 1
-
-    return count
+    img.save(str(png_path), dpi=(DPI, DPI))
+    gt_path.write_text(text, encoding='utf-8')
+    return 'ok'
 
 
 def main():
+    parser = argparse.ArgumentParser(
+        description='Render Kannada corpus to PNG training images (parallel)')
+    parser.add_argument(
+        '--workers', type=int,
+        default=os.cpu_count() or 4,
+        help=f'Parallel worker processes (default: {os.cpu_count() or 4} = cpu count)')
+    parser.add_argument(
+        '--force', action='store_true',
+        help='Re-render images that already exist (use after a shaping/font change)')
+    cli = parser.parse_args()
+    workers = max(1, cli.workers)
+
+    check_and_warn()
+
     if not CORPUS.exists():
         print(f"ERROR: Corpus not found: {CORPUS}")
         print("Run: python3 corpus/download-wiki.py")
@@ -129,14 +156,20 @@ def main():
     lines = [ln.rstrip('\n') for ln in CORPUS.read_text(encoding='utf-8').splitlines()
              if ln.strip()]
     print(f"Corpus: {len(lines)} lines")
+    print(f"Renderer: {'HarfBuzz + FreeType (shaped)' if SHAPING_AVAILABLE else 'Pillow (BROKEN conjuncts)'}")
+    print(f"Workers:  {workers}")
 
     with open(FONTS_YML) as f:
         config = yaml.safe_load(f)
 
-    total = 0
+    # ── Build flat task list (all font × line combinations) ───────────────
+    tasks = []
+    style_info = []   # (tag, font_file, n_lines) — for the summary header
+
     for font in config['fonts']:
         fid      = font['id']
         degrade  = font.get('degrade', False)
+        aalt     = 'aalt' in font.get('font_features', '')
         max_pgs  = font.get('max_pages', 600)
         font_dir = font.get('font_dir', 'fonts')
         flag     = "degraded" if degrade else "clean"
@@ -144,14 +177,66 @@ def main():
         print(f"\n[{fid}]  ({flag} rendering, max {max_pgs} pages/style)")
 
         for font_file in font['font_files']:
-            path  = FONTS_DIR / fid / font_dir / font_file
-            count = render_font(fid, font_file, path, lines, degrade, max_pgs)
-            print(f"  {font_file:<50}  {count} images")
-            total += count
+            font_path = FONTS_DIR / fid / font_dir / font_file
 
-    print(f"\nTotal rendered: {total} PNG+gt.txt pairs → {OUTDIR}")
+            if not font_path.exists():
+                print(f"  WARNING: font not found: {font_path}")
+                print(f"    Run ./scripts/01-prep-base.sh first.")
+                continue
+            try:
+                ImageFont.truetype(str(font_path), FONT_SIZE)
+            except Exception as e:
+                print(f"  WARNING: cannot load {font_path}: {e}")
+                continue
+
+            # Style tag: KarnataGTN-Bold.ttf → bold
+            style     = Path(font_file).stem.lower().replace('-', '_')
+            parts     = style.split('_')
+            style_tag = parts[-1] if len(parts) > 1 else style
+            tag       = f"{fid}_{style_tag}"
+
+            subset = lines[:max_pgs]
+            for idx, text in enumerate(subset):
+                seed = hash((tag, idx)) & 0xFFFFFFFF   # deterministic per image
+                tasks.append((str(font_path), text, idx, tag, degrade, str(OUTDIR), seed, aalt, cli.force))
+
+            print(f"  {font_file:<50}  queued {len(subset)} images")
+            style_info.append((tag, len(subset)))
+
+    if not tasks:
+        print("\nNo tasks to render.")
+        return
+
+    total = len(tasks)
+    print(f"\nRendering {total} images with {workers} workers…\n")
+
+    ok = fail = skip = 0
+
+    with multiprocessing.Pool(processes=workers) as pool:
+        for result in pool.imap_unordered(_render_task, tasks, chunksize=16):
+            if result == 'ok':
+                ok += 1
+            elif result == 'skip':
+                skip += 1
+            else:
+                fail += 1
+
+            done = ok + skip + fail
+            if done % 200 == 0 or done == total:
+                pct = done * 100 // total
+                print(f"  {done}/{total} ({pct}%)  new={ok}  skipped={skip}  failed={fail}",
+                      flush=True)
+
+    print(f"\nTotal rendered: {ok} new  {skip} skipped  {fail} failed → {OUTDIR}")
     print("Run: ./scripts/02-make-lstmf.sh")
 
 
 if __name__ == '__main__':
+    # Use fork start method: safe for CPU-bound PIL work on macOS/Linux.
+    # (spawn would require this script to be importable as a module,
+    #  but the filename contains a hyphen which Python can't import.)
+    try:
+        multiprocessing.set_start_method('fork')
+    except RuntimeError:
+        pass  # already set (e.g. called twice in same process)
     main()

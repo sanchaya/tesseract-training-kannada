@@ -2,32 +2,43 @@
 # ═══════════════════════════════════════════════════════════════
 # 00c-expand-unicharset.sh
 #
-# Adds missing Kannada characters (ಋ ಙ ಝ ಱ) to kan.traineddata's
-# unicharset, producing tessdata_expanded/kan.traineddata.
+# Adds missing Kannada characters to kan.traineddata's unicharset,
+# producing tessdata_expanded/kan.traineddata.
 #
-# WHY: The tessdata_best/kan.traineddata unicharset does not include
-# these 4 characters. lstmtraining skips (or errors on) any training
-# line that contains them. After running this script, retraining from
-# your existing checkpoint will auto-expand the output layer to cover
-# the new characters.
+# Characters added (absent from tessdata_best/kan.traineddata):
+#   ಋ (U+0C8B)  KANNADA LETTER VOCALIC R
+#   ಙ (U+0C99)  KANNADA LETTER NGA
+#   ಝ (U+0C9D)  KANNADA LETTER JHA
+#   ಱ (U+0CB1)  KANNADA LETTER RRA
+#   ೃ (U+0CC3)  KANNADA VOWEL SIGN VOCALIC R  ← very common in Sanskrit-
+#               origin classical Kannada: ನೃಪ ಮೃ ಕೃ ತೃ ಕೃಷ್ಣ ಮೃತ್ಯು…
+#
+# WHY: The tessdata_best unicharset omits these characters.
+# lstmtraining skips any training line that contains them, producing
+# "Encoding of string failed" / "Compute CTC targets failed" errors.
+# After running this script, retraining from the existing checkpoint
+# auto-expands the output layer to cover the new characters.
 #
 # What it does:
 #   1. Downloads kan/ langdata from GitHub (first run only; cached)
 #      https://github.com/tesseract-ocr/langdata_lstm/tree/main/kan
-#   2. Uses kan/kan.unicharset as the authoritative base (not the
-#      extracted lstm-unicharset) to stay aligned with upstream
-#   3. Merges the 4 missing characters into kan.unicharset
+#   2. Extracts the binary lstm-unicharset from tessdata_best so the
+#      expanded set is a proper superset (required by lstmtraining)
+#   3. Merges the missing characters into kan.unicharset
 #   4. Copies the expanded unicharset as Kannada/Kannada.unicharset
-#      for the combine_lang_model script_dir
 #   5. Runs combine_lang_model → tessdata_expanded/kan.traineddata
 #
 # After this script:
-#   • Re-run ④ Make lstmf (filter for these chars is auto-removed)
-#   • Re-run ⑤ Train (auto-uses tessdata_expanded/kan.traineddata)
+#   • Re-run ④ Make lstmf  (character filters auto-lifted)
+#   • Re-run ⑤ Train       (auto-uses tessdata_expanded/kan.traineddata)
+#
+# If you previously ran this script (before ೃ was added), rebuild with:
+#   ./scripts/00c-expand-unicharset.sh --force
+# Then: rm -rf lstmf/classical/ && re-run ④ Make lstmf → ⑤ Train
 #
 # Usage:
 #   ./scripts/00c-expand-unicharset.sh           # normal (cached downloads)
-#   ./scripts/00c-expand-unicharset.sh --force   # re-download all, re-run combine_lang_model
+#   ./scripts/00c-expand-unicharset.sh --force   # re-download all, rebuild
 # ═══════════════════════════════════════════════════════════════
 set -e
 
@@ -45,14 +56,14 @@ WORK_DIR="$ROOT/tmp/unicharset_work"
 LANGDATA_DIR="$ROOT/tmp/langdata_lstm"
 OUTPUT_TESSDATA="$ROOT/tessdata_expanded"
 
-MISSING_CHARS="ಋ ಙ ಝ ಱ"
+MISSING_CHARS="ಋ ಙ ಝ ಱ ೃ"
 BASE_URL="https://raw.githubusercontent.com/tesseract-ocr/langdata_lstm/main/kan"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Expand Kannada Unicharset"
 echo "  Adding: $MISSING_CHARS"
-echo "  Base:   tessdata_best/kan.traineddata lstm-unicharset (binary)"
+echo "  Base:   tessdata_best/kan.traineddata (binary lstm-unicharset)"
 echo "  Output: tessdata_expanded/kan.traineddata"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -112,17 +123,102 @@ fi
 
 # ── Script unicharsets — combine_lang_model loads these for all scripts used ──
 # The Kannada unicharset includes Latin-script chars (digits, punctuation), so
-# combine_lang_model also needs Latin.unicharset. Download once; both locations
-# are symlinked so either lookup path (root or subdirectory) resolves correctly.
-LATIN_URL="https://raw.githubusercontent.com/tesseract-ocr/langdata_lstm/main/Latin/Latin.unicharset"
-if [ ! -s "$LANGDATA_DIR/Latin/Latin.unicharset" ]; then
-    echo "→ Downloading Latin.unicharset (required by combine_lang_model)..."
-    if curl -fsSL "$LATIN_URL" -o "$LANGDATA_DIR/Latin/Latin.unicharset" 2>/dev/null; then
-        ln -sf "Latin/Latin.unicharset" "$LANGDATA_DIR/Latin.unicharset"
-        echo "  ✓ Latin.unicharset"
-    else
-        echo "  ⚠  Latin.unicharset not available — combine_lang_model will warn but continue"
+# combine_lang_model also needs Latin.unicharset.  combine_lang_model looks for:
+#   $LANGDATA_DIR/Latin/Latin.unicharset   (subdirectory form, preferred)
+#   $LANGDATA_DIR/Latin.unicharset         (root symlink, fallback)
+# We try four routes in order of reliability:
+#   1. GitHub langdata_lstm raw file (direct, ~20 KB)
+#   2. Extract from system Latin.traineddata (if installed)
+#   3. Extract from system eng.traineddata  (always present after brew install tesseract)
+#   4. Download script/Latin.traineddata from tessdata_best and extract (reliable)
+_install_latin_unicharset() {
+    local dest_file="$LANGDATA_DIR/Latin/Latin.unicharset"
+    local dest_link="$LANGDATA_DIR/Latin.unicharset"
+    local tmp_td="$WORK_DIR/_lextract"
+    local GOT=0
+
+    # 1. GitHub langdata_lstm
+    if curl -fsSL \
+            "https://raw.githubusercontent.com/tesseract-ocr/langdata_lstm/main/Latin/Latin.unicharset" \
+            -o "$dest_file" 2>/dev/null \
+       && [ -s "$dest_file" ]; then
+        echo "  ✓ Latin.unicharset (GitHub langdata_lstm)"
+        GOT=1
     fi
+
+    # 2. System Latin.traineddata
+    if [ "$GOT" = "0" ]; then
+        for _td in /opt/homebrew/share/tessdata /usr/local/share/tessdata /usr/share/tessdata \
+                   /opt/homebrew/share/tessdata/script /usr/local/share/tessdata/script; do
+            if [ -f "$_td/Latin.traineddata" ]; then
+                combine_tessdata -u "$_td/Latin.traineddata" "$tmp_td" 2>/dev/null || true
+                if [ -s "${tmp_td}.lstm-unicharset" ]; then
+                    cp "${tmp_td}.lstm-unicharset" "$dest_file"
+                    rm -f "${tmp_td}".*
+                    echo "  ✓ Latin.unicharset (extracted from $_td/Latin.traineddata)"
+                    GOT=1; break
+                fi
+                rm -f "${tmp_td}".*
+            fi
+        done
+    fi
+
+    # 3. System eng.traineddata (eng is always installed by brew install tesseract)
+    if [ "$GOT" = "0" ]; then
+        # Find tessdata dir via TESSDATA_PREFIX or common Homebrew/system paths
+        _tdata_dirs="${TESSDATA_PREFIX:-}"
+        for _td in /opt/homebrew/share/tessdata /usr/local/share/tessdata /usr/share/tessdata; do
+            _tdata_dirs="$_tdata_dirs $_td"
+        done
+        for _td in $_tdata_dirs; do
+            [ -f "$_td/eng.traineddata" ] || continue
+            combine_tessdata -u "$_td/eng.traineddata" "$tmp_td" 2>/dev/null || true
+            if [ -s "${tmp_td}.lstm-unicharset" ]; then
+                cp "${tmp_td}.lstm-unicharset" "$dest_file"
+                rm -f "${tmp_td}".*
+                echo "  ✓ Latin.unicharset (derived from $_td/eng.traineddata)"
+                GOT=1; break
+            fi
+            rm -f "${tmp_td}".*
+        done
+    fi
+
+    # 4. Download script/Latin.traineddata from tessdata_best, then extract
+    if [ "$GOT" = "0" ]; then
+        echo "  → GitHub routes failed; downloading script/Latin.traineddata (~22 MB)..."
+        local _lat_td="$WORK_DIR/Latin.traineddata"
+        if curl -fL --progress-bar \
+                "https://github.com/tesseract-ocr/tessdata_best/raw/main/script/Latin.traineddata" \
+                -o "$_lat_td" 2>/dev/null \
+           && [ -s "$_lat_td" ]; then
+            combine_tessdata -u "$_lat_td" "$tmp_td" 2>/dev/null || true
+            if [ -s "${tmp_td}.lstm-unicharset" ]; then
+                cp "${tmp_td}.lstm-unicharset" "$dest_file"
+                rm -f "${tmp_td}".* "$_lat_td"
+                echo "  ✓ Latin.unicharset (from tessdata_best script/Latin.traineddata)"
+                GOT=1
+            fi
+            rm -f "${tmp_td}".* "$_lat_td"
+        fi
+    fi
+
+    if [ "$GOT" = "1" ]; then
+        # Create/refresh the root-level symlink (relative so it survives mv)
+        ln -sf "Latin/Latin.unicharset" "$dest_link" 2>/dev/null || \
+            cp "$dest_file" "$dest_link"
+        return 0
+    else
+        echo "  ✗ Latin.unicharset not found — combine_lang_model WILL fail."
+        echo "    Fix: brew install tesseract  (installs eng.traineddata)"
+        echo "    Or:  curl -fsSL https://raw.githubusercontent.com/tesseract-ocr/langdata_lstm/main/Latin/Latin.unicharset \\"
+        echo "              -o tmp/langdata_lstm/Latin/Latin.unicharset"
+        return 1
+    fi
+}
+
+if [ ! -s "$LANGDATA_DIR/Latin/Latin.unicharset" ]; then
+    echo "→ Fetching Latin.unicharset (required by combine_lang_model)..."
+    _install_latin_unicharset || exit 1
 fi
 
 [ -f "$LANGDATA_DIR/kan/kan.unicharset" ] || {
@@ -133,6 +229,15 @@ fi
     echo "  Source: https://github.com/tesseract-ocr/langdata_lstm/tree/main/kan"
     exit 1
 }
+
+# ── Save a pristine copy of the langdata unicharset ───────────────────────────
+# Step 6a overwrites kan/kan.unicharset with our merged output. The pristine
+# download is used in the two-pass merge (Step 5) so standard chars like ಙ
+# that are in the upstream langdata but not in tessdata_best are never lost.
+# Refreshed on --force; otherwise cached across runs.
+if [ "$FORCE" = "1" ] || [ ! -f "$WORK_DIR/kan_langdata_pristine.unicharset" ]; then
+    cp "$LANGDATA_DIR/kan/kan.unicharset" "$WORK_DIR/kan_langdata_pristine.unicharset"
+fi
 
 # ── Step 2: Extract lstm-unicharset from tessdata_best/kan.traineddata ──────
 # IMPORTANT: the merge base must be the lstm-unicharset embedded in the BINARY
@@ -152,21 +257,21 @@ BASE_UNICHARSET="$WORK_DIR/kan_base.lstm-unicharset"
 BASE_COUNT=$(head -1 "$BASE_UNICHARSET")
 echo "  Extracted: $BASE_COUNT entries (binary lstm-unicharset)"
 
-# Check which of the 4 chars are missing from the BINARY unicharset
+# Check which chars are missing from the BINARY unicharset
 python3 -c "
 data = open('$BASE_UNICHARSET').read()
 missing = []
-for ch in 'ಋಙಝಱ':
+for ch in 'ಋಙಝಱೃ':
     if ch not in data:
         missing.append(f'{ch} (U+{ord(ch):04X})')
 if missing:
     print('  Missing from lstm-unicharset: ' + ', '.join(missing))
 else:
-    print('  All 4 characters already in lstm-unicharset.')
+    print('  All characters already in lstm-unicharset — nothing to add.')
     exit(1)
 " || {
     echo "  Nothing to add — tessdata_expanded not needed."
-    echo "  tessdata_best/kan.traineddata already covers all 4 chars."
+    echo "  tessdata_best/kan.traineddata already covers all required chars."
     exit 0
 }
 
@@ -176,10 +281,17 @@ echo "→ Step 3: Creating corpus with missing characters..."
 cat > "$WORK_DIR/new_chars.txt" << 'EOF'
 ಋ ಙ ಝ ಱ
 ಋಷಿ ಋಣ ಋತು ಋಗ್ವೇದ ಋಜು ಋಕ್ಷ
-ಪಂಚಾಂಗ ಸಂಗ ಅಂಗ ಮಂಗ ರಂಗ ಲಿಂಗ
 ಝರ ಝಲ ಝಳ ಝಂಕ ಝಗ ಝಲಕ
 ಗಾಱ ಅಱ ಕಱ ತಱ ಮಱ
+ಮಙ ಲಙ ಅಙ ಪಙ ಮಙ್ಕ ಪಙ್ಕ
+ನೃಪ ನೃಪತಿ ಮೃತ್ಯು ಕೃತ್ಯ ಕೃಷ್ಣ ತೃಪ್ತಿ ಮೃದು ವೃತ್ತಿ
 EOF
+# IMPORTANT: ೃ (U+0CC3, KANNADA VOWEL SIGN VOCALIC R) must NOT appear
+# standalone here — unicharset_extractor rejects bare combining chars:
+#   "Invalid start of grapheme sequence:M=0xcc3"
+#   "Normalization failed for string '...ೃ'"
+# This causes the ENTIRE LINE to be skipped, losing all other chars on it
+# (including ಙ).  ೃ is correctly extracted from word context: ನೃ, ಮೃ, ಕೃ…
 
 # ── Step 4: Extract unicharset from corpus ─────────────────────
 echo "→ Step 4: Extracting unicharset from new characters..."
@@ -187,21 +299,37 @@ unicharset_extractor \
     --output_unicharset "$WORK_DIR/new_chars.unicharset" \
     "$WORK_DIR/new_chars.txt"
 
-# ── Step 5: Merge lstm-unicharset + new chars ──────────────────
-echo "→ Step 5: Merging into lstm-unicharset..."
+# ── Step 5: Two-pass merge ─────────────────────────────────────────────────────
+# Pass A: BASE (tessdata_best binary) ∪ pristine langdata kan.unicharset
+#   The downloaded langdata unicharset has ALL standard Kannada chars including
+#   ಙ (U+0C99) — which IS in the upstream file but was missing from tessdata_best.
+#   Using the pristine copy saved earlier (not kan/kan.unicharset which Step 6a
+#   will overwrite) ensures chars are never lost across consecutive script runs.
+# Pass B: intermediate ∪ new_chars
+#   Adds chars not in either above (e.g. ೃ U+0CC3 if absent from langdata).
+echo "→ Step 5: Merging into expanded unicharset (two-pass)..."
+
+LANGDATA_UC="$WORK_DIR/kan_langdata_pristine.unicharset"
+[ -f "$LANGDATA_UC" ] || LANGDATA_UC="$LANGDATA_DIR/kan/kan.unicharset"
+
 merge_unicharsets \
     "$BASE_UNICHARSET" \
+    "$LANGDATA_UC" \
+    "$WORK_DIR/kan_intermediate.unicharset"
+
+merge_unicharsets \
+    "$WORK_DIR/kan_intermediate.unicharset" \
     "$WORK_DIR/new_chars.unicharset" \
     "$WORK_DIR/kan_expanded.unicharset"
 
 NEW_COUNT=$(head -1 "$WORK_DIR/kan_expanded.unicharset")
-echo "  Unicharset: $BASE_COUNT → $NEW_COUNT entries"
+echo "  Unicharset: $BASE_COUNT (base) → $NEW_COUNT entries"
 
 # Verify
 python3 -c "
 data = open('$WORK_DIR/kan_expanded.unicharset').read()
 all_ok = True
-for ch in 'ಋಙಝಱ':
+for ch in 'ಋಙಝಱೃ':
     status = '✓' if ch in data else '✗ STILL MISSING'
     print(f'  {ch} (U+{ord(ch):04X}): {status}')
     if ch not in data:
@@ -210,9 +338,9 @@ if not all_ok:
     exit(1)
 "
 
-# ── Step 6a: Write result back to kan/kan.unicharset ─────────────
-# kan/kan.unicharset is the single source of truth in our langdata dir.
-# After expansion it holds the merged (lstm-binary + 4 new chars) set.
+# ── Step 6a: Write expanded unicharset back to kan/kan.unicharset ─────────────
+# This overwrites the langdata download — but a pristine copy was saved in
+# tmp/unicharset_work/kan_langdata_pristine.unicharset for future runs.
 # Symlink at both locations for combine_lang_model compatibility.
 cp "$WORK_DIR/kan_expanded.unicharset" "$LANGDATA_DIR/kan/kan.unicharset"
 ln -sf "../kan/kan.unicharset" "$LANGDATA_DIR/Kannada/Kannada.unicharset"
@@ -276,13 +404,15 @@ if [ -f "$OUTPUT_TESSDATA/kan.traineddata" ]; then
     echo "  ✓ Done!"
     echo ""
     echo "  Created: tessdata_expanded/kan.traineddata ($SIZE)"
-    echo "  Unicharset: $BASE_COUNT (upstream) → $NEW_COUNT entries"
-    echo "  Added: ಋ (U+0C8B)  ಙ (U+0C99)  ಝ (U+0C9D)  ಱ (U+0CB1)"
+    echo "  Unicharset: $BASE_COUNT (base) → $NEW_COUNT entries"
+    echo "  Added: ಋ (U+0C8B)  ಙ (U+0C99)  ಝ (U+0C9D)  ಱ (U+0CB1)  ೃ (U+0CC3)"
     echo ""
     echo "  Next steps:"
-    echo "  1. Re-run ④ Make lstmf  — filter is now lifted for these chars"
-    echo "  2. Re-run ⑤ Train       — will use tessdata_expanded/ automatically"
-    echo "     (first ~5000 iters may show higher BCER as new nodes initialise)"
+    echo "  1. Regenerate classical lstmf files (old ones used limited unicharset):"
+    echo "       rm -rf lstmf/classical/"
+    echo "       CLASSICAL_A5_DIR=<path>/a5-pages ./scripts/02-make-lstmf.sh"
+    echo "  2. Re-run ⑤ Train — will use tessdata_expanded/ + full classical data"
+    echo "     (first ~5000 iters may show higher BCER as new output nodes warm up)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 else
     echo "ERROR: tessdata_expanded/kan.traineddata was not created."

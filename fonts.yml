@@ -20,6 +20,12 @@
 #   degrade     - true = add ink-spread simulation (historical/letterpress)
 #                 false = clean rendering (modern digital fonts)
 #   max_pages   - Training image count per font style
+#   font_features - Optional CSS font-feature-settings string. GTN/WMP store
+#                 their correct conjunct (ottu) forms in the OpenType 'aalt'
+#                 GSUB feature, which browsers do NOT enable by default.
+#                 Enabling it fixes detached ottu rendering. See
+#                 docs/CONJUNCT_RENDERING.md. Leave empty for GMP (whose
+#                 correct forms live in the base features — aalt breaks them).
 # ════════════════════════════════════════════════════════════════
 
 fonts:
@@ -41,6 +47,7 @@ fonts:
       - KarnataGTN-Black.ttf
     degrade: false
     max_pages: 600
+    font_features: "'aalt' 1"
 
   # ── Karnata German Mission Press ─────────────────────────────
   # Historical letterpress revival, German Mission Press, Mangaluru.
@@ -67,6 +74,7 @@ fonts:
       - KarnataWesleyanMissionPress.ttf
     degrade: true
     max_pages: 600
+    font_features: "'aalt' 1"
 
   # ── Karnata F Kittel ─────────────────────────────────────────
   # Basel Mission Press, Mangalore (1830-1900). Named after F. Kittel.
@@ -80,6 +88,48 @@ fonts:
       - KarnataFKittel.otf
     degrade: true
     max_pages: 600
+
+  # ── Anek Kannada ─────────────────────────────────────────────
+  # Modern Google Fonts typeface (not a Sanchaya font — installed by download,
+  # not by git clone, so fonts/kan_anek/ has no .git dir).
+  # Ships 5 width families on disk; font_dir scopes training + gallery to the
+  # default (normal-width) family only. The variable font is skipped.
+  - id: kan_anek
+    name: "Anek Kannada"
+    description: "Modern Google Fonts typeface with variable width support"
+    repo: https://fonts.google.com/specimen/Anek+Kannada
+    clone: false          # download from the specimen page — not a git remote
+    font_dir: static/AnekKannada
+    font_files:
+      - AnekKannada-Thin.ttf
+      - AnekKannada-ExtraLight.ttf
+      - AnekKannada-Light.ttf
+      - AnekKannada-Regular.ttf
+      - AnekKannada-Medium.ttf
+      - AnekKannada-SemiBold.ttf
+      - AnekKannada-Bold.ttf
+      - AnekKannada-ExtraBold.ttf
+    degrade: false
+    max_pages: 300
+
+  # ── Baloo Tamma 2 ───────────────────────────────────────────
+  # Humanist sans-serif typeface from Google Fonts, designed for Kannada.
+  # Multiple weights available (Regular, Medium, SemiBold, Bold, ExtraBold).
+  # Google Fonts download — no git clone, so fonts/kan_baloo/ has no .git dir.
+  - id: kan_baloo
+    name: "Baloo Tamma 2"
+    description: "Humanist sans-serif from Google Fonts, optimized for Kannada"
+    repo: https://fonts.google.com/specimen/Baloo+Tamma+2
+    clone: false          # download from the specimen page — not a git remote
+    font_dir: fonts
+    font_files:
+      - BalooTamma2-Regular.ttf
+      - BalooTamma2-Medium.ttf
+      - BalooTamma2-SemiBold.ttf
+      - BalooTamma2-Bold.ttf
+      - BalooTamma2-ExtraBold.ttf
+    degrade: false
+    max_pages: 300
 
   # ── ADD NEW FONTS BELOW ───────────────────────────────────────
   # Copy any entry above and fill in the fields.

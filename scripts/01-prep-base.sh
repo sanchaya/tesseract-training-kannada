@@ -48,18 +48,65 @@ fonts_yml, fonts_dir = sys.argv[1], Path(sys.argv[2])
 with open(fonts_yml) as f:
     data = yaml.safe_load(f)
 
+SKIP_DIRS = {'webfonts', 'Source', 'source', '.git', 'Tests'}
+
+def has_font_files(d: Path) -> bool:
+    """True when the directory already holds usable font files at any depth."""
+    if not d.is_dir():
+        return False
+    for p in list(d.rglob('*.ttf')) + list(d.rglob('*.otf')):
+        if not any(part in SKIP_DIRS for part in p.parts):
+            return True
+    return False
+
+def is_git_remote(url: str) -> bool:
+    """
+    Cheap check for a clonable remote.
+
+    Not every font is distributed as a git repo — Google Fonts families are
+    downloaded from a specimen page. Attempting `git clone` on such a URL fails
+    with exit 128 and, under `set -e`, used to abort the whole prep step before
+    the base model was ever downloaded.
+    """
+    u = (url or '').lower()
+    if u.endswith('.git') or u.startswith('git@'):
+        return True
+    return any(h in u for h in ('github.com', 'gitlab.com', 'bitbucket.org', 'codeberg.org'))
+
+failed, manual = [], []
+
 for font in data['fonts']:
     fid   = font['id']
-    repo  = font['repo']
+    repo  = font.get('repo', '')
     dest  = fonts_dir / fid
 
-    print(f"  [{fid}] {repo}")
-    if (dest / '.git').exists():
-        print(f"    ✓ already cloned — skipping (use git -C fonts/{fid} pull to update)")
-    else:
-        subprocess.run(['git', 'clone', '--depth', '1', repo, str(dest)],
-                       check=True)
+    print(f"  [{fid}] {repo or '(no repo)'}")
+
+    # Presence is judged by actual font files, not by a .git dir — repos may be
+    # cloned then stripped of .git, and downloaded families never have one.
+    if has_font_files(dest):
+        print(f"    ✓ font files present — skipping")
+        continue
+
+    if font.get('clone') is False or not is_git_remote(repo):
+        print(f"    ⚠ not a git remote — download manually into fonts/{fid}/")
+        print(f"      then re-run this step. Source: {repo}")
+        manual.append(fid)
+        continue
+
+    # One unreachable repo must not abort prep for every other font.
+    r = subprocess.run(['git', 'clone', '--depth', '1', repo, str(dest)])
+    if r.returncode == 0:
         print(f"    → cloned to {dest}")
+    else:
+        print(f"    ✗ clone failed (exit {r.returncode})")
+        failed.append(fid)
+
+if manual:
+    print(f"\n  ⚠ {len(manual)} font(s) need manual download: {', '.join(manual)}")
+if failed:
+    print(f"\n  ✗ {len(failed)} font(s) failed to clone: {', '.join(failed)}")
+    sys.exit(1)
 PYEOF
 
 # ── B: Download kan base model ─────────────────────────────────

@@ -263,14 +263,19 @@ def build_specimen():
     return lines
 
 
-def clean_lines(lines):
+def clean_lines(lines, expanded=False):
     """Strip comment lines and blank lines, normalise whitespace."""
+    import os as _os
     out = []
-    UNSUPPORTED = set('ಋಙಝಞಱ')
+    # When tessdata_expanded exists, all chars are encodable — use empty set.
+    # Otherwise drop tokens containing chars missing from tessdata_best unicharset.
+    #಩ (U+0CA9) and ಴ (U+0CB4) are unassigned/rare Kannada codepoints not in any unicharset.
+    UNSUPPORTED = set() if expanded else set('ಋಙಝಱ಩಴')
     for line in lines:
         if line.startswith('#'):
             continue
-        tokens = [t for t in line.split() if not (len(t) == 1 and t in UNSUPPORTED)]
+        # Drop any token that CONTAINS an unsupported character (handles conjuncts like ಥ್ಱ)
+        tokens = [t for t in line.split() if not any(c in UNSUPPORTED for c in t)]
         clean = ' '.join(tokens).strip()
         if clean:
             out.append(clean)

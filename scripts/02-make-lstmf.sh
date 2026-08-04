@@ -27,6 +27,22 @@ TESSDATA_BEST="$ROOT/tessdata_best"
 LSTMF_DIR="$ROOT/lstmf"
 RENDERED_DIR="$ROOT/rendered"
 SCAN_DIR="$ROOT/scan-input"
+INVENTORY_DIR="$ROOT/inventory"
+
+# ── Classical corpus A5 pages (optional) ──────────────────────────
+# Set CLASSICAL_A5_DIR to the a5-pages/ output of render-a5-pages.py.
+# Each leaf directory (a5-pages/<title>/<font_tag>/) is a flat folder
+# of PNG+gt.txt pairs that process_dir can consume directly.
+#
+# Override via environment:
+#   CLASSICAL_A5_DIR=/path/to/classical-corpus-kannada/a5-pages \
+#       ./scripts/02-make-lstmf.sh
+CLASSICAL_A5_DIR="${CLASSICAL_A5_DIR:-}"
+
+# ── Character inventory (optional) ───────────────────────────────────
+# Set INVENTORY_DIR to the output of generate-inventory.py.
+# Contains systematic Kannada character combinations for training baseline.
+INVENTORY_DIR="${INVENTORY_DIR:-$INVENTORY_DIR}"
 
 # ── Tesseract 5 check ─────────────────────────────────────────────
 TESS_VER=$(tesseract --version 2>&1 | head -1)
@@ -104,94 +120,329 @@ process_dir() {
     echo "→ Processing $label ($count images)..."
 
     python3 - "$src_dir" "$out_dir" "$LSTMF_DIR/list.txt" "$label" \
-             "$TESSDATA_BEST" << 'PYEOF'
-import sys, subprocess, shutil
+             "$TESSDATA_BEST" "${WORKERS:-0}" << 'PYEOF'
+import sys, subprocess, shutil, os, re as _re
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-src_dir, out_dir, list_txt, label, tdata = \
-    sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+src_dir, out_dir, list_txt, label, tdata, workers_arg = \
+    sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
 
-def make_lstmf(img_path, out_dir, list_file, tessdata):
-    img_path = Path(img_path)
+# Workers: env WORKERS > CLI arg > cpu_count (capped at 8 to avoid Tesseract overload)
+_ncpu = os.cpu_count() or 4
+WORKERS = int(os.environ.get('WORKERS') or (workers_arg if workers_arg != '0' else 0) or min(_ncpu, 8))
+
+# ── Classical corpus text cleaning ───────────────────────────────────────────
+def _clean_gt(raw: str) -> str:
+    """
+    Pre-process classical Kannada ground-truth text before lstmf creation.
+
+    Known issues across digitised texts in this corpus:
+      1. ೦ (U+0CE6) used as anusvara ಂ (U+0C82) — common OCR/input error.
+         e.g. 'ಬೇ೦ಟಿ' → 'ಬೇಂಟಿ'
+      2. XML/HTML chapter tags: <ch>ಐದನೆಯ ಸಂಧಿ</ch>, <p>…</p>, etc. —
+         editorial markup in nalacharitre and similar digitised texts.
+      3. Devanagari dandas ।/॥ (U+0964/U+0965) used as verse separators.
+      4. Devanagari digits ०-९ (U+0966-U+096F) used as verse numbers.
+      5. Editorial single-char annotations: (ಕ), (ಚ), (ರ) — alternate readings.
+      6. ASCII markup: + verse dividers, stray quotes.
+      7. ASCII pipe || used as speaker/section markers in drama texts (Yakshagana).
+         e.g. '|| ಸಿದ್ಧಯ್ಯ ||' — | (0x7C) is not in the Kannada unicharset.
+      8. Stray Latin letters embedded in Kannada words — digitization artifacts.
+         e.g. 'ಕಂದಾs' → 'ಕಂದಾ'  (ASCII 's', 0x73, not in unicharset).
+    """
+    t = raw
+    t = t.replace('೦', 'ಂ')              # ೦ → ಂ  digit-zero → anusvara
+    t = _re.sub(r'<[^>]+>', '', t)        # strip XML/HTML tags (<ch>, <p>, etc.)
+    t = _re.sub(r'[।॥]', '', t)          # strip Devanagari dandas U+0964/U+0965
+    t = _re.sub(r'[०-९]', '', t)         # strip Devanagari digits ०-९
+    t = _re.sub(r'\([ಀ-೿]\)', '', t)     # strip editorial (X) annotations
+    t = t.replace('+', '')                # strip verse-divider +
+    t = _re.sub(r'[\'"ʼ]', '', t)        # strip stray quote chars
+    t = t.replace('|', '')               # strip ASCII pipes (drama text || markers)
+    t = _re.sub(r'[a-zA-Z]', '', t)      # strip stray Latin letters (digitization artifacts)
+    # Word-final virama (U+0CCD) not followed by a Kannada consonant.
+    # The unicharset has ್‌ (virama+ZWNJ) as an explicit half-form entry,
+    # but has NO entry for standalone ್.  Words like ರಾವ್, ಕನ್, ಸ್ end in
+    # consonant + ್ with nothing following — causing ~87% skip ratio.
+    # Fix: append ZWNJ so it maps to the ್‌ unicharset slot.
+    t = _re.sub(r'್(?![ಕ-ಹೞೠೡ‌])',
+                r'್‌', t)
+    t = _re.sub(r'\s+', ' ', t).strip()
+    return t
+
+# ── Unicharset — determine which characters to filter ────────────────────────
+# tessdata_best/kan.traineddata is missing: ಋ ಙ ಝ ಱ ಩ ಴ ೃ
+# tessdata_expanded adds them all via 00c-expand-unicharset.sh.
+#
+# Three tiers:
+#   tessdata_best only          → filter all 7 known-missing chars
+#   tessdata_expanded (old)     → filter ೃ only  (re-run 00c --force to fix)
+#   tessdata_expanded (updated) → no filtering (all chars present)
+#
+# IMPORTANT: _has_vocalic_r must check tessdata_expanded *exists* — not just the
+# unicharset cache file.  After 00c Step 5 the cache has ೃ, but if combine_lang_model
+# failed (e.g. missing Latin.unicharset) tessdata_expanded is NOT built yet and
+# tessdata_best still can't encode ೃ → "Failed to read boxes" errors.
+_exp_tdata_dir = os.path.join(tdata, '..', 'tessdata_expanded')
+_exp_tdata     = os.path.join(_exp_tdata_dir, 'kan.traineddata')
+_uc_file       = os.path.join(tdata, '..', 'tmp', 'unicharset_work', 'kan_expanded.unicharset')
+_has_expanded  = os.path.exists(_exp_tdata)
+_has_vocalic_r = (
+    _has_expanded                               # tessdata_expanded must be built
+    and os.path.exists(_uc_file)
+    and 'ೃ' in open(_uc_file).read()
+)
+_UNSUPPORTED   = (set()          if _has_vocalic_r  else
+                  {'ೃ'}          if _has_expanded   else
+                  set('ಋಙಝಱ಩಴ೃ'))
+# Use tessdata_expanded when available so rare chars can be encoded correctly.
+_run_tdata = _exp_tdata_dir if _has_expanded else tdata
+# Ensure configs symlink exists in run tessdata dir (needed for lstm.train config)
+_run_configs  = os.path.join(_run_tdata, 'configs')
+_best_configs = os.path.join(tdata, 'configs')
+if not os.path.exists(_run_configs) and os.path.exists(_best_configs):
+    try:
+        os.symlink(os.path.realpath(_best_configs), _run_configs)
+    except OSError:
+        pass
+if _UNSUPPORTED:
+    print(f"  Note: filtering chars absent from unicharset: "
+          f"{' '.join(sorted(_UNSUPPORTED))} "
+          f"(run 00c-expand-unicharset.sh {'--force ' if _has_expanded else ''}to add them)",
+          flush=True)
+
+def _make_lstmf_impl(img_path_str):
+    """
+    Convert one PNG+gt.txt pair to an lstmf file.
+    Returns absolute path to the lstmf, or None on failure.
+    Thread-safe: each call writes to a unique stem, no shared file handles.
+    """
+    img_path = Path(img_path_str)
     gt_path  = img_path.with_suffix('.gt.txt')
-    if not img_path.exists() or not gt_path.exists():
-        return False
 
-    out_dir  = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    stem     = img_path.stem
-    dst_img  = out_dir / (stem + img_path.suffix)
-    dst_box  = out_dir / (stem + '.box')
-    lstmf    = out_dir / (stem + '.lstmf')
+    out_path = Path(out_dir)
+    out_path.mkdir(parents=True, exist_ok=True)
+    stem    = img_path.stem
+    dst_img = out_path / (stem + img_path.suffix)
+    dst_box = out_path / (stem + '.box')
+    lstmf   = out_path / (stem + '.lstmf')
+
+    # Resume: already done
+    if lstmf.exists():
+        return str(lstmf.resolve())
 
     shutil.copy2(img_path, dst_img)
 
-    # Get image dimensions for the WordStr box
-    from PIL import Image as PILImage
-    with PILImage.open(dst_img) as im:
+    from PIL import Image as _PIL
+    with _PIL.open(dst_img) as im:
         w, h = im.size
 
-    # Create WordStr box file (Tesseract 4/5 line-level training format)
-    # Strip chars absent from kan.traineddata unicharset; collapse spaces
-    #
-    # _UNSUPPORTED: characters NOT in tessdata_best/kan.traineddata unicharset.
-    # After running 00c-expand-unicharset.sh and retraining with tessdata_expanded/,
-    # clear this set so all Kannada chars are trained.
-    #
-    # Verified missing (run 00c-expand-unicharset.sh to fix):
-    #   ಋ U+0C8B  ಙ U+0C99  ಝ U+0C9D  ಱ U+0CB1
-    # Verified PRESENT (was incorrectly filtered before):
-    #   ಞ U+0C9E  — removed from filter
-    import re as _re
-    import os as _os
-    # Use empty set if tessdata_expanded/kan.traineddata exists (expansion done)
-    _expanded = _os.path.exists(_os.path.join(tdata, '..', 'tessdata_expanded', 'kan.traineddata'))
-    _UNSUPPORTED = set() if _expanded else set('ಋಙಝಱ')
-    _raw = gt_path.read_text(encoding='utf-8').strip()
-    _tokens = [t for t in _raw.split(' ') if not (len(t)==1 and t in _UNSUPPORTED)]
+    # Clean and filter ground-truth text.
+    # _clean_gt() fixes corpus OCR errors (digit-zero→anusvara, editorial marks, +).
+    # _UNSUPPORTED filters whole tokens whose chars aren't in the tessdata unicharset.
+    # Both are computed once at module level above.
+    _raw    = gt_path.read_text(encoding='utf-8', errors='ignore').strip()
+    _raw    = _clean_gt(_raw)                        # Fix OCR / editorial issues
+    _tokens = [t for t in _raw.split(' ') if not any(c in _UNSUPPORTED for c in t)]
     gt_text = _re.sub(r'\s+', ' ', ' '.join(_tokens)).strip()
-    with open(dst_box, 'w', encoding='utf-8') as bf:
-        bf.write(f"WordStr 0 0 {w} {h} 0 #{gt_text}\n\n")
 
-    # Generate lstmf
+    if not gt_text:
+        # Every token was filtered (e.g. entire page is ೃ-dense Sanskrit verse).
+        # An empty box file causes "Failed to read boxes from X.png" in Tesseract.
+        # Skip cleanly; this page will be included once 00c-expand-unicharset.sh
+        # --force is re-run to add the missing chars to tessdata_expanded.
+        dst_img.unlink(missing_ok=True)
+        dst_box.unlink(missing_ok=True)   # remove any stale box from a prior run
+        return None
+
+    # Split long GT into multiple WordStr box lines. Tesseract reads box text
+    # into a fixed kBoxReadBufSize (1024) buffer — a single line longer than
+    # ~1000 UTF-8 bytes gets truncated mid-character ("Bad UTF-8 str … at col
+    # 1022" → "Failed to read boxes from X.png"). Chunks are concatenated back
+    # into one full line by TrainFromBoxes, so word spacing must be preserved:
+    # trailing spaces are stripped by chomp_string, so append a trailing space
+    # to every chunk except the last.
+    _MAX_BOX_BYTES = 1000
+    _chunks = []
+    _cur = ''
+    for _word in gt_text.split(' '):
+        _cand = _word if not _cur else _cur + ' ' + _word
+        if len(_cand.encode('utf-8')) <= _MAX_BOX_BYTES:
+            _cur = _cand
+        else:
+            if _cur:
+                _chunks.append(_cur)
+            _cur = _word
+    if _cur:
+        _chunks.append(_cur)
+
+    with open(dst_box, 'w', encoding='utf-8') as bf:
+        for _i, _chunk in enumerate(_chunks):
+            _line = _chunk + (' ' if _i < len(_chunks) - 1 else '')
+            bf.write(f"WordStr 0 0 {w} {h} 0 #{_line}\n")
+
+    # ── CTC feasibility guard ────────────────────────────────────────────────
+    # The LSTM scales every input to 48px height, so the number of timesteps it
+    # can emit is roughly the width at that scale. CTC needs at least one
+    # timestep per label (more in practice, since repeated labels need a blank
+    # between them). When the transcription is longer than the timestep budget,
+    # lstmtraining cannot align it and logs:
+    #
+    #     Compute CTC targets failed for <file>.lstmf!
+    #
+    # This is what happens if a FULL PAGE image is paired with the whole page's
+    # text: an 875x1241 A5 page scales to ~33 timesteps but carries ~700
+    # characters. Such samples are unusable — they never train, and they make
+    # the run look stuck. Skip them here rather than letting them into
+    # list.txt. Line-level images (rendered/, inventory/) pass comfortably.
+    _txt = gt_text.strip()
+    _timesteps = int(w * (48.0 / h)) if h else 0
+    if _txt and _timesteps < len(_txt):
+        print(f"  ⊘ {stem}: CTC infeasible — {len(_txt)} labels need > {_timesteps} "
+              f"timesteps ({w}x{h}). Page-level image? Needs line segmentation.",
+              flush=True)
+        return None
+
     result = subprocess.run(
-        ["tesseract", str(dst_img), str(out_dir / stem),
-         "--tessdata-dir", tessdata,
+        ["tesseract", str(dst_img), str(out_path / stem),
+         "--tessdata-dir", _run_tdata,
          "--dpi", "150", "--psm", "6",
          "-l", "kan", "lstm.train"],
         capture_output=True, encoding='utf-8', errors='replace'
     )
+
     if lstmf.exists():
-        with open(list_file, 'a', encoding='utf-8') as lf:
-            lf.write(str(lstmf.resolve()) + '\n')
-        return True
+        return str(lstmf.resolve())
+
+    # Surface the actual Tesseract error so we can diagnose failures.
+    err_lines = (result.stderr or '').strip().splitlines()
+    # Find the most useful line (skip generic "Tesseract Open Source..." header)
+    reason = next((l for l in err_lines if any(k in l for k in
+        ('Error', 'error', 'Failed', 'failed', 'Encoding', 'encoding',
+         'Warning', 'FATAL', 'assert', 'Could not'))), None)
+    if not reason and err_lines:
+        reason = err_lines[-1]
+    if reason:
+        print(f"  ✗ {stem}: {reason.strip()}", flush=True)
 
     # Clean up on failure
     dst_img.unlink(missing_ok=True)
     dst_box.unlink(missing_ok=True)
-    return False
+    return None
 
+def make_lstmf(img_path_str):
+    """
+    Wrapper around _make_lstmf_impl.
+
+    A corrupt or transiently-unreadable image must not crash the whole run.
+    Catch any exception (e.g. PIL UnidentifiedImageError on a truncated PNG,
+    or OSError mid-read) and treat it as a per-image failure instead.
+    """
+    try:
+        return _make_lstmf_impl(img_path_str)
+    except Exception as _e:
+        stem = Path(img_path_str).stem
+        suffix = Path(img_path_str).suffix
+        print(f"  ✗ {stem}: {_e}", flush=True)
+        for _f in (Path(out_dir) / (stem + suffix),
+                   Path(out_dir) / (stem + '.box'),
+                   Path(out_dir) / (stem + '.lstmf')):
+            try:
+                _f.unlink(missing_ok=True)
+            except OSError:
+                pass
+        return None
+
+# Collect images that have a matching gt.txt
 imgs = sorted(
-    p for p in Path(src_dir).iterdir()
+    str(p) for p in Path(src_dir).iterdir()
     if p.suffix.lower() in ('.png', '.tif', '.tiff', '.jpg')
+       and p.with_suffix('.gt.txt').exists()
 )
-ok = fail = skip = 0
-for img in imgs:
-    if not img.with_suffix('.gt.txt').exists():
-        skip += 1
-        continue
-    if make_lstmf(img, out_dir, list_txt, tdata):
-        ok += 1
-    else:
-        fail += 1
+skipped = sum(
+    1 for p in Path(src_dir).iterdir()
+    if p.suffix.lower() in ('.png', '.tif', '.tiff', '.jpg')
+       and not p.with_suffix('.gt.txt').exists()
+)
 
-print(f"  {label}: {ok} OK  {fail} failed  {skip} skipped (no gt.txt)")
+ok = fail = 0
+lstmf_paths = []
+total = len(imgs)
+
+print(f"  Workers: {WORKERS}", flush=True)
+
+# ThreadPoolExecutor: tesseract is an external subprocess, so threads are
+# truly parallel despite the GIL. Collect paths — write list.txt at the end
+# to avoid concurrent file-append races.
+with ThreadPoolExecutor(max_workers=WORKERS) as ex:
+    futures = {ex.submit(make_lstmf, img): img for img in imgs}
+    done = 0
+    for future in as_completed(futures):
+        done += 1
+        path = future.result()
+        if path:
+            lstmf_paths.append(path)
+            ok += 1
+        else:
+            fail += 1
+        if done % 200 == 0 or done == total:
+            pct = done * 100 // total if total else 0
+            print(f"  {done}/{total} ({pct}%)  ok={ok}  fail={fail}", flush=True)
+
+# Write results to list.txt (single write, no race)
+with open(list_txt, 'a', encoding='utf-8') as lf:
+    for p in sorted(lstmf_paths):
+        lf.write(p + '\n')
+
+print(f"  {label}: {ok} OK  {fail} failed  {skipped} skipped (no gt.txt)")
 PYEOF
 }
+
+# ── Process inventory first (character building blocks) ─────────────────────────
+# Walk inventory/<font_tag>/ subdirs (flat dirs with char_*.png + char_*.gt.txt)
+if [ -d "$INVENTORY_DIR" ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  Character inventory: $INVENTORY_DIR"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    mkdir -p "$LSTMF_DIR/inventory"
+    for font_dir in "$INVENTORY_DIR"/*; do
+        [ -d "$font_dir" ] || continue
+        font_tag=$(basename "$font_dir")
+        lstmf_out="$LSTMF_DIR/inventory/$font_tag"
+        process_dir "$font_dir" "$lstmf_out" "Inventory/$font_tag"
+    done
+fi
 
 process_dir "$RENDERED_DIR"           "$LSTMF_DIR/rendered"   "Synthetic rendered"
 process_dir "$SCAN_DIR"               "$LSTMF_DIR/scan"       "Real scan images"
 process_dir "$RENDERED_DIR/font-test" "$LSTMF_DIR/font-test"  "Per-font test images"
+
+# ── Classical corpus A5 pages ─────────────────────────────────────
+if [ -n "$CLASSICAL_A5_DIR" ] && [ -d "$CLASSICAL_A5_DIR" ]; then
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  Classical corpus A5 pages: $CLASSICAL_A5_DIR"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    mkdir -p "$LSTMF_DIR/classical"
+
+    # Walk title/<font_tag>/ leaf dirs (depth 2 under CLASSICAL_A5_DIR)
+    while IFS= read -r leaf_dir; do
+        [ -d "$leaf_dir" ] || continue
+        # Build a safe label from the relative path (slashes → __)
+        rel="${leaf_dir#$CLASSICAL_A5_DIR/}"
+        label="${rel//\//__}"
+        lstmf_out="$LSTMF_DIR/classical/$label"
+        process_dir "$leaf_dir" "$lstmf_out" "Classical/$rel"
+    done < <(find "$CLASSICAL_A5_DIR" -mindepth 2 -maxdepth 2 -type d | sort)
+else
+    if [ -n "$CLASSICAL_A5_DIR" ]; then
+        echo ""
+        echo "  NOTE: CLASSICAL_A5_DIR set but not found: $CLASSICAL_A5_DIR"
+        echo "        Run render-a5-pages.py first to generate A5 pages."
+    fi
+fi
 
 TOTAL=$(wc -l < "$LSTMF_DIR/list.txt" | tr -d ' ')
 

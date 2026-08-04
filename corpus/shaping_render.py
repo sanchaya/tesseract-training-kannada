@@ -61,32 +61,37 @@ except ImportError:
     SHAPING_AVAILABLE = False
 
 # ── OpenType features for Kannada complex script ──────────────────────────
-# These are the GSUB/GPOS feature tags required for Indic scripts.
-# Without them Pillow would render every codepoint separately.
-_KANNADA_FEATURES = {
-    # Standard ligatures & contextual alternates
-    "liga": True, "calt": True, "clig": True,
-    # Kerning & mark positioning
-    "kern": True, "mark": True, "mkmk": True,
-    # Indic-specific substitution stages (OpenType Indic spec)
-    "nukt": True,   # Nukta forms
-    "akhn": True,   # Akhand (pre-shaping ligatures, e.g. ಕ್ಷ, ಜ್ಞ)
-    "rphf": True,   # Reph form
-    "pref": True,   # Pre-base reordering
-    "blwf": True,   # Below-base forms
-    "half": True,   # Half forms
-    "pstf": True,   # Post-base forms
-    "vatu": True,   # Vattu (below-base consonant + reph)
-    "cjct": True,   # Conjunct forms
-    "pres": True,   # Pre-base substitutions
-    "abvs": True,   # Above-base substitutions
-    "blws": True,   # Below-base substitutions
-    "psts": True,   # Post-base substitutions
-    "haln": True,   # Halant (virama) forms
-    "dist": True,   # Distances
-    "abvm": True,   # Above-base mark positioning
-    "blwm": True,   # Below-base mark positioning
-}
+#
+# DO NOT force the Indic feature tags here.
+#
+# It is tempting to enable nukt/akhn/rphf/pref/blwf/half/pstf/vatu/cjct/pres/
+# blws/psts/haln explicitly — an earlier version of this file did exactly that.
+# It is wrong, and it silently corrupted every conjunct in GTN, GMP and WMP.
+#
+# HarfBuzz's Indic shaper applies those features ITSELF, per-glyph, using
+# internal masks: `blwf` is applied only to the consonant that must take the
+# below-base (ottu) form, `half` only to the one taking the half form, and so
+# on. Passing them in the feature dict enables them globally across the whole
+# run, so the shaper applies below-base substitution to the *base* consonant
+# too. The cluster then reorders and the ottu is emitted BEFORE its base:
+#
+#     ತ್ತ  correct → uni0CA4 + kn_t_ottu       (base, then ottu)
+#          forced  → kn_t_ottu + uni0CA4       (ottu first — visually broken)
+#
+# Kittel was unaffected because its GSUB carries only blwf/blws/haln/psts and
+# no reordering triggers, which is why it looked correct and became the
+# reference font that masked this bug for so long.
+#
+# The Indic shaper is selected automatically by buf.guess_segment_properties().
+# Leave this empty and let it do its job. See docs/CONJUNCT_RENDERING.md.
+_KANNADA_FEATURES = {}
+
+# `aalt` is intentionally NOT in _KANNADA_FEATURES. GTN/WMP store their
+# correct conjunct (ottu) forms in the aalt GSUB feature, which most
+# shapers do not enable by default — but GMP's correct forms live in the
+# base features, and enabling aalt on GMP breaks them. Enable aalt only
+# for fonts that need it. See docs/CONJUNCT_RENDERING.md.
+_AALT_FEATURE = {"aalt": True}
 
 
 # ── Core rendering ─────────────────────────────────────────────────────────
@@ -100,6 +105,7 @@ def render_text(
     min_height=60,
     bg_color=255,
     ink_color=0,
+    aalt=False,
 ):
     """
     Render *text* from *font_path* with full OpenType shaping.
@@ -120,6 +126,11 @@ def render_text(
         Background grey value (255 = white).
     ink_color : int (0–255)
         Foreground grey value (0 = black).
+    aalt : bool
+        Enable the OpenType 'aalt' (access-all-alternates) GSUB feature.
+        Needed for GTN/WMP fonts whose correct conjunct forms live in aalt;
+        must stay False for GMP (aalt breaks its base-feature conjuncts).
+        See docs/CONJUNCT_RENDERING.md.
 
     Returns
     -------
@@ -159,7 +170,10 @@ def render_text(
     buf.add_str(text)
     buf.guess_segment_properties()  # sets script=Kannada, direction=LTR, language
 
-    hb.shape(hb_font, buf, _KANNADA_FEATURES)
+    features = dict(_KANNADA_FEATURES)
+    if aalt:
+        features.update(_AALT_FEATURE)
+    hb.shape(hb_font, buf, features)
 
     glyph_infos     = buf.glyph_infos
     glyph_positions = buf.glyph_positions
@@ -251,6 +265,7 @@ def render_char_with_label(
     bg=(255, 255, 255),
     ink=(20, 20, 60),
     label_ink=(120, 130, 150),
+    aalt=False,
 ):
     """
     Render a single Kannada character (with full shaping) and an ASCII label
@@ -287,6 +302,7 @@ def render_char_with_label(
             min_height=font_size + padding,
             bg_color=255,
             ink_color=0,
+            aalt=aalt,
         )
         cw, ch = char_grey.size
     else:

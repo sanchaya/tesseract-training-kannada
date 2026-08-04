@@ -17,6 +17,16 @@ font from fonts.yml.  Output is grouped by font+variant:
           sentence_01.png
           manifest.json
 
+Rendering engine:
+  Uses uharfbuzz + freetype-py for full OpenType shaping so that Kannada
+  conjunct characters (ಕ್ಷ, ಜ್ಞ, ಶ್ರ …) render correctly.  Without shaping,
+  Pillow renders each Unicode codepoint as a separate isolated glyph — the
+  visual result is broken/split conjuncts.
+
+  If uharfbuzz / freetype-py are not installed the script falls back to
+  Pillow with a warning.  Fix with:
+      pip install uharfbuzz freetype-py numpy --break-system-packages
+
 Usage:
     python3 scripts/gen-char-images.py                   # all fonts
     python3 scripts/gen-char-images.py --font-id kan_gmp # one font
@@ -30,6 +40,19 @@ import sys, os, json, argparse, re
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
+
+# ── Shaping renderer ───────────────────────────────────────────────────────
+sys.path.insert(0, str(ROOT / 'corpus'))
+try:
+    from shaping_render import (
+        SHAPING_AVAILABLE, render_text as _render_text,
+        render_char_with_label as _render_char_label,
+        check_and_warn as _check_and_warn,
+    )
+except ImportError:
+    SHAPING_AVAILABLE = False
+    def _check_and_warn():
+        print("  ⚠  shaping_render.py not found — using Pillow (broken conjuncts)")
 
 # ── Kannada character sets ─────────────────────────────────────────────────
 
@@ -99,17 +122,48 @@ def load_fonts_yml():
     return doc.get('fonts', [])
 
 
-def scan_font_dir(font_id):
+def scan_roots(font_id, font_dir=None):
     """
-    Scan fonts/<id>/ for ALL TTF and OTF files.
+    Directories to scan for a font, in priority order.
+
+    When fonts.yml declares `font_dir`, the scan is SCOPED to that directory
+    (plus its ttf/ and otf/ siblings) rather than walking the whole repo tree.
+    This matters for families that ship many width variants on disk — e.g.
+    Anek Kannada has 5 width families × 8 weights = 40 files, but fonts.yml
+    declares only static/AnekKannada, so only those 8 weights are used.
+
+    Falls back to a full recursive walk when no font_dir is declared.
+    """
+    base = ROOT / 'fonts' / font_id
+    if not base.exists():
+        return []
+
+    if not font_dir:
+        return [base]
+
+    d       = base / font_dir
+    parent  = d.parent
+    roots   = [d, d / 'ttf', d / 'otf', parent / 'ttf', parent / 'otf', base]
+    seen, out = set(), []
+    for r in roots:
+        if r.is_dir() and r not in seen:
+            seen.add(r)
+            out.append(r)
+    return out or [base]
+
+
+def scan_font_dir(font_id, font_dir=None):
+    """
+    Scan a font's directories for ALL TTF and OTF files.
     - If a stem has BOTH TTF and OTF: include both as '<Stem>-ttf' and '<Stem>-otf'
       (they may rasterise slightly differently → more training diversity)
     - If a stem has only one format: use '<Stem>' (no suffix)
-    - Skips: variable fonts ([wght]), webfonts/, Source/ dirs, duplicate files
+    - Skips: variable fonts ([wght] / VariableFont), webfonts/, Source/ dirs, duplicates
+    - Scope is limited by `font_dir` when declared in fonts.yml (see scan_roots)
     Returns dict: variant_name → Path
     """
-    font_root = ROOT / 'fonts' / font_id
-    if not font_root.exists():
+    roots = scan_roots(font_id, font_dir)
+    if not roots:
         return {}
 
     SKIP_DIRS = {'webfonts', 'Source', 'source'}
@@ -117,12 +171,18 @@ def scan_font_dir(font_id):
     # Group by stem → {ttf: Path, otf: Path}
     by_stem = {}
 
-    for p in sorted(font_root.rglob('*')):
+    # Scoped roots are scanned shallowly; an unscoped base is walked recursively.
+    if font_dir:
+        candidates = [p for r in roots for p in sorted(r.glob('*'))]
+    else:
+        candidates = sorted(roots[0].rglob('*'))
+
+    for p in candidates:
         if not p.is_file():
             continue
         if any(part in SKIP_DIRS for part in p.parts):
             continue
-        if '[' in p.name or ']' in p.name:
+        if '[' in p.name or ']' in p.name or 'VariableFont' in p.name:
             continue
 
         suffix = p.suffix.lower()
@@ -185,7 +245,7 @@ def resolve_font_path(font_entry, filename):
                 return p
 
     # Fall back to directory scan
-    scanned = scan_font_dir(fid)
+    scanned = scan_font_dir(fid, fontdir)
     return scanned.get(stem)
 
 
@@ -200,7 +260,9 @@ def get_font_variants(font_entry):
       • Then add any extra stems found on disk that aren't already covered.
     """
     fid        = font_entry['id']
-    scanned    = scan_font_dir(fid)   # variant_name → path (already suffixed when both exist)
+    # Scope the scan to the declared font_dir so extra width families on disk
+    # (e.g. Anek's Condensed/Expanded sets) don't explode the variant count.
+    scanned    = scan_font_dir(fid, font_entry.get('font_dir'))
     seen_names = set()
     variants   = []
 
@@ -236,39 +298,54 @@ INK   = (20,  20,  60)
 MUTED = (120, 130, 150)
 
 
-def render_char_image(ch, label, font, size, dpi, out_path, write_gt=True):
-    """Render a single character (+ small label) to a PNG."""
-    from PIL import Image, ImageDraw, ImageFont
+def render_char_image(ch, label, font_path_str, size, dpi, out_path, write_gt=True, aalt=False):
+    """
+    Render a single Kannada character (+ small ASCII label) to a PNG.
 
-    pad = max(size // 3, 16)
-    tmp = Image.new('RGB', (1, 1))
-    dtmp = ImageDraw.Draw(tmp)
+    Uses shaping_render for the Kannada character so conjuncts form correctly,
+    and Pillow for the ASCII label (no shaping needed).
+    """
+    if SHAPING_AVAILABLE:
+        img = _render_char_label(
+            char=ch,
+            label=label,
+            font_path=font_path_str,
+            font_size=size,
+            label_size=max(size // 4, 9),
+            padding=max(size // 3, 16),
+            dpi=dpi,
+            bg=BG,
+            ink=INK,
+            label_ink=MUTED,
+            aalt=aalt,
+        )
+    else:
+        # Pillow fallback (broken conjuncts)
+        from PIL import Image as _PI, ImageDraw, ImageFont
+        try:
+            font = ImageFont.truetype(font_path_str, size=size)
+        except Exception:
+            font = ImageFont.load_default()
+        lbl_size = max(size // 4, 9)
+        try:
+            lbl_font = ImageFont.truetype(font_path_str, size=lbl_size)
+        except Exception:
+            lbl_font = ImageFont.load_default()
 
-    bb = dtmp.textbbox((0, 0), ch, font=font)
-    cw, ch_h = bb[2] - bb[0], bb[3] - bb[1]
+        pad  = max(size // 3, 16)
+        tmp  = _PI.new('RGB', (1, 1))
+        dtmp = ImageDraw.Draw(tmp)
+        bb   = dtmp.textbbox((0, 0), ch, font=font)
+        lbb  = dtmp.textbbox((0, 0), label, font=lbl_font)
+        cw, ch_h = bb[2]-bb[0], bb[3]-bb[1]
+        lw = lbb[2]-lbb[0]
 
-    # Label font
-    lbl_size = max(size // 4, 9)
-    try:
-        lbl_font = ImageFont.truetype(str(font.path), size=lbl_size)
-    except Exception:
-        lbl_font = ImageFont.load_default()
-    lbl_bb = dtmp.textbbox((0, 0), label, font=lbl_font)
-    lw = lbl_bb[2] - lbl_bb[0]
-
-    W = max(cw + pad * 2, lw + pad * 2, size + pad)
-    H = ch_h + pad * 3 + (lbl_bb[3] - lbl_bb[1]) + 4
-
-    img = Image.new('RGB', (W, H), BG)
-    d   = ImageDraw.Draw(img)
-
-    cx = (W - cw) // 2 - bb[0]
-    cy = pad - bb[1]
-    d.text((cx, cy), ch, font=font, fill=INK)
-
-    lx = (W - lw) // 2
-    ly = cy + ch_h + pad // 2
-    d.text((lx, ly), label, font=lbl_font, fill=MUTED)
+        W = max(cw + pad*2, lw + pad*2, size + pad)
+        H = ch_h + pad*3 + (lbb[3]-lbb[1]) + 4
+        img = _PI.new('RGB', (W, H), BG)
+        d   = ImageDraw.Draw(img)
+        d.text(((W-cw)//2 - bb[0], pad - bb[1]), ch, font=font, fill=INK)
+        d.text(((W-lw)//2, pad + ch_h + pad//2 - lbb[1]), label, font=lbl_font, fill=MUTED)
 
     img.save(str(out_path), dpi=(dpi, dpi))
     if write_gt:
@@ -276,21 +353,51 @@ def render_char_image(ch, label, font, size, dpi, out_path, write_gt=True):
     return out_path
 
 
-def render_line_image(items, font, dpi, out_path, text_override=None):
-    """Render a row of characters as a single line image."""
-    from PIL import Image, ImageDraw
+def render_line_image(items, font_path_str, dpi, out_path, text_override=None, size=48, aalt=False):
+    """
+    Render a row of characters as a single shaped line image.
 
+    Uses shaping_render for correct Kannada conjunct formation.
+    """
     text = text_override or '  '.join(x[0] for x in items)
     pad  = 20
-    tmp  = Image.new('RGB', (1, 1))
-    dtmp = ImageDraw.Draw(tmp)
-    bb   = dtmp.textbbox((0, 0), text, font=font)
-    lw, lh = bb[2] - bb[0], bb[3] - bb[1]
 
-    W = lw + pad * 4
-    H = lh + pad * 2
-    img = Image.new('RGB', (W, H), BG)
-    ImageDraw.Draw(img).text((pad * 2 - bb[0], pad - bb[1]), text, font=font, fill=INK)
+    if SHAPING_AVAILABLE:
+        grey = _render_text(
+            font_path_str, text,
+            font_size=size,
+            padding_x=pad * 2,
+            padding_y=pad,
+            min_height=size + pad * 2,
+            bg_color=255,
+            ink_color=0,
+            aalt=aalt,
+        )
+        # Convert greyscale to RGB
+        from PIL import Image as _PI
+        img = _PI.merge('RGB', [grey.convert('L')] * 3)
+        # Re-tint to INK colour
+        import numpy as np
+        arr = np.array(grey, dtype=np.float32) / 255.0
+        r = (arr*BG[0] + (1-arr)*INK[0]).astype(np.uint8)
+        g = (arr*BG[1] + (1-arr)*INK[1]).astype(np.uint8)
+        b = (arr*BG[2] + (1-arr)*INK[2]).astype(np.uint8)
+        img = _PI.fromarray(np.stack([r,g,b], axis=2), mode='RGB')
+    else:
+        from PIL import Image as _PI, ImageDraw, ImageFont
+        try:
+            font = ImageFont.truetype(font_path_str, size=size)
+        except Exception:
+            font = ImageFont.load_default()
+        tmp  = _PI.new('RGB', (1, 1))
+        dtmp = ImageDraw.Draw(tmp)
+        bb   = dtmp.textbbox((0, 0), text, font=font)
+        lw, lh = bb[2]-bb[0], bb[3]-bb[1]
+        W = lw + pad * 4
+        H = lh + pad * 2
+        img = _PI.new('RGB', (W, H), BG)
+        ImageDraw.Draw(img).text((pad*2 - bb[0], pad - bb[1]), text, font=font, fill=INK)
+
     img.save(str(out_path), dpi=(dpi, dpi))
     out_path.with_suffix('.gt.txt').write_text(text, encoding='utf-8')
     return out_path
@@ -298,15 +405,18 @@ def render_line_image(items, font, dpi, out_path, text_override=None):
 
 # ── Per-font generation ────────────────────────────────────────────────────
 
-def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
+def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi, aalt=False):
     """Generate all character images for one font variant."""
     from PIL import ImageFont
 
     out_dir = out_base / font_id / variant_name
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    font_path_str = str(font_path)
+
+    # Verify the font is loadable before generating anything
     try:
-        font = ImageFont.truetype(str(font_path), size=size)
+        ImageFont.truetype(font_path_str, size=size)
     except Exception as e:
         print(f"    ✗ Cannot load font {font_path}: {e}")
         return 0
@@ -315,10 +425,11 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
     errors    = []
 
     # ── Individual characters ──────────────────────────────────
+    # render_char_image now takes (ch, label, font_path_str, size, dpi, out_path)
     for ch, cp, name in VOWELS:
         fname = out_dir / f"vowel_{name.lower()}.png"
         try:
-            render_char_image(ch, f"U+{cp}", font, size, dpi, fname)
+            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt)
             generated.append({'type':'vowel','ch':ch,'cp':cp,'name':name,'file':fname.name})
         except Exception as e:
             errors.append(f"vowel {name}: {e}")
@@ -326,7 +437,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
     for ch, cp, name in CONSONANTS:
         fname = out_dir / f"consonant_{name.lower()}.png"
         try:
-            render_char_image(ch, f"U+{cp}", font, size, dpi, fname)
+            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt)
             generated.append({'type':'consonant','ch':ch,'cp':cp,'name':name,'file':fname.name})
         except Exception as e:
             errors.append(f"consonant {name}: {e}")
@@ -334,7 +445,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
     for ch, stem in CONJUNCTS:
         fname = out_dir / f"conjunct_{stem}.png"
         try:
-            render_char_image(ch, stem, font, size, dpi, fname)
+            render_char_image(ch, stem, font_path_str, size, dpi, fname, aalt=aalt)
             generated.append({'type':'conjunct','ch':ch,'name':stem,'file':fname.name})
         except Exception as e:
             errors.append(f"conjunct {stem}: {e}")
@@ -342,12 +453,13 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
     for ch, cp, name in DIGITS:
         fname = out_dir / f"digit_{name}.png"
         try:
-            render_char_image(ch, f"U+{cp}", font, size, dpi, fname)
+            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt)
             generated.append({'type':'digit','ch':ch,'cp':cp,'name':name,'file':fname.name})
         except Exception as e:
             errors.append(f"digit {name}: {e}")
 
     # ── Line images ────────────────────────────────────────────
+    # render_line_image now takes (items, font_path_str, dpi, out_path, text_override, size)
     for group_name, items in [
         ('vowels',     [(ch,cp,name) for ch,cp,name in VOWELS]),
         ('consonants', [(ch,cp,name) for ch,cp,name in CONSONANTS]),
@@ -355,7 +467,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
     ]:
         fname = out_dir / f"line_{group_name}.png"
         try:
-            render_line_image([(ch,) for ch,*_ in items], font, dpi, fname)
+            render_line_image([(ch,) for ch,*_ in items], font_path_str, dpi, fname, size=size, aalt=aalt)
             generated.append({'type':'line','name':group_name,'file':fname.name})
         except Exception as e:
             errors.append(f"line {group_name}: {e}")
@@ -363,7 +475,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
     # Conjuncts line
     fname = out_dir / 'line_conjuncts.png'
     try:
-        render_line_image(CONJUNCTS, font, dpi, fname)
+        render_line_image(CONJUNCTS, font_path_str, dpi, fname, size=size, aalt=aalt)
         generated.append({'type':'line','name':'conjuncts','file':fname.name})
     except Exception as e:
         errors.append(f"line conjuncts: {e}")
@@ -372,7 +484,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi):
     for i, sent in enumerate(SAMPLE_SENTENCES, 1):
         fname = out_dir / f"sentence_{i:02d}.png"
         try:
-            render_line_image([], font, dpi, fname, text_override=sent)
+            render_line_image([], font_path_str, dpi, fname, text_override=sent, size=size, aalt=aalt)
             generated.append({'type':'sentence','name':f'sentence_{i:02d}','file':fname.name})
         except Exception as e:
             errors.append(f"sentence {i}: {e}")
@@ -424,6 +536,10 @@ def main():
         print("  pip install pyyaml --break-system-packages")
         sys.exit(1)
 
+    # Warn if HarfBuzz shaping libraries are not installed
+    _check_and_warn()
+    print(f"  Renderer: {'HarfBuzz + FreeType (shaped)' if SHAPING_AVAILABLE else 'Pillow (BROKEN conjuncts)'}")
+
     out_base = Path(args.outdir)
     fonts    = load_fonts_yml()
 
@@ -448,6 +564,7 @@ def main():
     for font_entry in fonts:
         fid      = font_entry['id']
         fname    = font_entry['name']
+        aalt     = 'aalt' in font_entry.get('font_features', '')
         variants = get_font_variants(font_entry)
 
         if not variants:
@@ -458,7 +575,7 @@ def main():
         for variant_name, font_path in variants:
             print(f"    {variant_name}  ({font_path.name})")
             n = generate_for_variant(fid, variant_name, font_path,
-                                     out_base, args.size, args.dpi)
+                                     out_base, args.size, args.dpi, aalt)
             print(f"    → {n} images")
             total_images += n
             summary.append({'font_id': fid, 'font_name': fname,

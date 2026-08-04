@@ -83,9 +83,13 @@ kan_hist/
 ├── corpus/
 │   ├── download-wikisource.py    ← PREFERRED: proofread pages from kn.wikisource.org
 │   ├── download-wiki.py          supplement: Kannada Wikipedia prose
+│   ├── download-classical.py     supplement: classical Kannada corpus (Sanchaya)
 │   ├── clean-corpus.py           clean raw text → kan_corpus.txt
 │   ├── generate-specimen.py      systematic glyph-coverage corpus
-│   ├── render-corpus.py          render corpus → PNG+gt.txt pairs
+│   ├── render-corpus.py          render corpus lines → PNG+gt.txt pairs
+│   ├── render-a5-pages.py        render classical corpus as A5 page images (browser)
+│   ├── browser_render.js         headless Chrome renderer — correct conjunct shaping
+│   ├── shaping_render.py         HarfBuzz + FreeType renderer (modern fonts only)
 │   ├── cache/                    downloaded dumps (gitignored — large files)
 │   └── kan_corpus.txt            cleaned training text (generated)
 │
@@ -128,7 +132,12 @@ kan_hist/
 | Pillow | `pip install pillow` | `pip install pillow` |
 | PyYAML | `pip install pyyaml` | `pip install pyyaml` |
 | Flask (portal only) | `pip install flask` | `pip install flask` |
+| Node.js 18+ | `brew install node` | `apt install nodejs` |
+| Chrome / Chromium | `brew install --cask google-chrome` | `apt install chromium-browser` |
+| Puppeteer (Node) | `npm install` (in repo root) | `npm install` |
 | Git | `brew install git` | `apt install git` |
+
+> **Browser rendering:** `browser_render.js` and `render-a5-pages.py` require Node.js and Chrome. If Chrome is not installed system-wide, run `npx puppeteer browsers install chrome` inside the repo root to download a pinned version — it is detected automatically at runtime. The standard `render-corpus.py` (line-level images) does not require a browser.
 
 ---
 
@@ -215,6 +224,31 @@ The cleaner keeps lines with ≥ 8 Kannada characters, strips markdown/wiki arti
 
 You can also supply your own corpus — write lines to `corpus/raw_kannada.txt` and run `clean-corpus.py`.
 
+#### Classical Kannada corpus (pre-classical and medieval texts)
+
+`download-classical.py` imports text from the [classical-corpus-kannada](https://github.com/sanchaya/classical-corpus-kannada) project — 16 classical Kannada texts (Pampa's *Vikramarjuna Vijaya*, Ranna's *Gadhayuddha*, Jaimini *Bharata*, *Vaddaradhane*, and more) spanning the 10th–19th centuries. This vocabulary is especially valuable for historical OCR because it contains archaic forms, rare conjuncts, and literary registers absent from modern Wikipedia text.
+
+```bash
+# Append classical corpus text to raw_kannada.txt
+python3 corpus/download-classical.py \
+    --corpus-dir /path/to/classical-corpus-kannada
+
+# Dry-run (print stats only, no writes):
+python3 corpus/download-classical.py \
+    --corpus-dir /path/to/classical-corpus-kannada --dry-run
+```
+
+The script filters lines by Kannada character ratio (≥ 35%), strips verse-number suffixes (`।। ೧ ।।`), and collapses whitespace. After importing, run `clean-corpus.py` as usual.
+
+**Classical corpus as A5 page images:** the classical corpus can also be rendered directly as full A5-page training images (875 × 1241 px at 150 DPI) — one page per chunk of text, all 9 font styles. This produces large-scale page-level training data in addition to the line-level `render-corpus.py` output. See [Step 3 — A5 page images](#step-3--render-training-images) below.
+
+```
+16 titles × 9 fonts × ~200 pages avg = ~28,800 page images
+```
+
+The classical corpus source files are at:
+[github.com/sanchaya/classical-corpus-kannada](https://github.com/sanchaya/classical-corpus-kannada)
+
 #### Option: Specimen corpus (systematic glyph coverage)
 
 Instead of or in addition to random prose, you can generate a *specimen corpus* — a deliberately designed text that guarantees every Kannada vowel, every consonant × matra combination, all common conjuncts, and historical vocabulary all appear in training:
@@ -247,6 +281,10 @@ Because the same text is rendered across every font variant, this also makes it 
 
 ### Step 3 — Render training images
 
+Two rendering paths are available and complementary — run both for maximum training data.
+
+#### 3a — Line-level images (standard)
+
 ```bash
 python3 corpus/render-corpus.py
 ```
@@ -256,6 +294,56 @@ For each corpus line × each font style, renders a 150 DPI PNG image with matchi
 **Output:** `rendered/<font_id>_<style>_line<N>.png` + matching `.gt.txt`
 
 **To include real scanned pages:** place `page.png` (or `.tif`) + `page.gt.txt` in `scan-input/`. They will be picked up in the next step.
+
+#### 3b — A5 page images from classical corpus
+
+```bash
+python3 corpus/render-a5-pages.py \
+    --corpus-dir /path/to/classical-corpus-kannada
+```
+
+Renders the full classical Kannada corpus as A5-sized page images (875 × 1241 px, 150 DPI) using headless Chrome. Each page contains a chunk of source text wrapped to page width; the matching `.gt.txt` holds that text verbatim.
+
+**Why browser rendering?** Historical Sanchaya fonts (GMP, WMP, GTN TTFs) rely on the OS text stack for Kannada conjunct shaping — their OpenType GSUB tables are incomplete. The browser (CoreText on macOS, HarfBuzz+Pango on Linux) applies the same shaping as `fonts.sanchaya.net`, producing correct conjuncts for all fonts. Python HarfBuzz alone cannot do this for these fonts.
+
+**Output:** `<corpus-dir>/a5-pages/<title>/<font_tag>/page<N>.png` + `.gt.txt`
+
+```
+classical-corpus-kannada/a5-pages/
+    vikramarjuna-vijaya-pampabharata/
+        kan_gtn_regular/
+            page0001.png   ← 875×1241 px, ~18 stanzas
+            page0001.gt.txt
+        kan_gmp_karnatagermanmissionpresstypeface/
+            page0001.png   ← degraded (letterpress simulation)
+            page0001.gt.txt
+        …
+    rakshashataka/…
+    …
+```
+
+Options:
+
+```bash
+# Process a single title for testing:
+python3 corpus/render-a5-pages.py \
+    --corpus-dir /path/to/classical-corpus-kannada \
+    --title rakshashataka
+
+# Adjust page chunk size (chars per page, default 900):
+python3 corpus/render-a5-pages.py \
+    --corpus-dir /path/to/classical-corpus-kannada \
+    --chars-per-page 1200
+
+# Limit browser concurrency (default 4):
+python3 corpus/render-a5-pages.py \
+    --corpus-dir /path/to/classical-corpus-kannada \
+    --concurrency 2
+```
+
+The script is **resume-safe** — already-rendered PNG+gt.txt pairs are skipped. Ctrl-C at any time and re-run to continue.
+
+**Prerequisites:** Node.js + Chrome must be available. If Chrome is not installed, run `npx puppeteer browsers install chrome` inside the repo root first.
 
 ---
 
@@ -267,7 +355,16 @@ For each corpus line × each font style, renders a 150 DPI PNG image with matchi
 
 Converts all PNG+gt.txt pairs in `rendered/` and `scan-input/` into Tesseract `.lstmf` binary training files. Writes the file list to `lstmf/list.txt`.
 
-**Output:** `lstmf/*.lstmf`, `lstmf/list.txt`
+To also include the classical corpus A5 page images (generated in step 3b), set `CLASSICAL_A5_DIR`:
+
+```bash
+CLASSICAL_A5_DIR=/path/to/classical-corpus-kannada/a5-pages \
+    ./scripts/02-make-lstmf.sh
+```
+
+The script walks every `<title>/<font_tag>/` leaf directory under `CLASSICAL_A5_DIR` and processes each as a flat PNG+gt.txt source, writing `.lstmf` files to `lstmf/classical/<title>__<font_tag>/`.
+
+**Output:** `lstmf/rendered/`, `lstmf/scan/`, `lstmf/classical/` (if CLASSICAL_A5_DIR set), `lstmf/list.txt`
 
 ---
 
@@ -509,6 +606,10 @@ Tesseract is a line-level model. Running it on single-character images produces 
 ## Project structure in depth
 
 See [`docs/TRAINING.md`](docs/TRAINING.md) for detail on training parameters, BCER interpretation, and how to tune the model. See [`docs/PORTAL.md`](docs/PORTAL.md) for the portal's REST API reference.
+
+See [`docs/IMAGE_GENERATION.md`](docs/IMAGE_GENERATION.md) for how every PNG in the project is produced — the four render paths, the shared HarfBuzz + FreeType shaping method, per-font `aalt` handling, and what the `degrade:` flag actually does.
+
+See [`docs/AUDIT_2026-08.md`](docs/AUDIT_2026-08.md) for the August 2026 audit — ten defects found across rendering, the font registry and the portal, with root causes and verification. Start here if conjuncts look wrong, a newly-added font isn't appearing, or the portal reports training that isn't running.
 
 ---
 
