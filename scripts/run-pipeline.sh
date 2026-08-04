@@ -34,6 +34,12 @@ cd "$ROOT"
 mkdir -p logs
 PIPELINE_LOG="$ROOT/logs/pipeline.log"
 
+# Root of the classical corpus — the folder holding per-title .txt sources and
+# the generated a5-pages/. Override for a corpus kept outside the repo:
+#   CLASSICAL_CORPUS_DIR=/path/to/classical-corpus-kannada ./scripts/run-pipeline.sh
+CLASSICAL_DIR="${CLASSICAL_CORPUS_DIR:-$ROOT/classical-corpus-kannada}"
+CLASSICAL_A5="$CLASSICAL_DIR/a5-pages"
+
 DRY_RUN=0; DO_TRAIN=0; WITH_CLASSICAL=0; FROM="unicharset"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -68,7 +74,7 @@ snapshot() {
   local inv rend cls lst
   inv=$(find inventory -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
   rend=$(ls rendered/*.png 2>/dev/null | wc -l | tr -d ' ')
-  cls=$(find classical-corpus-kannada/a5-pages -name '*_line*.png' 2>/dev/null | wc -l | tr -d ' ')
+  cls=$(find "$CLASSICAL_A5" -name '*_line*.png' 2>/dev/null | wc -l | tr -d ' ')
   lst=$(wc -l < lstmf/list.txt 2>/dev/null | tr -d ' ' || echo 0)
   say "   inventory=$inv  rendered=$rend  classical-lines=$cls  lstmf-list=$lst"
 }
@@ -157,8 +163,23 @@ fi
 # ── 5. Classical (optional, slow) ────────────────────────────────────────────
 if [ $WITH_CLASSICAL -eq 1 ] && should_run classical; then
   stage "5/7  Classical A5 → LINE images  (hours; ~430K files)"
-  python3 corpus/render-a5-pages.py --lines --workers 4 2>&1 | tee -a "$PIPELINE_LOG" | tail -5
-  metric "classical line images: $(find classical-corpus-kannada/a5-pages -name '*_line*.png' | wc -l | tr -d ' ')"
+
+  if [ ! -d "$CLASSICAL_DIR" ]; then
+    say "   ✗ classical corpus not found at: $CLASSICAL_DIR"
+    say "     Set CLASSICAL_CORPUS_DIR=/path/to/classical-corpus-kannada"
+    exit 1
+  fi
+  titles=$(find "$CLASSICAL_DIR" -maxdepth 2 -name '*.txt' 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$titles" -eq 0 ]; then
+    say "   ✗ no .txt source texts under $CLASSICAL_DIR — nothing to render"
+    exit 1
+  fi
+  say "   corpus: $CLASSICAL_DIR  ($titles source texts)"
+
+  python3 corpus/render-a5-pages.py \
+    --corpus-dir "$CLASSICAL_DIR" \
+    --lines --workers 4 2>&1 | tee -a "$PIPELINE_LOG" | tail -5
+  metric "classical line images: $(find "$CLASSICAL_A5" -name '*_line*.png' 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
 # ── 6. lstmf ─────────────────────────────────────────────────────────────────
@@ -168,7 +189,7 @@ if should_run lstmf; then
   stage "6/7  Build lstmf  (clearing stale cache first)"
   rm -rf lstmf/rendered lstmf/inventory lstmf/classical lstmf/font-test lstmf/list.txt 2>/dev/null || true
   INVENTORY_DIR="$ROOT/inventory" \
-  CLASSICAL_A5_DIR="$ROOT/classical-corpus-kannada/a5-pages" \
+  CLASSICAL_A5_DIR="$CLASSICAL_A5" \
     ./scripts/02-make-lstmf.sh 2>&1 | tee -a "$PIPELINE_LOG" | tail -8
   metric "lstmf entries: $(wc -l < lstmf/list.txt | tr -d ' ')"
 fi
