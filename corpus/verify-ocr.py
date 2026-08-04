@@ -11,6 +11,8 @@ Usage:
     python3 corpus/verify-ocr.py --count 40          # more samples
     python3 corpus/verify-ocr.py --source rendered   # only line images
     python3 corpus/verify-ocr.py --source classical  # only A5 pages
+    python3 corpus/verify-ocr.py --source scan       # REAL scans — the number that matters
+    python3 corpus/verify-ocr.py --source all        # rendered + classical + scan
     python3 corpus/verify-ocr.py --out my-report.html
 
 Output: ocr-verification-report.html (self-contained, no external deps)
@@ -39,6 +41,7 @@ TESSDATA     = ROOT / 'tessdata_best'
 TESS_EXPANDED = ROOT / 'tessdata_expanded'
 RENDERED_DIR = ROOT / 'rendered'
 CLASSICAL_DIR = ROOT / 'classical-corpus-kannada' / 'a5-pages'
+SCAN_DIR = ROOT / 'scan-input'
 
 # ── OCR ────────────────────────────────────────────────────────────────────────
 def run_ocr(img_path: Path, tessdata_dir: Path, lang: str, psm: int) -> str:
@@ -142,6 +145,32 @@ def collect_rendered(n: int) -> list[tuple[Path, str, int]]:
     out = []
     for img, gt_f in pairs[:n]:
         out.append((img, gt_f.read_text(encoding='utf-8').strip(), 7))
+    return out
+
+def collect_scan(n: int) -> list[tuple[Path, str, int]]:
+    """
+    Real scanned pages from scan-input/ — the only source that measures what the
+    model will actually be used for.
+
+    Every other source is synthetic: rendered from the same fonts the model
+    trained on, so its error rate reflects internal consistency rather than
+    accuracy. A model can sit at 5% BCER on synthetic data and still exceed 50%
+    CER on a real page. Treat this number as the real one.
+    """
+    pairs = []
+    if SCAN_DIR.exists():
+        for gt_f in sorted(SCAN_DIR.glob('*.gt.txt')):
+            stem = gt_f.name.removesuffix('.gt.txt')
+            for ext in ('.png', '.tif', '.tiff', '.jpg', '.jpeg'):
+                img = gt_f.with_name(stem + ext)
+                if img.exists():
+                    pairs.append((img, gt_f))
+                    break
+    random.shuffle(pairs)
+    out = []
+    for img, gt_f in pairs[:n]:
+        gt = re.sub(r'\s+', ' ', gt_f.read_text(encoding='utf-8').strip()).strip()
+        out.append((img, gt, 6))          # psm 6: a scanned page is a text block
     return out
 
 def collect_classical(n: int) -> list[tuple[Path, str, int]]:
@@ -345,7 +374,7 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--count', type=int, default=30,
                     help='Total number of samples (default 30)')
-    ap.add_argument('--source', choices=['rendered','classical','both'], default='both',
+    ap.add_argument('--source', choices=['rendered','classical','scan','both','all'], default='both',
                     help='Image source (default: both)')
     ap.add_argument('--seed', type=int, default=42, help='Random seed')
     ap.add_argument('--out', type=str, default='ocr-verification-report.html')
@@ -386,6 +415,14 @@ def main():
             samples.append({'img': img, 'gt': gt, 'psm': psm, 'src': 'classical',
                             'label': str(rel)})
         print(f"Collected {len(s)} classical samples")
+    if args.source in ('scan', 'all'):
+        n_s = n if args.source == 'scan' else max(5, n // 4)
+        s = collect_scan(n_s)
+        for img, gt, psm in s:
+            samples.append({'img': img, 'gt': gt, 'psm': psm, 'src': 'scan',
+                            'label': img.name})
+        print(f"Collected {len(s)} real scan samples"
+              + ("" if s else "  ⚠  none found — add page images + .gt.txt to scan-input/"))
 
     if not samples:
         print("ERROR: No samples found.")
@@ -480,6 +517,7 @@ def main():
     src_opts = '<option value="all">All sources</option>'
     if any(s['src'] == 'rendered'   for s in samples): src_opts += '<option value="rendered">Rendered lines</option>'
     if any(s['src'] == 'classical'  for s in samples): src_opts += '<option value="classical">Classical A5 pages</option>'
+    if any(s['src'] == 'scan'       for s in samples): src_opts += '<option value="scan">Real scans</option>'
 
     model_opts = ''.join(f'<option value="{m[0]}">{m[0]}</option>' for m in models)
 
