@@ -871,6 +871,10 @@ app.post("/api/run/:step", (req, res) => {
     specimen:      ["python3", [path.join(P.corpus,  "generate-specimen.py"), "--merge"]],
     render:        ["python3", [path.join(P.corpus,  "render-corpus.py")]],
     inventory:     ["python3", [path.join(P.corpus,  "generate-inventory.py")]],
+    // Coverage analysis — must run BEFORE expandunichar, since it produces the
+    // word list that 00c turns into unicharset units.
+    coverage:      ["python3", [path.join(P.scripts, "find-missing-clusters.py"),
+                                "--kannada-only", "--update-00c"]],
     lstmf:         ["bash",    [path.join(P.scripts, "02-make-lstmf.sh")]],
     train:         ["bash",    [path.join(P.scripts, "03-train.sh")]],
     package:       ["bash",    [path.join(P.scripts, "04-package.sh")]],
@@ -903,6 +907,17 @@ app.post("/api/run/:step", (req, res) => {
   // generate-inventory.py defaults to the weights declared in fonts.yml;
   // ?all_fonts=1 widens it to every .ttf/.otf on disk.
   if (step === 'inventory' && req.query.all_fonts === '1') runArgs.push('--all-fonts');
+
+  // Coverage inventory: the complete orthographic set (enumerated + attested).
+  // ?attested=1 keeps only conjuncts real text uses — recommended for training
+  // images, since the full conjunct grid enlarges the LSTM output layer with
+  // combinations that never occur.
+  if (step === 'inventory' && req.query.complete === '1') {
+    runArgs.push('--complete');
+    if (req.query.attested !== '0') runArgs.push('--attested-only');
+    runArgs.push('--emit-wordlist', path.join(ROOT, 'corpus', 'coverage', 'kannada-units.txt'));
+    fs.mkdirSync(path.join(ROOT, 'corpus', 'coverage'), { recursive: true });
+  }
 
   // Support TRAIN_MODE variants for the training step
   const runOpts = {};

@@ -786,6 +786,12 @@ footer a:hover { text-decoration: underline; }
       style="background:var(--card);color:#b45309;border:1.5px solid #fde68a">↺ Clear &amp; re-render</button>
     <button class="btn btn-primary step-run-btn" onclick="run('inventory')" id="sb-inventory"
       title="Generate the character inventory — systematic vowel / consonant / conjunct baselines for every font declared in fonts.yml. Required for inventory-first training; ④ Make lstmf includes it automatically once generated.">Inventory</button>
+    <button class="btn step-run-btn" onclick="run('coverage')" id="sb-coverage"
+      title="Scan the corpus for grapheme clusters the unicharset cannot encode (e.g. ರ್ಖ in ಮೂರ್ಖ), and append real example words to 00c-expand-unicharset.sh. Run this BEFORE Expand chars — otherwise gaps are only discovered later, as training failures."
+      style="background:var(--card);color:#6d28d9;border:1.5px solid #c4b5fd;font-size:0.8em;padding:4px 8px">🔍 Coverage scan</button>
+    <button class="btn step-run-btn" onclick="runCoverageInventory()" id="sb-coverage-inv"
+      title="Generate the COMPLETE Kannada coverage set — every vowel, consonant, consonant×matra, conjunct, half form, anusvara/visarga and numeral, plus clusters mined from the corpus. Writes corpus/coverage/kannada-units.txt for the unicharset and renders images + ground truth for training."
+      style="background:var(--card);color:#6d28d9;border:1.5px dashed #c4b5fd;font-size:0.8em;padding:4px 8px">Coverage inventory</button>
     <button class="btn step-run-btn" onclick="showA5Panel()" id="sb-a5"
       title="Render A5 page images from a classical corpus directory using headless Chrome — correct conjunct shaping for all fonts"
       style="background:var(--card);color:#065f46;border:1.5px solid #6ee7b7;font-size:0.8em;padding:4px 8px">🌐 A5 Browser Render</button>
@@ -2459,7 +2465,8 @@ async function loadStatus() {
   // Update proc-badge
   if (running) {
     const stepNames = { prep:'Prep base', expandunichar:'Expanding unicharset', wiki:'Downloading corpus', clean:'Cleaning corpus',
-      render:'Rendering images', inventory:'Generating inventory', lstmf:'Building lstmf', train:'Training', package:'Packaging' };
+      render:'Rendering images', inventory:'Generating inventory', coverage:'Scanning coverage',
+      lstmf:'Building lstmf', train:'Training', package:'Packaging' };
     badge.style.display = 'inline-flex';
     badge.textContent = `⚙ ${stepNames[running] || running}…`;
     badge.className = 'pill pill-brand';
@@ -2807,10 +2814,10 @@ async function loadCorpusStats() {
 // ── Run step ─────────────────────────────────────────────────────
 let dashLogSrc = null;
 
-async function run(step, force, mode) {
+async function run(step, force, mode, extraQuery) {
   const names = { prep:'Prep base', expandunichar:'Expanding unicharset', wiki:'Download corpus', clean:'Clean corpus',
                   specimen:'Generate specimen', render: force ? 'Re-render images (force)' : 'Render images',
-                  inventory:'Character inventory',
+                  inventory:'Character inventory', coverage:'Coverage scan',
                   lstmf:'Make lstmf', train: mode === 'fresh' ? 'Train (fresh+expanded)' : 'Train', package:'Package' };
   if (STATIC_MODE) { toast('Training unavailable in static mode — run the Node.js server'); return; }
 
@@ -2819,7 +2826,10 @@ async function run(step, force, mode) {
     const params = new URLSearchParams();
     if (force) params.set('force', '1');
     if (mode)  params.set('mode', mode);
-    const url = '/api/run/'+step + (params.toString() ? '?' + params.toString() : '');
+    let qs = params.toString();
+    if (extraQuery) qs += (qs ? '' : '') + extraQuery;   // extraQuery starts with '&'
+    if (qs.startsWith('&')) qs = qs.slice(1);
+    const url = '/api/run/'+step + (qs ? '?' + qs : '');
     r = await (await fetch(url, { method: 'POST' })).json();
     if (!r.ok) { toast('Error: ' + (r.error || 'unknown')); return; }
   } catch(e) { toast('Server not running'); return; }
@@ -2887,6 +2897,20 @@ async function run(step, force, mode) {
   toast(`▶ ${names[step]} started — output streaming below`);
   // Also refresh status after a short delay
   setTimeout(loadStatus, 3000);
+}
+
+// Complete coverage inventory: enumerated orthographic set + clusters mined
+// from the corpus. --attested-only keeps conjuncts real text actually uses;
+// the full grid would enlarge the LSTM output layer for combinations that never
+// occur. Emits corpus/coverage/kannada-units.txt for the unicharset stage.
+async function runCoverageInventory() {
+  if (!confirm('Generate the COMPLETE Kannada coverage set?\n\n'
+             + '• ~1,900 orthographic units (enumerated + mined from your corpus)\n'
+             + '• writes corpus/coverage/kannada-units.txt for the unicharset\n'
+             + '• renders images + ground truth for every encodable unit\n\n'
+             + 'Run Coverage scan → Expand chars FIRST, or units still missing\n'
+             + 'from the unicharset will be skipped.')) return;
+  run('inventory', false, null, '&complete=1&attested=1');
 }
 
 // ── Attach the dashboard log panel to an already-running step ────────────

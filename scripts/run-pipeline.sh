@@ -48,7 +48,7 @@ LOG_TARGETS=("$PIPELINE_LOG" "$PORTAL_LOG")
 CLASSICAL_DIR="${CLASSICAL_CORPUS_DIR:-$ROOT/classical-corpus-kannada}"
 CLASSICAL_A5="$CLASSICAL_DIR/a5-pages"
 
-DRY_RUN=0; DO_TRAIN=0; WITH_CLASSICAL=0; FROM="unicharset"
+DRY_RUN=0; DO_TRAIN=0; WITH_CLASSICAL=0; FROM="coverage"
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run)        DRY_RUN=1 ;;
@@ -61,7 +61,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-STAGES=(unicharset corpus render inventory classical lstmf validate train)
+STAGES=(coverage unicharset corpus render inventory classical lstmf validate train)
 started=0
 should_run() {
   [ "$1" = "$FROM" ] && started=1
@@ -87,6 +87,23 @@ snapshot() {
   say "   inventory=$inv  rendered=$rend  classical-lines=$cls  lstmf-list=$lst"
 }
 
+say ""
+say "Current state:"; snapshot
+
+if [ $DRY_RUN -eq 1 ]; then
+  say ""
+  say "Plan (from '$FROM'):"
+  started=0
+  for s in "${STAGES[@]}"; do
+    [ "$s" = "train" ] && [ $DO_TRAIN -eq 0 ] && continue
+    [ "$s" = "classical" ] && [ $WITH_CLASSICAL -eq 0 ] && continue
+    should_run "$s" && say "   • $s"
+  done
+  say ""
+  say "(dry run — nothing executed)"
+  exit 0
+fi
+
 # ── Preflight: fail fast on a toolchain that cannot produce valid output ─────
 # Checked up front rather than at the lstmf stage, so a wrong Tesseract is
 # caught before spending minutes on rendering.
@@ -105,22 +122,6 @@ case "$TESS_VER" in
       exit 1 ;;
 esac
 
-say ""
-say "Current state:"; snapshot
-
-if [ $DRY_RUN -eq 1 ]; then
-  say ""
-  say "Plan (from '$FROM'):"
-  started=0
-  for s in "${STAGES[@]}"; do
-    [ "$s" = "train" ] && [ $DO_TRAIN -eq 0 ] && continue
-    [ "$s" = "classical" ] && [ $WITH_CLASSICAL -eq 0 ] && continue
-    should_run "$s" && say "   • $s"
-  done
-  say ""
-  say "(dry run — nothing executed)"
-  exit 0
-fi
 
 if pgrep -x lstmtraining >/dev/null 2>&1; then
   say ""
@@ -134,11 +135,22 @@ fi
 
 started=0
 
+# ── 0. Coverage analysis ─────────────────────────────────────────────────────
+# MUST precede the unicharset stage: it mines the corpus for grapheme clusters
+# that cannot currently be encoded and appends real example words to
+# 00c-expand-unicharset.sh, which the next stage turns into unicharset units.
+# Without this, gaps are found one at a time by training failures.
+if should_run coverage; then
+  stage "0/8  Coverage analysis  (find clusters the unicharset cannot encode)"
+  python3 -u scripts/find-missing-clusters.py --kannada-only --update-00c 2>&1 \
+    | tee -a "${LOG_TARGETS[@]}" | tail -14
+fi
+
 # ── 1. Unicharset ────────────────────────────────────────────────────────────
 # MUST be first: it defines the recoder. Changing it later invalidates
 # everything built before it.
 if should_run unicharset; then
-  stage "1/7  Expand unicharset  (adds ಋ ಙ ಝ ಱ ೃ ಞ ೞ)"
+  stage "1/8  Expand unicharset  (adds ಋ ಙ ಝ ಱ ೃ ಞ ೞ)"
   ./scripts/00c-expand-unicharset.sh --force 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
   metric "unicharset units: $(
     combine_tessdata -u tessdata_expanded/kan.traineddata /tmp/_pl. >/dev/null 2>&1 &&
@@ -147,7 +159,7 @@ fi
 
 # ── 2. Corpus ────────────────────────────────────────────────────────────────
 if should_run corpus; then
-  stage "2/7  Clean corpus  (strip unassigned codepoints)"
+  stage "2/8  Clean corpus  (strip unassigned codepoints)"
   python3 -u corpus/clean-corpus.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -6
   metric "corpus lines: $(wc -l < corpus/kan_corpus.txt | tr -d ' ')"
 fi
@@ -156,21 +168,25 @@ fi
 # --force because a corpus or shaping change must overwrite existing images;
 # without it render-corpus.py skips every file that already exists.
 if should_run render; then
-  stage "3/7  Render synthetic lines  (--force)"
+  stage "3/8  Render synthetic lines  (--force)"
   python3 -u corpus/render-corpus.py --force 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -3
   metric "rendered images: $(ls rendered/*.png 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
 # ── 4. Inventory ─────────────────────────────────────────────────────────────
 if should_run inventory; then
-  stage "4/7  Character inventory"
-  python3 -u corpus/generate-inventory.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
+  stage "4/8  Character inventory  (complete coverage set)"
+  mkdir -p corpus/coverage
+  python3 -u corpus/generate-inventory.py \
+    --complete --attested-only \
+    --emit-wordlist corpus/coverage/kannada-units.txt 2>&1 \
+    | tee -a "${LOG_TARGETS[@]}" | tail -8
   metric "inventory images: $(find inventory -name '*.png' | wc -l | tr -d ' ')"
 fi
 
 # ── 5. Classical (optional, slow) ────────────────────────────────────────────
 if [ $WITH_CLASSICAL -eq 1 ] && should_run classical; then
-  stage "5/7  Classical A5 → LINE images  (hours; ~430K files)"
+  stage "5/8  Classical A5 → LINE images  (hours; ~430K files)"
 
   if [ ! -d "$CLASSICAL_DIR" ]; then
     say "   ✗ classical corpus not found at: $CLASSICAL_DIR"
@@ -194,7 +210,7 @@ fi
 # Clear first: 02-make-lstmf.sh resumes from existing .lstmf files. After a
 # unicharset or corpus change the cached ones are stale and would be re-admitted.
 if should_run lstmf; then
-  stage "6/7  Build lstmf  (clearing stale cache first)"
+  stage "6/8  Build lstmf  (clearing stale cache first)"
   rm -rf lstmf/rendered lstmf/inventory lstmf/classical lstmf/font-test lstmf/list.txt 2>/dev/null || true
   INVENTORY_DIR="$ROOT/inventory" \
   CLASSICAL_A5_DIR="$CLASSICAL_A5" \
@@ -204,7 +220,7 @@ fi
 
 # ── 7. Validate before committing hours of GPU time ──────────────────────────
 if should_run validate; then
-  stage "7/7  Validate training set"
+  stage "7/8  Validate training set"
   python3 -u - <<'PY' 2>&1 | tee -a "${LOG_TARGETS[@]}"
 import subprocess, tempfile, os, collections
 from pathlib import Path
