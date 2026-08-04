@@ -1837,14 +1837,72 @@ footer a:hover { text-decoration: underline; }
     <h2>Font registry</h2>
     <span class="hint">from fonts.yml</span>
     <button class="btn btn-outline" onclick="loadFonts()">↺ Refresh</button>
+    <button class="btn btn-primary" onclick="showAddFont()" style="padding:5px 12px">＋ Add font</button>
   </div>
+
+  <!-- Add-font panel -->
+  <div id="add-font-panel" class="card" style="display:none;margin-bottom:14px;border:1.5px solid #6ee7b7">
+    <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">Add a font to the registry</div>
+    <p style="font-size:.78rem;color:var(--mute);line-height:1.55;margin-bottom:10px">
+      Put the font files in <code>fonts/&lt;id&gt;/</code> first — <strong>the folder name must
+      match the id exactly</strong>, or the font stays invisible to every render path.
+      Then enter the id below and press Scan to detect the files.
+    </p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <label style="font-size:.78rem;font-weight:600">id  <span style="color:var(--mute);font-weight:400">(= folder name)</span>
+        <input id="af-id" type="text" placeholder="kan_newfont"
+          style="width:100%;margin-top:3px;padding:6px 9px;border:1.5px solid var(--border2);border-radius:6px;font-size:.82rem;background:var(--bg)">
+      </label>
+      <label style="font-size:.78rem;font-weight:600">Display name
+        <input id="af-name" type="text" placeholder="My Kannada Face"
+          style="width:100%;margin-top:3px;padding:6px 9px;border:1.5px solid var(--border2);border-radius:6px;font-size:.82rem;background:var(--bg)">
+      </label>
+    </div>
+    <button class="btn btn-outline" onclick="scanFontDir()" style="padding:4px 12px;font-size:.8rem">🔍 Scan folder</button>
+    <div id="af-scan" style="font-size:.78rem;margin-top:8px"></div>
+
+    <div id="af-details" style="display:none;margin-top:10px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+        <label style="font-size:.78rem;font-weight:600">font_dir
+          <input id="af-dir" type="text"
+            style="width:100%;margin-top:3px;padding:5px 7px;border:1.5px solid var(--border2);border-radius:6px;font-size:.8rem;background:var(--bg)">
+        </label>
+        <label style="font-size:.78rem;font-weight:600">Max pages/style
+          <input id="af-pages" type="number" value="600" min="50" max="5000"
+            style="width:100%;margin-top:3px;padding:5px 7px;border:1.5px solid var(--border2);border-radius:6px;font-size:.8rem;background:var(--bg)">
+        </label>
+        <label style="font-size:.78rem;font-weight:600">Repo / source URL
+          <input id="af-repo" type="text" placeholder="optional"
+            style="width:100%;margin-top:3px;padding:5px 7px;border:1.5px solid var(--border2);border-radius:6px;font-size:.8rem;background:var(--bg)">
+        </label>
+      </div>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:.78rem">
+        <input id="af-degrade" type="checkbox" style="margin-top:3px">
+        <span><strong>Letterpress simulation</strong> (<code>degrade: true</code>) — blur, speckle and
+        slight skew. On for historical revivals; off for modern digital faces.</span>
+      </label>
+      <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:.78rem">
+        <input id="af-aalt" type="checkbox" style="margin-top:3px">
+        <span><strong>Needs <code>aalt</code></strong> — only if this font keeps its conjunct (ottu)
+        forms in the <code>aalt</code> GSUB feature, as GTN and WMP do. Wrong either way breaks
+        conjuncts, so check the Images gallery after adding.</span>
+      </label>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary" onclick="submitFont()">Add to registry</button>
+        <button class="btn btn-outline" onclick="document.getElementById('add-font-panel').style.display='none'">Cancel</button>
+        <span id="af-status" style="font-size:.78rem;color:var(--mute)"></span>
+      </div>
+    </div>
+  </div>
+
   <div class="card" style="padding:0;overflow:hidden">
     <table class="tbl">
-      <thead><tr><th>Font name</th><th>Styles</th><th>Rendering</th><th>Repo cloned</th><th>Images</th></tr></thead>
-      <tbody id="font-tbody"><tr><td colspan="5" style="color:var(--mute);padding:14px">Loading…</td></tr></tbody>
+      <thead><tr><th>Font name</th><th>Styles</th><th>Rendering</th><th>Files present</th><th>Images</th><th></th></tr></thead>
+      <tbody id="font-tbody"><tr><td colspan="6" style="color:var(--mute);padding:14px">Loading…</td></tr></tbody>
     </table>
   </div>
-  <p class="hint" style="margin-top:8px">To add a font, edit <code>fonts.yml</code> then re-run ① Prep base + ④ Render images.</p>
+  <p class="hint" style="margin-top:8px">After adding or removing a font, re-run ③ Render images and
+  the Inventory step so the training data matches the registry.</p>
 </div>
 
 <!-- ═══ TRAINING ═════════════════════════════════════════════════ -->
@@ -2526,16 +2584,97 @@ async function loadFonts() {
   }
   document.getElementById('font-tbody').innerHTML = d.map(f => `
     <tr>
-      <td><strong>${f.name}</strong></td>
+      <td><strong>${f.name}</strong><br><span style="font-size:.72rem;color:var(--mute)">${f.id}</span></td>
       <td>${f.styles}</td>
-      <td><span class="pill ${f.degrade ? 'pill-amber' : 'pill-brand'}">${f.degrade ? 'Degraded' : 'Clean'}</span></td>
+      <td><span class="pill ${f.degrade ? 'pill-amber' : 'pill-brand'}"
+                title="${f.degrade
+                  ? 'Letterpress simulation: blur, speckle, slight skew. Not a fault.'
+                  : 'Rendered clean — modern digital face.'}">${f.degrade ? 'Letterpress' : 'Clean'}</span></td>
       <td>${f.cloned
-        ? '<span class="pill pill-green">✓ Cloned</span>'
-        : '<span class="pill pill-gray">Not cloned</span>'}</td>
+        ? '<span class="pill pill-green">✓ present</span>'
+        : '<span class="pill pill-gray">missing</span>'}</td>
       <td>${f.rendered > 0
         ? `<span class="pill pill-green">${f.rendered.toLocaleString()}</span>`
         : '—'}</td>
+      <td style="text-align:right"><button class="btn btn-outline"
+            onclick="removeFont('${f.id}','${f.name.replace(/'/g, "\\'")}')"
+            title="Remove from fonts.yml. Font files are kept on disk."
+            style="padding:3px 10px;font-size:.74rem;color:#b91c1c;border-color:#fca5a5">Remove</button></td>
     </tr>`).join('');
+}
+
+// ── Add / remove fonts ───────────────────────────────────────────
+function showAddFont() {
+  const p = document.getElementById('add-font-panel');
+  p.style.display = 'block';
+  document.getElementById('af-details').style.display = 'none';
+  document.getElementById('af-scan').innerHTML = '';
+  p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+let _afFiles = [];
+async function scanFontDir() {
+  const id = document.getElementById('af-id').value.trim();
+  const out = document.getElementById('af-scan');
+  if (!id) { out.innerHTML = '<span style="color:var(--red)">Enter the id first.</span>'; return; }
+  out.innerHTML = 'Scanning…';
+  try {
+    const r = await fetch(`/api/fonts/scan/${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (!r.ok) { out.innerHTML = `<span style="color:var(--red)">${d.error}</span>`; return; }
+    _afFiles = d.font_files;
+    document.getElementById('af-dir').value = d.font_dir;
+    document.getElementById('af-details').style.display = 'block';
+    const others = d.all_dirs.filter(x => x.dir !== d.font_dir);
+    out.innerHTML =
+      `<span style="color:var(--green)">✓ ${d.font_files.length} font file(s) in
+       <code>${d.font_dir}</code></span><div style="color:var(--mute);margin-top:4px">
+       ${d.font_files.slice(0, 6).join(', ')}${d.font_files.length > 6 ? ` … +${d.font_files.length - 6}` : ''}</div>` +
+      (others.length ? `<div style="color:var(--mute);margin-top:4px">Other folders found:
+       ${others.map(o => `${o.dir} (${o.count})`).join(', ')} — change font_dir to scope elsewhere.</div>` : '');
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--red)">${e.message}</span>`;
+  }
+}
+
+async function submitFont() {
+  const status = document.getElementById('af-status');
+  const body = {
+    id:            document.getElementById('af-id').value.trim(),
+    name:          document.getElementById('af-name').value.trim(),
+    font_dir:      document.getElementById('af-dir').value.trim() || '.',
+    font_files:    _afFiles,
+    degrade:       document.getElementById('af-degrade').checked,
+    max_pages:     parseInt(document.getElementById('af-pages').value) || 600,
+    repo:          document.getElementById('af-repo').value.trim(),
+    font_features: document.getElementById('af-aalt').checked ? "'aalt' 1" : '',
+  };
+  if (!body.name) { status.textContent = 'Display name required.'; return; }
+  if (!body.font_files.length) { status.textContent = 'Scan the folder first.'; return; }
+  status.textContent = 'Adding…';
+  try {
+    const r = await fetch('/api/fonts', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) { status.innerHTML = `<span style="color:var(--red)">${d.error}</span>`; return; }
+    document.getElementById('add-font-panel').style.display = 'none';
+    notify(`✓ ${body.name} added — ${d.next}`, 'info', 9000);
+    loadFonts();
+  } catch (e) { status.textContent = e.message; }
+}
+
+async function removeFont(id, name) {
+  if (!confirm(`Remove "${name}" (${id}) from fonts.yml?\n\n`
+             + `The font files in fonts/${id}/ are kept — only the registry entry is removed.\n`
+             + `Training data already generated from this font is not deleted either.`)) return;
+  try {
+    const r = await fetch(`/api/fonts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (!r.ok) { notify(`Error: ${d.error}`, 'error', 8000); return; }
+    notify(`✓ ${name} removed. ${d.note}`, 'info', 9000);
+    loadFonts();
+  } catch (e) { notify(e.message, 'error'); }
 }
 
 async function loadCheckpoints() {

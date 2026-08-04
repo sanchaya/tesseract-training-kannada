@@ -1069,6 +1069,171 @@ app.get("/api/font-images/compare", (req, res) => {
   res.json(result);
 });
 
+// ── Font registry: scan / add / remove ────────────────────────────────────
+//
+// fonts.yml is edited AS TEXT, not by loading and re-dumping via js-yaml.
+// A round-trip through yaml.dump() would silently discard every comment in the
+// file — and fonts.yml carries the per-font notes that explain the `aalt`
+// asymmetry, the degrade flag, and the directory-naming rule. Those comments
+// are the main defence against repeating the bugs they document.
+
+const SKIP_FONT_DIRS = new Set(["webfonts", "Source", "source", ".git", "Tests"]);
+
+// Suggest font_dir + font_files for a folder already sitting in fonts/<id>/
+app.get("/api/fonts/scan/:id", (req, res) => {
+  const id   = req.params.id.replace(/[^\w.-]/g, "");
+  const base = path.join(ROOT, "fonts", id);
+  if (!fs.existsSync(base)) {
+    return res.status(404).json({ error: `fonts/${id}/ not found. Create it and put the font files inside.` });
+  }
+
+  // Group font files by their parent directory; the directory holding the most
+  // is the best font_dir candidate.
+  const byDir = new Map();
+  const walk = dir => {
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (!SKIP_FONT_DIRS.has(e.name)) walk(p); }
+      else if (/\.(ttf|otf)$/i.test(e.name)
+               && !/\[|VariableFont/i.test(e.name)) {
+        const rel = path.relative(base, dir) || ".";
+        if (!byDir.has(rel)) byDir.set(rel, []);
+        byDir.get(rel).push(e.name);
+      }
+    }
+  };
+  walk(base);
+
+  if (!byDir.size) return res.status(404).json({ error: `No .ttf/.otf files found under fonts/${id}/` });
+
+  const [font_dir, files] = [...byDir.entries()].sort((a, b) => b[1].length - a[1].length)[0];
+  res.json({
+    id,
+    font_dir: font_dir === "." ? "." : font_dir,
+    font_files: files.sort(),
+    all_dirs: [...byDir.entries()].map(([d, f]) => ({ dir: d, count: f.length })),
+  });
+});
+
+app.post("/api/fonts", express.json(), (req, res) => {
+  const { id, name, description = "", repo = "", font_dir = ".",
+          font_files = [], degrade = false, max_pages = 600,
+          font_features = "", clone = null } = req.body || {};
+
+  if (!id || !/^[\w.-]+$/.test(id)) return res.status(400).json({ error: "Valid id required (letters, digits, _ . -)" });
+  if (!name)                        return res.status(400).json({ error: "name required" });
+  if (!Array.isArray(font_files) || !font_files.length)
+    return res.status(400).json({ error: "font_files must be a non-empty list" });
+
+  const fonts = loadFonts();
+  if (fonts.some(f => f.id === id)) return res.status(409).json({ error: `Font id '${id}' already exists` });
+
+  // The directory name MUST equal the id — every generator resolves fonts at
+  // fonts/<id>/, and a mismatch makes the font silently render nothing.
+  const base = path.join(ROOT, "fonts", id);
+  if (!fs.existsSync(base)) {
+    return res.status(400).json({
+      error: `fonts/${id}/ does not exist. The folder name must match the id exactly, ` +
+             `or the font will be invisible to every render path.` });
+  }
+  const missing = font_files.filter(f =>
+    !fs.existsSync(path.join(base, font_dir === "." ? "" : font_dir, f)));
+  if (missing.length) {
+    return res.status(400).json({ error: `Not found under fonts/${id}/${font_dir}/: ${missing.join(", ")}` });
+  }
+
+  const yml = fs.readFileSync(P.fontsYml, "utf8");
+  fs.writeFileSync(P.fontsYml + ".bak", yml);          // always keep one undo step
+
+  const esc = s => String(s).replace(/"/g, '\\"');
+  const block = [
+    ``,
+    `  # ── ${name} ${"─".repeat(Math.max(0, 44 - name.length))}`,
+    `  # Added via the portal on ${new Date().toISOString().slice(0, 10)}.`,
+    `  - id: ${id}`,
+    `    name: "${esc(name)}"`,
+    description ? `    description: "${esc(description)}"` : null,
+    repo        ? `    repo: ${repo}` : null,
+    clone === false ? `    clone: false          # not a git remote — download manually` : null,
+    `    font_dir: ${font_dir}`,
+    `    font_files:`,
+    ...font_files.map(f => `      - ${f}`),
+    `    degrade: ${degrade ? "true" : "false"}`,
+    `    max_pages: ${parseInt(max_pages) || 600}`,
+    font_features ? `    font_features: "${esc(font_features)}"` : null,
+  ].filter(Boolean).join("\n");
+
+  // Insert before the "ADD NEW FONTS BELOW" marker so the trailing guidance
+  // comment stays at the bottom where people look for it.
+  const marker = yml.indexOf("  # ── ADD NEW FONTS BELOW");
+  const updated = marker === -1
+    ? yml.trimEnd() + "\n" + block + "\n"
+    : yml.slice(0, marker) + block + "\n\n" + yml.slice(marker);
+
+  try {
+    yaml.load(updated);                                 // never write invalid YAML
+  } catch (e) {
+    return res.status(500).json({ error: `Generated YAML is invalid: ${e.message}` });
+  }
+  fs.writeFileSync(P.fontsYml, updated);
+  console.log(`  [fonts] added ${id} (${font_files.length} styles)`);
+  res.json({ ok: true, id, styles: font_files.length,
+             next: "Run ③ Render images and the Inventory step to generate training data for this font." });
+});
+
+app.delete("/api/fonts/:id", (req, res) => {
+  const id = req.params.id.replace(/[^\w.-]/g, "");
+  const fonts = loadFonts();
+  if (!fonts.some(f => f.id === id)) return res.status(404).json({ error: `No font with id '${id}'` });
+
+  const yml   = fs.readFileSync(P.fontsYml, "utf8");
+  const lines = yml.split("\n");
+
+  // A font's block runs from its `- id:` line back through any immediately
+  // preceding comment lines, and forward to the next entry or the trailing
+  // marker. Removing the leading comments too keeps the file tidy.
+  const idLine = lines.findIndex(l => new RegExp(`^\\s*-\\s*id:\\s*${id}\\s*$`).test(l));
+  if (idLine === -1) return res.status(404).json({ error: `Could not locate '${id}' in fonts.yml` });
+
+  // Walk backwards over this entry's own comment header and blank lines.
+  let start = idLine;
+  while (start > 0 && /^\s*#/.test(lines[start - 1])) start--;
+  while (start > 0 && lines[start - 1].trim() === "") start--;
+
+  // Scan forward from AFTER the id line — not from `start`, which sits inside
+  // the comment block. Starting at `start + 1` made the very first `- id:`
+  // encountered be this font's own, so the loop exited immediately and deleted
+  // only the comments, leaving the entry behind while reporting success.
+  let end = idLine + 1;
+  while (end < lines.length) {
+    if (/^\s*-\s*id:\s/.test(lines[end]))                    break;
+    if (/^\s*#\s*──\s*ADD NEW FONTS BELOW/.test(lines[end])) break;
+    if (/^\s*#\s*──/.test(lines[end]))                       break;   // next entry's header
+    end++;
+  }
+  while (end > idLine + 1 && lines[end - 1].trim() === "") end--;
+
+  fs.writeFileSync(P.fontsYml + ".bak", yml);
+  const updated = [...lines.slice(0, start), ...lines.slice(end)].join("\n");
+
+  let parsed;
+  try { parsed = yaml.load(updated); }
+  catch (e) { return res.status(500).json({ error: `Edit would produce invalid YAML: ${e.message}` }); }
+  if (!parsed?.fonts?.length) {
+    return res.status(400).json({ error: "Refusing to remove the last font — the registry would be empty." });
+  }
+  fs.writeFileSync(P.fontsYml, updated);
+
+  // Font FILES are never deleted here. Unregistering is reversible; deleting a
+  // font folder is not, and the same folder may be the source for generated
+  // images still referenced by an in-flight training run.
+  console.log(`  [fonts] removed ${id} from registry (files kept at fonts/${id}/)`);
+  res.json({ ok: true, id, files_kept: `fonts/${id}/`,
+             note: "Removed from the registry. Font files were left on disk; delete fonts/" + id + "/ manually if you want them gone." });
+});
+
 // ── OCR quality check ─────────────────────────────────────────────────────
 app.get("/api/ocr-quality", async (req, res) => {
   const testDir  = path.join(ROOT, "test-images");
