@@ -169,7 +169,9 @@ fi
 # without it render-corpus.py skips every file that already exists.
 if should_run render; then
   stage "3/8  Render synthetic lines  (--force)"
-  python3 -u corpus/render-corpus.py --force 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -3
+  python3 -u corpus/render-corpus.py --force 2>&1 \
+    | tee -a "${LOG_TARGETS[@]}" \
+    | awk 'NR%10==0 || /Total|ERROR|fail/'
   metric "rendered images: $(ls rendered/*.png 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
@@ -213,9 +215,15 @@ if [ $WITH_CLASSICAL -eq 1 ] && should_run classical; then
   # --force: the renderer skips existing output, so without it a rebuild after a
   # shaping or font-feature change silently preserves every old image. This is
   # exactly how aalt-rendered GTN/WMP pages survived earlier rebuilds.
+  # NOT `| tail -N`: tail buffers until EOF, so a multi-hour stage shows nothing
+  # until it finishes and then prints five lines. Pass progress through instead —
+  # awk keeps only the periodic percentage lines so the terminal stays readable
+  # while the full output still lands in both logs.
   python3 -u corpus/render-a5-pages.py \
     --corpus-dir "$CLASSICAL_DIR" \
-    --lines --force --workers 4 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
+    --lines --force --workers 4 2>&1 \
+    | tee -a "${LOG_TARGETS[@]}" \
+    | awk 'NR%20==0 || /Done|ERROR|Total|fail=[1-9]/'
   metric "classical line images: $(find "$CLASSICAL_A5" -name '*_line*.png' 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
