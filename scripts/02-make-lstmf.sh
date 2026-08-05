@@ -430,7 +430,17 @@ def _make_lstmf_impl(img_path_str):
     result = subprocess.run(
         ["tesseract", str(dst_img), str(out_path / stem),
          "--tessdata-dir", _run_tdata,
-         "--dpi", "150", "--psm", "6",
+         # PSM 13 (RAW_LINE) is what tesstrain's Makefile uses by default for
+         # building .lstmf from single-line ground truth, and the reason is
+         # specific: PSM 6 runs layout analysis, which on a tight line crop can
+         # re-segment or reject the line, so some images silently produce no
+         # .lstmf at all. PSM 13 bypasses that and treats the image as one raw
+         # text line — which is exactly what these images are.
+         #
+         # This project used PSM 6 up to Aug 2026. Override to compare:
+         #   LSTMF_PSM=6 ./scripts/02-make-lstmf.sh
+         # https://github.com/tesseract-ocr/tesstrain
+         "--dpi", "150", "--psm", os.environ.get("LSTMF_PSM", "13"),
          "-l", "kan", "lstm.train"],
         capture_output=True, encoding='utf-8', errors='replace'
     )
