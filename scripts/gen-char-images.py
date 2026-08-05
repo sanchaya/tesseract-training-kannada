@@ -298,17 +298,29 @@ INK   = (20,  20,  60)
 MUTED = (120, 130, 150)
 
 
-def render_char_image(ch, label, font_path_str, size, dpi, out_path, write_gt=True, aalt=False):
+def render_char_image(ch, label, font_path_str, size, dpi, out_path, write_gt=True, aalt=False,
+                      show_label=False):
     """
-    Render a single Kannada character (+ small ASCII label) to a PNG.
+    Render one character to PNG.
 
-    Uses shaping_render for the Kannada character so conjuncts form correctly,
-    and Pillow for the ASCII label (no shaping needed).
+    `show_label` burns the codepoint (e.g. "U+0C95") into the image below the
+    glyph. It defaults to FALSE, and that matters: these images are fed to
+    Tesseract by the 1:1 OCR test, whose ground truth is the character alone.
+    With a label present, Tesseract reads both the glyph AND the label, so the
+    comparison fails for every character no matter how good the model is —
+    a model at 0.003% BCER still scored zero here.
+
+    The label is also drawn in the Kannada font, where Latin glyphs are often
+    missing, so "U+0C95" rendered as garbage — adding noise on top of the
+    mismatch.
+
+    The codepoint is still recorded per character in manifest.json, which is
+    where diagnostic metadata belongs.
     """
     if SHAPING_AVAILABLE:
         img = _render_char_label(
             char=ch,
-            label=label,
+            label=(label if show_label else ""),
             font_path=font_path_str,
             font_size=size,
             label_size=max(size // 4, 9),
@@ -336,7 +348,8 @@ def render_char_image(ch, label, font_path_str, size, dpi, out_path, write_gt=Tr
         tmp  = _PI.new('RGB', (1, 1))
         dtmp = ImageDraw.Draw(tmp)
         bb   = dtmp.textbbox((0, 0), ch, font=font)
-        lbb  = dtmp.textbbox((0, 0), label, font=lbl_font)
+        _lbl = label if show_label else ""
+        lbb  = dtmp.textbbox((0, 0), _lbl, font=lbl_font)
         cw, ch_h = bb[2]-bb[0], bb[3]-bb[1]
         lw = lbb[2]-lbb[0]
 
@@ -345,7 +358,8 @@ def render_char_image(ch, label, font_path_str, size, dpi, out_path, write_gt=Tr
         img = _PI.new('RGB', (W, H), BG)
         d   = ImageDraw.Draw(img)
         d.text(((W-cw)//2 - bb[0], pad - bb[1]), ch, font=font, fill=INK)
-        d.text(((W-lw)//2, pad + ch_h + pad//2 - lbb[1]), label, font=lbl_font, fill=MUTED)
+        if show_label:
+            d.text(((W-lw)//2, pad + ch_h + pad//2 - lbb[1]), _lbl, font=lbl_font, fill=MUTED)
 
     img.save(str(out_path), dpi=(dpi, dpi))
     if write_gt:
@@ -405,7 +419,8 @@ def render_line_image(items, font_path_str, dpi, out_path, text_override=None, s
 
 # ── Per-font generation ────────────────────────────────────────────────────
 
-def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi, aalt=False):
+def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi, aalt=False,
+                         show_labels=False):
     """Generate all character images for one font variant."""
     from PIL import ImageFont
 
@@ -429,7 +444,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi, 
     for ch, cp, name in VOWELS:
         fname = out_dir / f"vowel_{name.lower()}.png"
         try:
-            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt)
+            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt, show_label=show_labels)
             generated.append({'type':'vowel','ch':ch,'cp':cp,'name':name,'file':fname.name})
         except Exception as e:
             errors.append(f"vowel {name}: {e}")
@@ -437,7 +452,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi, 
     for ch, cp, name in CONSONANTS:
         fname = out_dir / f"consonant_{name.lower()}.png"
         try:
-            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt)
+            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt, show_label=show_labels)
             generated.append({'type':'consonant','ch':ch,'cp':cp,'name':name,'file':fname.name})
         except Exception as e:
             errors.append(f"consonant {name}: {e}")
@@ -445,7 +460,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi, 
     for ch, stem in CONJUNCTS:
         fname = out_dir / f"conjunct_{stem}.png"
         try:
-            render_char_image(ch, stem, font_path_str, size, dpi, fname, aalt=aalt)
+            render_char_image(ch, stem, font_path_str, size, dpi, fname, aalt=aalt, show_label=show_labels)
             generated.append({'type':'conjunct','ch':ch,'name':stem,'file':fname.name})
         except Exception as e:
             errors.append(f"conjunct {stem}: {e}")
@@ -453,7 +468,7 @@ def generate_for_variant(font_id, variant_name, font_path, out_base, size, dpi, 
     for ch, cp, name in DIGITS:
         fname = out_dir / f"digit_{name}.png"
         try:
-            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt)
+            render_char_image(ch, f"U+{cp}", font_path_str, size, dpi, fname, aalt=aalt, show_label=show_labels)
             generated.append({'type':'digit','ch':ch,'cp':cp,'name':name,'file':fname.name})
         except Exception as e:
             errors.append(f"digit {name}: {e}")
@@ -518,6 +533,11 @@ def main():
     parser.add_argument('--outdir',   default=str(ROOT / 'test-images'))
     parser.add_argument('--dpi',      type=int, default=150)
     parser.add_argument('--size',     type=int, default=48)
+    parser.add_argument('--show-labels', action='store_true',
+                        help='Burn the codepoint label (U+0C95) into each character image. '
+                             'OFF by default: the 1:1 OCR test compares against the character '
+                             'alone, so a label in the pixels makes every comparison fail no '
+                             'matter how good the model is. The codepoint is in manifest.json.')
     parser.add_argument('--font-id',  default=None,
                         help='Generate for one font only (e.g. kan_gmp)')
     args = parser.parse_args()
@@ -575,7 +595,8 @@ def main():
         for variant_name, font_path in variants:
             print(f"    {variant_name}  ({font_path.name})")
             n = generate_for_variant(fid, variant_name, font_path,
-                                     out_base, args.size, args.dpi, aalt)
+                                     out_base, args.size, args.dpi, aalt,
+                                     show_labels=args.show_labels)
             print(f"    → {n} images")
             total_images += n
             summary.append({'font_id': fid, 'font_name': fname,
