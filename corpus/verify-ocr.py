@@ -42,6 +42,7 @@ TESS_EXPANDED = ROOT / 'tessdata_expanded'
 RENDERED_DIR = ROOT / 'rendered'
 CLASSICAL_DIR = ROOT / 'classical-corpus-kannada' / 'a5-pages'
 SCAN_DIR = ROOT / 'scan-input'
+BEST_DIR = ROOT / 'best'          # where 04-package.sh writes kan_hist.traineddata
 
 # ── OCR ────────────────────────────────────────────────────────────────────────
 def run_ocr(img_path: Path, tessdata_dir: Path, lang: str, psm: int) -> str:
@@ -387,8 +388,21 @@ def main():
     models = []
     if (TESSDATA / 'kan.traineddata').exists():
         models.append(('tessdata_best', TESSDATA, 'kan', '#6c8ebf'))
-    if (TESSDATA / 'kan_hist.traineddata').exists():
-        models.append(('kan_hist', TESSDATA, 'kan_hist', '#a78bfa'))
+    # kan_hist: prefer best/ — that is where 04-package.sh writes. Reading it
+    # from tessdata_best/ meant every evaluation silently measured whatever
+    # stale copy happened to be there; on 2026-08-05 that was a model from
+    # 2026-07-03, so a full day of packaging and retraining produced
+    # byte-identical CER because none of it was ever loaded.
+    _hist = None
+    for _d in (BEST_DIR, TESSDATA):
+        if (_d / 'kan_hist.traineddata').exists():
+            _hist = _d
+            break
+    if _hist is not None:
+        import datetime as _dt
+        _m = (_hist / 'kan_hist.traineddata').stat().st_mtime
+        print(f"  kan_hist from {_hist.name}/  (built {_dt.datetime.fromtimestamp(_m):%Y-%m-%d %H:%M})")
+        models.append(('kan_hist', _hist, 'kan_hist', '#a78bfa'))
     if (TESS_EXPANDED / 'kan.traineddata').exists():
         models.append(('tessdata_expanded', TESS_EXPANDED, 'kan', '#34d399'))
     if not models:
