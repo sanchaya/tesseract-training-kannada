@@ -93,6 +93,8 @@ function rotateLogIfNeeded() {
 app.use(express.json({ limit: "50mb" }));
 app.use(express.static(P.public));
 app.use("/test-images", express.static(path.join(ROOT, "test-images")));
+// Generated HTML reports (unit coverage, sweeps). Written by scripts, read-only here.
+app.use("/reports", express.static(path.join(ROOT, "output", "reports")));
 app.use("/fonts",           express.static(path.join(ROOT, "fonts"),
   { setHeaders: (res) => res.setHeader("Access-Control-Allow-Origin", "*") }));
 app.use("/classical-pages", express.static(P.classicalA5,
@@ -873,6 +875,11 @@ app.post("/api/run/:step", (req, res) => {
     inventory:     ["python3", [path.join(P.corpus,  "generate-inventory.py")]],
     // Coverage analysis — must run BEFORE expandunichar, since it produces the
     // word list that 00c turns into unicharset units.
+    // Measured per-grapheme recognition: runs the packaged model over the
+    // inventory (a labelled enumeration of the whole script) and scores each
+    // grapheme per font. Answers "which characters actually work", which a
+    // single BCER number cannot.
+    covreport:     ["python3", [path.join(ROOT, "corpus", "unit-coverage-report.py")]],
     coverage:      ["python3", [path.join(P.scripts, "find-missing-clusters.py"),
                                 "--kannada-only", "--update-00c"]],
     // One action for the whole data build. run-pipeline.sh owns the ordering,
