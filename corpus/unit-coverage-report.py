@@ -53,6 +53,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import string
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -112,8 +113,14 @@ def classify(g):
             return 'digit'
         if 'KANNADA' in n:
             return 'sign'
+        if g in string.ascii_uppercase:
+            return 'latin-upper'
+        if g in string.ascii_lowercase:
+            return 'latin-lower'
+        if g in string.digits:
+            return 'ascii-digit'
         if g.isascii():
-            return 'ascii'
+            return 'punctuation'
         return 'other'
     if any('KANNADA VOWEL SIGN' in unicodedata.name(c, '') for c in g[1:]):
         return 'cv-syllable'
@@ -125,7 +132,18 @@ def classify(g):
 
 CATEGORY_ORDER = ['vowel', 'consonant', 'vowel-sign', 'cv-syllable',
                   'anusvara-visarga', 'conjunct', 'conjunct-stacked', 'cluster',
-                  'sign', 'digit', 'ascii', 'other', 'special']
+                  'sign', 'digit', 'latin-upper', 'latin-lower', 'ascii-digit',
+                  'punctuation', 'other', 'special']
+
+# Always shown, even with no unicharset unit and no sample.
+#
+# Latin coverage has to be visible rather than merely absent. The kan unicharset
+# contains ASCII digits and punctuation but NOT ONE letter — no A-Z, no a-z — so
+# kan_hist physically cannot emit an English character no matter how it is
+# trained. Any line with an English word in it is unencodable and gets dropped.
+# Without these reference rows that hole is invisible: a character that is in no
+# unicharset and in no inventory simply never appears in the report.
+REFERENCE = set(string.ascii_letters + string.digits + '.,;:!?()[]-\'"/&%')
 
 CATEGORY_LABEL = {
     'vowel': 'Independent vowels  ಅ ಆ ಇ',
@@ -137,8 +155,11 @@ CATEGORY_LABEL = {
     'conjunct-stacked': 'Stacked conjuncts  ರ್ಘ್ಯ',
     'cluster': 'Other clusters',
     'sign': 'Signs',
-    'digit': 'Digits  ೦ ೧',
-    'ascii': 'ASCII / punctuation',
+    'digit': 'Kannada digits  ೦ ೧',
+    'latin-upper': 'English capitals  A B C',
+    'latin-lower': 'English lowercase  a b c',
+    'ascii-digit': 'Western digits  0 1 2',
+    'punctuation': 'Punctuation',
     'other': 'Other',
     'special': 'Tesseract internal',
 }
@@ -428,7 +449,7 @@ def main():
     for r in results:
         per[r['gt']].append(r)
 
-    keys = set(per) | set(units) | _static_labels
+    keys = set(per) | set(units) | _static_labels | REFERENCE
     graphemes = []
     for g in sorted(keys):
         rs = per.get(g, [])

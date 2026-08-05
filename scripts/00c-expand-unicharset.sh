@@ -49,8 +49,10 @@
 set -e
 
 FORCE=0
+WITH_LATIN=0
 for arg in "$@"; do
-    [ "$arg" = "--force" ] && FORCE=1
+    [ "$arg" = "--force" ]       && FORCE=1
+    [ "$arg" = "--with-latin" ]  && WITH_LATIN=1
 done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -347,6 +349,39 @@ EOF
 #   "Normalization failed for string '...ೃ'"
 # This causes the ENTIRE LINE to be skipped, losing all other chars on it
 # (including ಙ).  ೃ is correctly extracted from word context: ನೃ, ಮೃ, ಕೃ…
+
+# ── Step 3b: English letters (opt-in) ─────────────────────────────
+# The kan unicharset ships with ASCII digits and punctuation but NOT ONE Latin
+# letter — no A-Z, no a-z. So kan_hist physically cannot emit an English
+# character, and any training line containing an English word is unencodable
+# and silently dropped.
+#
+# This is OFF by default and that is deliberate. Adding 52 units:
+#   • changes the unicharset, which changes the recoder, which invalidates
+#     every existing checkpoint — the next run must start fresh
+#   • widens the output layer, adding classes the model must learn to tell
+#     apart from visually similar Kannada glyphs
+# Worth it only when the source material actually contains English. In the
+# current corpus, Latin appears on 0.39% of lines and is almost entirely
+# digitisation noise ('s' 307 times from manteswamy.txt), which is a bad reason
+# to pay that cost. Real scans with English title pages are a good one.
+#
+# Every font in fonts/ carries full A-Z, a-z and 0-9, so the glyphs are there
+# whenever you want them.
+if [ "$WITH_LATIN" = "1" ]; then
+    echo "→ Step 3b: adding English letters (A-Z, a-z) to the unicharset..."
+    cat >> "$WORK_DIR/new_chars.txt" << 'LATINEOF'
+ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz
+The Kannada Bible Mission Press Bangalore Mysore Madras
+Volume Part Chapter Page Edition Printed Published Editor
+Rev Dr Mr Mrs Esq Vol No pp ed trans
+London Basel Mangalore Dharwar Belgaum Hubli Tumkur
+A B C D E F G H I J K L M N O P Q R S T U V W X Y Z
+a b c d e f g h i j k l m n o p q r s t u v w x y z
+LATINEOF
+else
+    echo "  (English letters NOT added — pass --with-latin if your scans contain English)"
+fi
 
 # ── Step 4: Extract unicharset from corpus ─────────────────────
 echo "→ Step 4: Extracting unicharset from new characters..."

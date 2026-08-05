@@ -879,6 +879,10 @@ app.post("/api/run/:step", (req, res) => {
     // inventory (a labelled enumeration of the whole script) and scores each
     // grapheme per font. Answers "which characters actually work", which a
     // single BCER number cannot.
+    // Triage the coverage report into causes. Deliberately does NOT just
+    // render more of whatever failed: inventory images are already in the
+    // training set, so more of the same is volume, not information.
+    remediate:     ["python3", [path.join(ROOT, "corpus", "remediate-coverage.py")]],
     covreport:     ["python3", [path.join(ROOT, "corpus", "unit-coverage-report.py")]],
     coverage:      ["python3", [path.join(P.scripts, "find-missing-clusters.py"),
                                 "--kannada-only", "--update-00c"]],
@@ -922,6 +926,10 @@ app.post("/api/run/:step", (req, res) => {
   if (step === 'inventory' && req.query.all_fonts === '1') runArgs.push('--all-fonts');
 
   // Pipeline options — surfaced as checkboxes rather than remembered flags.
+  if (step === 'remediate') {
+    if (req.query.generate === '1') runArgs.push('--generate');
+    if (req.query.render   === '1') runArgs.push('--render');
+  }
   if (step === 'pipeline') {
     if (req.query.classical === '1') runArgs.push('--with-classical');
     if (req.query.from)              runArgs.push('--from', String(req.query.from).replace(/[^a-z]/g, ''));

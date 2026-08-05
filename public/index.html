@@ -787,6 +787,9 @@ footer a:hover { text-decoration: underline; }
         style="font-size:.95rem;padding:9px 18px">Coverage report</button>
       <a class="btn" href="/reports/unit-coverage.html" target="_blank"
         style="font-size:.85rem;padding:9px 14px">View ↗</a>
+      <button class="btn step-run-btn" id="sb-remediate"
+        onclick="runRemediate()"
+        style="font-size:.95rem;padding:9px 18px">Fix what's failing</button>
     </div>
     <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:.78rem">
       <input id="pl-classical" type="checkbox" style="margin-top:3px">
@@ -2531,6 +2534,7 @@ async function loadStatus() {
     const stepNames = { prep:'Prep base', expandunichar:'Expanding unicharset', wiki:'Downloading corpus', clean:'Cleaning corpus',
       render:'Rendering images', inventory:'Generating inventory', coverage:'Scanning coverage',
       covreport:'Measuring per-grapheme recognition',
+      remediate:'Triaging failing characters',
       pipeline:'Preparing training data',
       lstmf:'Building lstmf', train:'Training', package:'Packaging' };
     badge.style.display = 'inline-flex';
@@ -2702,6 +2706,22 @@ async function runCoverageReport() {
     + 'gets right in any font.\n\n'
     + 'Open it with "View ↗" when the log says it is done.')) return;
   run('covreport');
+}
+
+// Triage the coverage report, then optionally generate targeted data.
+// Two-stage on purpose: the triage usually says "training is not the fix",
+// and it is worth reading that before generating anything.
+async function runRemediate() {
+  const go = confirm('Triage the failing characters?\n\n'
+    + 'Sorts every failing grapheme into:\n'
+    + '  • STRUCTURAL — not in the unicharset; training cannot fix it\n'
+    + '  • FONT-SPECIFIC — works in some fonts; suspect the image, not the model\n'
+    + '  • UNIVERSAL — fails everywhere; more context data may help\n\n'
+    + 'OK = triage only (fast, safe).\n'
+    + 'Read the result before generating — usually most failures are in the\n'
+    + 'first two classes, where adding data makes things worse, not better.');
+  if (!go) return;
+  run('remediate');
 }
 
 // ── Review queue ─────────────────────────────────────────────────
@@ -2968,6 +2988,7 @@ async function run(step, force, mode, extraQuery) {
                   specimen:'Generate specimen', render: force ? 'Re-render images (force)' : 'Render images',
                   inventory:'Character inventory', coverage:'Coverage scan',
                   covreport:'Coverage report',
+                  remediate:'Coverage remediation',
                   pipeline:'Preparing training data',
                   lstmf:'Make lstmf', train: mode === 'fresh' ? 'Train (fresh+expanded)' : 'Train', package:'Package' };
   if (STATIC_MODE) { toast('Training unavailable in static mode — run the Node.js server'); return; }
