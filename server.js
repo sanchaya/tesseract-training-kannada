@@ -1414,6 +1414,199 @@ app.delete("/api/fonts/:id", (req, res) => {
   });
 });
 
+// ── Review queue: lowest-confidence predictions first ─────────────────────
+//
+// Correcting ground truth only pays off where the ground truth is uncertain,
+// and the model's own confidence is the cheapest signal for that. This ranks
+// images by mean word confidence and returns the worst, so review effort goes
+// where the model is least sure rather than to whatever happens to be first.
+//
+// Source matters:
+//   scan       real scanned pages — GT is human-made and may be wrong or absent.
+//              This is the only source where correction creates NEW information,
+//              and per docs/AUDIT it is the highest-value data the project can add.
+//   classical  synthetic renders; GT is generated from source text and is correct
+//              by construction. Low confidence here indicates a MODEL weakness,
+//              not a data error — useful for diagnosis, not for correction.
+//
+// Tesseract's TSV output carries a per-word confidence; the mean over words is a
+// usable proxy for line quality.
+// Character error rate between two strings (Levenshtein / reference length).
+function cerOf(ref, hyp) {
+  const r = [...ref.replace(/\s+/g, " ").trim()];
+  const h = [...hyp.replace(/\s+/g, " ").trim()];
+  if (!r.length) return hyp.trim() ? 1 : 0;
+  let prev = Array.from({ length: h.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= r.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= h.length; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (r[i - 1] !== h[j - 1] ? 1 : 0));
+    }
+    prev = cur;
+  }
+  return Math.min(prev[h.length] / r.length, 1);
+}
+
+// Run OCR and score how much attention this image deserves.
+//
+// Tesseract's per-word confidence comes from its `tsv` config, which is NOT
+// present in this project's tessdata dir (only lstm.train is), so asking for it
+// silently returns plain text instead — every item then scored 0.0 confidence
+// and the ranking was meaningless.
+//
+// Disagreement with the existing ground truth is a better signal anyway: it is
+// always available, and it points at the pairs where model and GT actually
+// conflict — which is exactly where a human should look. Confidence is still
+// reported when the tsv config happens to be available.
+function ocrWithConfidence(imgPath, tessdataDir, lang, psm, gtText) {
+  const cp = require("child_process");
+  let text = "", confidence = null;
+
+  const tsv = cp.spawnSync("tesseract",
+    [imgPath, "stdout", "--tessdata-dir", tessdataDir, "-l", lang, "--psm", String(psm), "tsv"],
+    { encoding: "utf8", timeout: 60_000 });
+
+  const rows = (tsv.stdout || "").trim().split("\n");
+  const looksTsv = rows.length > 1 && rows[0].split("\t").length >= 12;
+  if (looksTsv) {
+    const words = [], confs = [];
+    for (const row of rows.slice(1)) {
+      const c = row.split("\t");
+      if (c.length < 12) continue;
+      const conf = parseFloat(c[10]);
+      const t = (c[11] || "").trim();
+      if (t && conf >= 0) { words.push(t); confs.push(conf); }
+    }
+    text = words.join(" ");
+    confidence = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : 0;
+  } else {
+    // tsv unavailable — the same invocation without it returns plain text.
+    const plain = cp.spawnSync("tesseract",
+      [imgPath, "stdout", "--tessdata-dir", tessdataDir, "-l", lang, "--psm", String(psm)],
+      { encoding: "utf8", timeout: 60_000 });
+    text = (plain.stdout || "").trim();
+  }
+
+  return {
+    text,
+    confidence,                               // null when tsv is unavailable
+    cer: Math.round(cerOf(gtText || "", text) * 1000) / 10,   // % disagreement with GT
+  };
+}
+
+app.get("/api/review/queue", (req, res) => {
+  const source = (req.query.source || "scan").replace(/[^a-z-]/g, "");
+  const sample = Math.min(parseInt(req.query.sample) || 25, 100);
+  const want   = Math.min(parseInt(req.query.limit)  || 10, 50);
+  const lang   = (req.query.model || "kan_hist").replace(/[^\w.-]/g, "");
+
+  const tessdataDir = fs.existsSync(path.join(P.tessdataDir, `${lang}.traineddata`))
+    ? P.tessdataDir
+    : (fs.existsSync(path.join(P.bestDir, `${lang}.traineddata`)) ? P.bestDir : null);
+  if (!tessdataDir) {
+    return res.status(404).json({ error: `${lang}.traineddata not found. Run ⑥ Package first.` });
+  }
+
+  // Collect candidate image+gt pairs for the chosen source.
+  let pairs = [];
+  const push = (img, gt, psm) => { if (fs.existsSync(gt)) pairs.push({ img, gt, psm }); };
+  try {
+    if (source === "scan") {
+      for (const f of fs.readdirSync(P.scanDir)) {
+        if (!/\.(png|tif|tiff|jpe?g)$/i.test(f)) continue;
+        const img = path.join(P.scanDir, f);
+        push(img, img.replace(/\.[^.]+$/, ".gt.txt"), 6);
+      }
+    } else if (source === "rendered") {
+      for (const f of fs.readdirSync(P.rendered)) {
+        if (!f.endsWith(".png")) continue;
+        const img = path.join(P.rendered, f);
+        push(img, img.replace(/\.png$/, ".gt.txt"), 7);
+      }
+    } else if (source === "classical") {
+      // Sample a few font dirs rather than walking 600K files.
+      const titles = fs.readdirSync(P.classicalA5).slice(0, 6);
+      for (const t of titles) {
+        const td = path.join(P.classicalA5, t);
+        if (!fs.statSync(td).isDirectory()) continue;
+        for (const fd of fs.readdirSync(td).slice(0, 2)) {
+          const d = path.join(td, fd);
+          if (!fs.statSync(d).isDirectory()) continue;
+          for (const f of fs.readdirSync(d).filter(x => /_line\d+\.png$/.test(x)).slice(0, 40)) {
+            const img = path.join(d, f);
+            push(img, img.replace(/\.png$/, ".gt.txt"), 7);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    return res.status(500).json({ error: `Could not read ${source}: ${e.message}` });
+  }
+  if (!pairs.length) {
+    return res.json({ source, items: [], note: source === "scan"
+      ? "No image + .gt.txt pairs in scan-input/. Add real scans there — they are the highest-value training data."
+      : `No pairs found for source '${source}'.` });
+  }
+
+  // Random sample so repeat calls surface different material.
+  for (let i = pairs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
+  }
+  pairs = pairs.slice(0, sample);
+
+  const scored = [];
+  for (const p of pairs) {
+    const gtText = fs.readFileSync(p.gt, "utf8").trim();
+    const out = ocrWithConfidence(p.img, tessdataDir, lang, p.psm, gtText);
+    if (!out) continue;
+    scored.push({
+      image:      "/review-image?p=" + encodeURIComponent(path.relative(ROOT, p.img)),
+      path:       path.relative(ROOT, p.img),
+      gt:         gtText,
+      ocr:        out.text,
+      confidence: out.confidence === null ? null : Math.round(out.confidence * 10) / 10,
+      cer:        out.cer,
+    });
+  }
+  // Worst first. Rank by disagreement with GT, falling back to confidence when
+  // the tsv config is available and GT happens to be empty.
+  scored.sort((a, b) => (b.cer - a.cer) ||
+                        ((a.confidence ?? 100) - (b.confidence ?? 100)));
+  res.json({ source, model: lang, sampled: scored.length,
+             ranked_by: scored.some(s => s.confidence !== null) ? "cer+confidence" : "cer",
+             items: scored.slice(0, want) });
+});
+
+// Serve an image from the review queue. Path is contained to ROOT.
+app.get("/review-image", (req, res) => {
+  const rel = String(req.query.p || "");
+  const abs = path.resolve(ROOT, rel);
+  if (!abs.startsWith(path.resolve(ROOT) + path.sep)) return res.status(403).end();
+  if (!fs.existsSync(abs)) return res.status(404).end();
+  res.sendFile(abs);
+});
+
+// Save a corrected transcription back over the image's .gt.txt.
+app.post("/api/review/save", express.json(), (req, res) => {
+  const { path: rel, text } = req.body || {};
+  if (!rel || typeof text !== "string") {
+    return res.status(400).json({ error: "path and text required" });
+  }
+  const abs = path.resolve(ROOT, rel);
+  if (!abs.startsWith(path.resolve(ROOT) + path.sep)) return res.status(403).json({ error: "path outside project" });
+  const gt = abs.replace(/\.[^.]+$/, ".gt.txt");
+  if (!fs.existsSync(gt)) return res.status(404).json({ error: `${path.relative(ROOT, gt)} not found` });
+
+  // Keep the previous transcription. Ground truth is the one thing in this
+  // project that cannot be regenerated from anything else.
+  fs.writeFileSync(gt + ".bak", fs.readFileSync(gt));
+  fs.writeFileSync(gt, text.trim() + "\n", "utf8");
+  console.log(`  [review] corrected ${path.relative(ROOT, gt)}`);
+  res.json({ ok: true, gt: path.relative(ROOT, gt),
+             note: "Saved. Re-run ④ Make lstmf for this to reach training." });
+});
+
 // ── OCR quality check ─────────────────────────────────────────────────────
 app.get("/api/ocr-quality", async (req, res) => {
   const testDir  = path.join(ROOT, "test-images");

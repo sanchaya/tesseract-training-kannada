@@ -1839,6 +1839,27 @@ footer a:hover { text-decoration: underline; }
 
 <!-- ═══ FONTS ════════════════════════════════════════════════════ -->
 <div id="pg-fonts" class="page">
+  <!-- ── Review queue: worst predictions first ───────────────────────── -->
+  <div class="sec">
+    <h2>Review &amp; correct</h2>
+    <span class="hint">worst predictions first</span>
+    <select id="rv-source" style="padding:4px 8px;border:1.5px solid var(--border2);border-radius:6px;font-size:.82rem;background:var(--bg)">
+      <option value="scan">Real scans — highest value</option>
+      <option value="rendered">Rendered lines (diagnostic)</option>
+      <option value="classical">Classical lines (diagnostic)</option>
+    </select>
+    <button class="btn btn-primary" onclick="loadReviewQueue()" style="padding:5px 12px">Scan for problems</button>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <p style="font-size:.78rem;color:var(--mute);line-height:1.55;margin:0 0 10px">
+      Ranks images by how far the model's output differs from the stored ground truth, worst first.
+      <strong>Real scans are the only source where correcting adds new information</strong> — synthetic
+      ground truth is generated from the source text and is correct by construction, so a high score
+      there points at a model weakness, not a data error.
+    </p>
+    <div id="rv-results"><span style="font-size:.82rem;color:var(--mute)">Press “Scan for problems” to begin.</span></div>
+  </div>
+
   <div class="sec">
     <h2>Font registry</h2>
     <span class="hint">from fonts.yml</span>
@@ -2608,6 +2629,61 @@ async function loadFonts() {
             title="Remove from fonts.yml. Font files are kept on disk."
             style="padding:3px 10px;font-size:.74rem;color:#b91c1c;border-color:#fca5a5">Remove</button></td>
     </tr>`).join('');
+}
+
+// ── Review queue ─────────────────────────────────────────────────
+// Ranks by disagreement with stored ground truth, worst first. Tesseract's
+// per-word confidence needs its `tsv` config, which is not present in this
+// project's tessdata dir, so CER-vs-GT is the ranking signal.
+async function loadReviewQueue() {
+  const src = document.getElementById('rv-source').value;
+  const box = document.getElementById('rv-results');
+  box.innerHTML = '<span style="font-size:.82rem;color:var(--mute)">Running OCR over a sample… this takes a few seconds per image.</span>';
+  let d;
+  try {
+    d = await (await fetch(`/api/review/queue?source=${src}&sample=20&limit=10`)).json();
+  } catch (e) { box.innerHTML = `<span style="color:var(--red)">${e.message}</span>`; return; }
+  if (d.error)      { box.innerHTML = `<span style="color:var(--red)">${d.error}</span>`; return; }
+  if (!d.items?.length) {
+    box.innerHTML = `<span style="font-size:.82rem;color:var(--mute)">${d.note || 'Nothing to review.'}</span>`;
+    return;
+  }
+  box.innerHTML = d.items.map((it, i) => `
+    <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span class="pill ${it.cer > 40 ? 'pill-amber' : 'pill-brand'}">${it.cer.toFixed(1)}% differs</span>
+        ${it.confidence !== null ? `<span class="pill pill-gray">conf ${it.confidence}</span>` : ''}
+        <span style="font-size:.72rem;color:var(--mute);word-break:break-all">${it.path}</span>
+      </div>
+      <img src="${it.image}" style="max-width:100%;max-height:150px;border:1px solid var(--border2);border-radius:4px;background:#fff">
+      <div style="font-size:.75rem;color:var(--mute);margin-top:6px">model read:</div>
+      <div style="font-size:.86rem;font-family:monospace;background:var(--bg);padding:5px;border-radius:4px;white-space:pre-wrap">${(it.ocr||'(nothing)').replace(/</g,'&lt;')}</div>
+      <div style="font-size:.75rem;color:var(--mute);margin-top:6px">ground truth — edit to correct:</div>
+      <textarea id="rv-gt-${i}" rows="3"
+        style="width:100%;font-size:.86rem;padding:5px;border:1.5px solid var(--border2);border-radius:4px;background:var(--bg)">${it.gt.replace(/</g,'&lt;')}</textarea>
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary" style="padding:3px 12px;font-size:.78rem"
+          onclick="saveReviewCorrection('${it.path.replace(/'/g,"\\'")}', ${i})">Save correction</button>
+        <span id="rv-status-${i}" style="font-size:.76rem;color:var(--mute)"></span>
+      </div>
+    </div>`).join('') +
+    `<p style="font-size:.76rem;color:var(--mute)">Sampled ${d.sampled}, ranked by ${d.ranked_by}.
+     Corrections reach training on the next ④ Make lstmf.</p>`;
+}
+
+async function saveReviewCorrection(p, i) {
+  const text = document.getElementById(`rv-gt-${i}`).value;
+  const st   = document.getElementById(`rv-status-${i}`);
+  st.textContent = 'Saving…';
+  try {
+    const r = await fetch('/api/review/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: p, text }) });
+    const d = await r.json();
+    st.innerHTML = r.ok
+      ? `<span style="color:var(--green)">✓ saved — ${d.note}</span>`
+      : `<span style="color:var(--red)">${d.error}</span>`;
+  } catch (e) { st.textContent = e.message; }
 }
 
 // ── Add / remove fonts ───────────────────────────────────────────
