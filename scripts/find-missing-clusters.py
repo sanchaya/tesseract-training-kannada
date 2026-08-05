@@ -210,12 +210,39 @@ def main():
         if idx == -1:
             print("✗ could not find the corpus heredoc in 00c-expand-unicharset.sh")
             return 1
+        # Skip words the heredoc already contains.
+        #
+        # This used to append unconditionally, and the result was a slow leak:
+        # a cluster that 00c cannot actually fix — ರ್ಙ್ಗ and ರ್ಢ್ಯ are the
+        # standing examples — is rediscovered on every single pipeline run and
+        # its example word appended again. The heredoc accumulated four
+        # identical copies of one line that way. The duplicates never helped;
+        # unicharset_extractor sees the same graphemes it already saw, so the
+        # cluster stays missing and the file just grows.
+        heredoc_start = src.rfind('\n', 0, src.find("<< 'EOF'"))
+        existing = set(src[heredoc_start:idx].split())
+        fresh = [w for w in words if w not in existing]
+        dupes = len(words) - len(fresh)
+
+        if not fresh:
+            print(f"\n  Nothing new for {script.relative_to(ROOT)} — "
+                  f"all {len(words)} example word(s) are already in it.")
+            if dupes:
+                print("  These clusters survive a 00c run, so adding the same words")
+                print("  again will not fix them. They need a different remedy:")
+                print("    • genuinely rare/erroneous → let corpus cleaning drop them")
+                print("    • real but deeply stacked (ರ್ಙ್ಗ, ರ್ಢ್ಯ) → Tesseract's")
+                print("      recoder has no unit for triple conjuncts; the affected")
+                print("      lines will be skipped and that is expected")
+            return 0
+
         # Words must appear in CONTEXT — unicharset_extractor rejects bare
         # combining sequences and drops the whole line with them.
-        block = '\n'.join(' '.join(words[i:i + 8]) for i in range(0, len(words), 8))
+        block = '\n'.join(' '.join(fresh[i:i + 8]) for i in range(0, len(fresh), 8))
         src = src[:idx] + '\n' + block + src[idx:]
         script.write_text(src, encoding='utf-8')
-        print(f"\n✓ appended {len(words)} words to {script.relative_to(ROOT)}")
+        print(f"\n✓ appended {len(fresh)} new word(s) to {script.relative_to(ROOT)}"
+              + (f"  ({dupes} already present, skipped)" if dupes else ""))
         print("  Now run:  ./scripts/00c-expand-unicharset.sh --force")
 
     return 0
