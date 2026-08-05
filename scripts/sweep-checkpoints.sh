@@ -32,19 +32,28 @@ TD=tessdata_expanded/kan.traineddata
 # Preserve whatever is currently installed.
 BACKUP=/tmp/kan_hist_backup_$$.traineddata
 [ -f best/kan_hist.traineddata ] && cp best/kan_hist.traineddata "$BACKUP"
+REPLACED=0          # only restore if the sweep actually swapped the model out
 restore() {
-  if [ -f "$BACKUP" ]; then
+  if [ -f "$BACKUP" ] && [ "$REPLACED" = "1" ]; then
     cp "$BACKUP" best/kan_hist.traineddata
     cp "$BACKUP" tessdata_best/kan_hist.traineddata
     rm -f "$BACKUP"
     echo "  (restored your original best/kan_hist.traineddata)"
+  else
+    rm -f "$BACKUP"
   fi
 }
 trap restore EXIT
 
 # Pick N checkpoints spread across the iteration range, so the sweep covers the
 # whole training trajectory rather than clustering at one end.
-mapfile -t ALL < <(ls output/kan_hist_[0-9]*.checkpoint 2>/dev/null \
+# NOT mapfile: that is bash 4+, and macOS ships bash 3.2 — the script died on
+# line 47 and its cleanup trap then restored the previous model over a freshly
+# packaged one, silently undoing the user's work.
+ALL=()
+while IFS= read -r _line; do
+  [ -n "$_line" ] && ALL+=("$_line")
+done < <(ls output/kan_hist_[0-9]*.checkpoint 2>/dev/null \
   | awk -F_ '{it=$NF; sub(/\.checkpoint/,"",it); print it+0, $0}' | sort -n | awk '{print $2}')
 TOTAL=${#ALL[@]}
 [ "$TOTAL" -gt 0 ] || { echo "✗ no checkpoints in output/"; exit 1; }
@@ -73,6 +82,7 @@ for cp in "${PICKS[@]}"; do
     --traineddata "$TD" --model_output /tmp/sweep.traineddata >/dev/null 2>&1 || {
       printf "  %-46s %-10s %8s %8s\n" "$name" "$bcer" "export✗" "-"; continue; }
 
+  REPLACED=1
   cp /tmp/sweep.traineddata best/kan_hist.traineddata
   cp /tmp/sweep.traineddata tessdata_best/kan_hist.traineddata
 
