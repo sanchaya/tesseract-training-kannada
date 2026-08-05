@@ -150,6 +150,25 @@ _MAXU  = max((len(u) for u in _UNITS), default=1) if _UNITS else 1
 # permissive than Tesseract's encoder and let unencodable lines through.
 _EXEMPT = set(' \t\n')
 
+def apply_wordfinal_virama(text: str) -> str:
+    """
+    Append ZWNJ to a word-final virama, exactly as 02-make-lstmf.sh's _clean_gt()
+    does before building the training pair.
+
+    Without this, clean-corpus is STRICTER than the pipeline it feeds. A bare ್
+    has no unicharset unit, so any line ending a word in a consonant + virama
+    (ರಾವ್, ಕನ್, ಸ್ — very common in Kannada) failed the encodability check and
+    was discarded here, even though the lstmf stage would have encoded it fine
+    via the ್‌ half-form unit. That single mismatch accounted for 1,112 of the
+    1,689 lines this script was dropping.
+
+    The corpus is written WITHOUT the ZWNJ — the transform belongs to the
+    training pair, not to the corpus text — but the CHECK has to model what the
+    pipeline will actually do.
+    """
+    return re.sub(r'್(?![ಕ-ಹೞೠೡ‌])', '್‌', text)
+
+
 def encodable(text: str) -> bool:
     """
     Unit matching is tried BEFORE the exemption: ್‌ (virama + ZWNJ) is a real
@@ -186,7 +205,9 @@ for line in raw:
     for part in split_at_boundary(cleaned, MAX_CHARS):
         if kan_count(part) < MIN_KAN:
             continue
-        if not encodable(part):
+        # Check what the PIPELINE will encode, not the raw text: the lstmf
+        # stage appends ZWNJ to word-final viramas before encoding.
+        if not encodable(apply_wordfinal_virama(part)):
             unencodable += 1
             continue
         out_lines.append(part)
