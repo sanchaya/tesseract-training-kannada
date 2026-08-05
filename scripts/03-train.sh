@@ -249,12 +249,33 @@ if [ "$TRAIN_MODE" = "expand" ] || [ "$TRAIN_MODE" = "fresh" ]; then
     echo "expanded" > "$MODE_FILE"
 fi
 
+# ── Train / eval split ───────────────────────────────────────────────────────
+# tesstrain's Makefile splits the list (RATIO_TRAIN=0.90) and hands the
+# remainder to lstmtraining as --eval_listfile. We did not, and it cost us
+# months: with no held-out list, every BCER lstmtraining printed was the error
+# on data it was training on. BCER reached 0.003% while real-scan CER sat at
+# 44-53%, and the checkpoint sweep found no overfitting knee because there was
+# no held-out curve that could bend.
+python3 "$SCRIPT_DIR/make-eval-split.py" || {
+    echo "  ✗ could not build the train/eval split"; exit 1; }
+
+TRAIN_LIST="$LSTMF_DIR/list.train.txt"
+EVAL_LIST="$LSTMF_DIR/list.eval.txt"
+EVAL_ARG=""
+if [ -s "$EVAL_LIST" ]; then
+    EVAL_ARG="--eval_listfile $EVAL_LIST"
+else
+    echo "  ⚠  no eval list — training error will be the ONLY signal."
+    TRAIN_LIST="$LSTMF_DIR/list.txt"
+fi
+
 lstmtraining \
     --continue_from   "$CONTINUE_FROM" \
     --model_output    "$OUTPUT/$MODEL_NAME" \
     --traineddata     "$TESSDATA_BEST/kan.traineddata" \
     $OLD_TD_ARG \
-    --train_listfile  "$LSTMF_DIR/list.txt" \
+    --train_listfile  "$TRAIN_LIST" \
+    $EVAL_ARG \
     --learning_rate   "$LEARNING_RATE" \
     --max_iterations  "$MAX_ITERATIONS" \
     --target_error_rate -1

@@ -25,9 +25,20 @@ TD=tessdata_expanded/kan.traineddata
 CP=$(ls -t output/kan_hist_[0-9]*.checkpoint 2>/dev/null | head -1)
 [ -n "$CP" ] || { echo "✗ no checkpoint in output/"; exit 1; }
 
-# A held-out slice: last 200 entries of the training list.
+# The held-out list built by make-eval-split.py. This used to be
+# `tail -200 lstmf/list.txt` — the TRAINING list. Evaluating a model on its own
+# training data reports memorisation, and acting on that number is how we
+# concluded the iteration cap should be raised when it was already correct.
 mkdir -p /tmp/diag
-tail -200 lstmf/list.txt > /tmp/diag/eval.txt
+if [ -s lstmf/list.eval.txt ]; then
+  head -300 lstmf/list.eval.txt > /tmp/diag/eval.txt
+else
+  echo "  ✗ lstmf/list.eval.txt not found."
+  echo "    Run:  python3 scripts/make-eval-split.py"
+  echo "    Refusing to fall back to the training list — the resulting number"
+  echo "    would look excellent and mean nothing."
+  exit 1
+fi
 echo "  checkpoint : $(basename "$CP")"
 echo "  traineddata: $TD"
 echo "  eval set   : $(wc -l < /tmp/diag/eval.txt) lstmf entries"

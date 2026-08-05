@@ -620,7 +620,23 @@ if [ -d "$INVENTORY_DIR" ]; then
 fi
 
 process_dir "$RENDERED_DIR"           "$LSTMF_DIR/rendered"   "Synthetic rendered"
-process_dir "$SCAN_DIR"               "$LSTMF_DIR/scan"       "Real scan images"
+# Whole scanned pages cannot be training samples: the LSTM normalises to 48px
+# tall, so an A5 page collapses to ~30 timesteps and CTC cannot emit 500+
+# characters from that. Both of our real scans were silently rejected here for
+# exactly this reason, which is why the model had never seen a real scan.
+# segment-scans.py cuts pages into lines first.
+if [ -d "$ROOT/scan-lines" ]; then
+    while IFS= read -r page_dir; do
+        [ -d "$page_dir" ] || continue
+        process_dir "$page_dir" "$LSTMF_DIR/scan/$(basename "$page_dir")" \
+                    "Real scan lines/$(basename "$page_dir")"
+    done < <(find "$ROOT/scan-lines" -mindepth 1 -maxdepth 1 -type d | sort)
+elif compgen -G "$SCAN_DIR/*.png" >/dev/null 2>&1; then
+    echo ""
+    echo "  ⚠  scan-input/ has pages but scan-lines/ does not exist."
+    echo "     Whole pages are CTC-infeasible and would be dropped. Run:"
+    echo "       python3 corpus/segment-scans.py"
+fi
 process_dir "$RENDERED_DIR/font-test" "$LSTMF_DIR/font-test"  "Per-font test images"
 
 # ── Classical corpus A5 pages ─────────────────────────────────────
@@ -649,6 +665,10 @@ else
 fi
 
 TOTAL=$(wc -l < "$LSTMF_DIR/list.txt" | tr -d ' ')
+
+# Build the held-out split now, so `validate` and the portal can show it before
+# anyone commits hours to training.
+python3 "$SCRIPT_DIR/make-eval-split.py" || true
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

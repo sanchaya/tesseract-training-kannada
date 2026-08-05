@@ -61,7 +61,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-STAGES=(coverage unicharset corpus render inventory classical lstmf validate train)
+STAGES=(coverage unicharset corpus render inventory classical scans lstmf validate train)
 started=0
 should_run() {
   [ "$1" = "$FROM" ] && started=1
@@ -230,6 +230,24 @@ fi
 # ── 6. lstmf ─────────────────────────────────────────────────────────────────
 # Clear first: 02-make-lstmf.sh resumes from existing .lstmf files. After a
 # unicharset or corpus change the cached ones are stale and would be re-admitted.
+# ── 4c. Real scans → line images ─────────────────────────────────────────────
+# MUST run before lstmf. 02-make-lstmf.sh reads scan-lines/, not scan-input/,
+# because a whole scanned page is CTC-infeasible: the LSTM normalises input to
+# 48px tall, so an A5 page collapses to ~30 timesteps and cannot emit 500+
+# characters. Both real scans were silently rejected on exactly that guard,
+# which is why the model had never trained on a single real scan while scoring
+# 44-53% CER on them against stock Tesseract's 19.5%.
+if should_run scans; then
+  stage "4c/9  Segment real scans  (whole pages → line images)"
+  if ls scan-input/*.png scan-input/*.jpg scan-input/*.tif >/dev/null 2>&1; then
+    python3 -u corpus/segment-scans.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -20
+    metric "scan line samples: $(find scan-lines -name 'line*.png' 2>/dev/null | wc -l | tr -d ' ')"
+  else
+    say "  no pages in scan-input/ — skipping."
+    say "  Real scans are the highest-value training data you can add."
+  fi
+fi
+
 if should_run lstmf; then
   stage "6/8  Build lstmf  (clearing stale cache first)"
   rm -rf lstmf/rendered lstmf/inventory lstmf/classical lstmf/font-test lstmf/list.txt 2>/dev/null || true
