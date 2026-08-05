@@ -442,13 +442,24 @@ function runBg(cmd, args, stepId, opts = {}) {
   const child = spawn(cmd, args, {
     cwd:   ROOT,
     stdio: ["ignore", fs.openSync(P.logFile, "a"), fs.openSync(P.logFile, "a")],
-    detached: false,
+    // detached gives the child its own process GROUP, which buys two things:
+    //   • Stop can kill(-pid) the whole tree. These scripts fan out into
+    //     lstmtraining and multiprocessing pools; killing only the bash parent
+    //     orphans the children, which keep writing files nobody tracks any more.
+    //   • A four-hour render survives a portal restart instead of dying with it.
+    //     The lock file is what lets the next server find it again.
+    detached: true,
     // TRAINOCR_NO_TEE: scripts self-log to logs/training.log when run on a
     // terminal. Here stdout is already that file, so tee would duplicate lines.
     env: { ...process.env, TRAINOCR_NO_TEE: "1", ...(opts.env || {}) },
   });
+  currentJob = { step: stepId, pid: child.pid, child,
+                 startedAt: Date.now(), argv: [cmd, ...args] };
+  writeLock(currentJob);
+
   const clear = (code, why) => {
     if (runningStep === stepId) runningStep = null;
+    if (currentJob && currentJob.step === stepId) { currentJob = null; clearLock(); }
     completedSteps[stepId] = { code, ts: Date.now(), ok: code === 0 };
     const l = fs.openSync(P.logFile, "a");
     fs.writeSync(l, `\n[trainocr] ${stepId} ${code === 0 ? "✓ done" : `✗ ${why} (exit ${code})`}\n`);
@@ -865,6 +876,49 @@ app.get("/api/log/stream", (req, res) => {
 });
 
 // ── API: run step ──────────────────────────────────────────────────────────
+// What is running, how far along, and what it last said.
+//
+// The portal previously had no answer to "is this still going?" — the only
+// signal was the log, and a step that prints nothing for ten minutes was
+// indistinguishable from one that had died.
+app.get("/api/job", (req, res) => {
+  const job = activeJob();
+  if (!job) return res.json({ running: false, completed: completedSteps });
+  const prog = jobProgress();
+  res.json({
+    running: true,
+    step: job.step,
+    pid: job.pid,
+    source: job.source,
+    startedAt: job.startedAt,
+    elapsedMs: job.startedAt ? Date.now() - job.startedAt : null,
+    ...prog,
+    completed: completedSteps,
+  });
+});
+
+// Stop the running job.
+//
+// Kills the process GROUP, not just the leader: these scripts fan out into
+// lstmtraining and python multiprocessing pools, and killing the bash parent
+// alone leaves those children running and untracked.
+app.post("/api/job/stop", (req, res) => {
+  const job = activeJob();
+  if (!job) return res.json({ ok: true, message: "Nothing running" });
+  let killed = false;
+  try { process.kill(-job.pid, "SIGTERM"); killed = true; } catch {}
+  if (!killed) { try { process.kill(job.pid, "SIGTERM"); killed = true; } catch {} }
+  setTimeout(() => {
+    if (pidAlive(job.pid)) { try { process.kill(-job.pid, "SIGKILL"); } catch {} }
+    if (currentJob && !pidAlive(currentJob.pid)) { currentJob = null; }
+    if (!activeJob()) { clearLock(); runningStep = null; }
+  }, 3000);
+  const l = fs.openSync(P.logFile, "a");
+  fs.writeSync(l, `\n[trainocr] ${job.step} — stopped by user\n`);
+  fs.closeSync(l);
+  res.json({ ok: killed, step: job.step, pid: job.pid });
+});
+
 app.post("/api/run/:step", (req, res) => {
   const cmds = {
     prep:          ["bash",    [path.join(P.scripts, "01-prep-base.sh")]],
@@ -900,6 +954,31 @@ app.post("/api/run/:step", (req, res) => {
   const { step } = req.params;
   const force = req.query.force === '1';
   if (!cmds[step]) return res.status(400).json({ error: `Unknown step: ${step}` });
+
+  // ── One job at a time ─────────────────────────────────────────────────────
+  //
+  // This check did not exist. runningStep was assigned before every spawn and
+  // never read, so a second click simply started a second process. That is not
+  // merely untidy: 02-make-lstmf.sh caches .lstmf files and resumes from that
+  // cache, and render --force rewrites images in place. Two runs interleaving
+  // means one adopts the other's half-written file as finished input, and the
+  // result is corrupt training data that nothing downstream flags.
+  //
+  // The rule is deliberately blunt — one job, no exceptions, no queue. Every
+  // step here reads or writes the same handful of directories, so there is no
+  // useful safe-pairs list to maintain.
+  const busy = activeJob();
+  if (busy) {
+    const mins = busy.startedAt ? Math.round((Date.now() - busy.startedAt) / 60000) : null;
+    return res.status(409).json({
+      error: "busy", running: busy.step, pid: busy.pid,
+      startedAt: busy.startedAt, source: busy.source,
+      message: busy.source === "external"
+        ? `lstmtraining (pid ${busy.pid}) is running outside the portal. Stop it first: pkill lstmtraining`
+        : `"${busy.step}" is already running` + (mins !== null ? ` (${mins} min)` : "")
+          + ". Wait for it to finish, or press Stop.",
+    });
+  }
   const [cmd, args] = cmds[step];
   if (!fs.existsSync(args[0])) return res.status(404).json({ error: `Script not found: ${args[0]}` });
 
@@ -1019,6 +1098,16 @@ let _a5CorpusPath = '';     // last corpus dir used — passed to 02-make-lstmf.
 // produce correctly-shaped training images for historical fonts.
 app.post("/api/render-a5-pages", express.json(), (req, res) => {
   if (_a5Proc) return res.status(409).json({ error: "Already running — stop it first" });
+  // The A5 renderer has its own spawn path, so it needs the same guard as
+  // /api/run/:step. It writes into classical-corpus-kannada/a5-pages/, which
+  // 02-make-lstmf.sh reads — running both at once means lstmf consumes
+  // half-written PNGs and caches them as valid.
+  {
+    const busy = activeJob();
+    if (busy) return res.status(409).json({
+      error: "busy", running: busy.step, pid: busy.pid,
+      message: `"${busy.step}" is already running. Wait for it, or press Stop.` });
+  }
 
   // `lines` defaults to TRUE: page-mode output cannot be used for LSTM training
   // (a full page paired with the whole page's text is CTC-infeasible — see
@@ -1078,10 +1167,14 @@ app.post("/api/render-a5-pages", express.json(), (req, res) => {
     env:      { ...process.env },
   });
   runningStep = "render-a5-pages";
+  currentJob = { step: "render-a5-pages", pid: _a5Proc.pid, child: _a5Proc,
+                 startedAt: Date.now(), argv: ["python3", ...args] };
+  writeLock(currentJob);
 
   _a5Proc.on("exit", code => {
     _a5Proc    = null;
     runningStep = null;
+    if (currentJob && currentJob.step === "render-a5-pages") { currentJob = null; clearLock(); }
     const l = fs.openSync(P.logFile, "a");
     fs.writeSync(l, `\n[trainocr] render-a5-pages ${
       _a5Stopped ? "⏹ stopped by user" : code === 0 ? "✓ done" : `✗ failed (exit ${code})`
@@ -2081,8 +2174,99 @@ app.get("/api/char-train/history/:fontId/:variant", (req, res) => {
 // ── Char-train: generate lstmf + fine-tune from test images ───────────────
 // State tracking for the long-running train job
 let charTrainJob  = null;
-let runningStep   = null;   // currently active pipeline step
+let runningStep   = null;   // currently active pipeline step (kept for compat)
 let completedSteps = {};    // stepId → { code, ts }
+
+// ── Job registry ────────────────────────────────────────────────────────────
+//
+// runningStep used to be a bare string that was SET before spawning and never
+// CHECKED. Nothing stopped a second click from starting a second process, and
+// two of these steps overlapping is genuinely destructive: render --force and
+// 02-make-lstmf.sh write the same files, and 02 caches .lstmf then resumes from
+// that cache, so a half-written file from one run gets adopted by the other and
+// silently becomes training data.
+//
+// The lock file exists because the portal is restarted often and jobs outlive
+// it. Without one, a restart forgets a four-hour render is in flight and
+// cheerfully starts another. It stores the PID so a stale lock — process gone,
+// file left behind by a crash — can be told from a live one.
+const JOB_LOCK = path.join(ROOT, "output", ".job.lock");
+let currentJob = null;   // { step, pid, child, startedAt, argv }
+
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function readLock() {
+  try {
+    const j = JSON.parse(fs.readFileSync(JOB_LOCK, "utf8"));
+    if (j && j.pid && pidAlive(j.pid)) return j;
+    fs.unlinkSync(JOB_LOCK);          // stale: the process is gone
+    return null;
+  } catch { return null; }
+}
+
+function writeLock(job) {
+  try {
+    fs.mkdirSync(path.dirname(JOB_LOCK), { recursive: true });
+    fs.writeFileSync(JOB_LOCK, JSON.stringify({
+      step: job.step, pid: job.pid, startedAt: job.startedAt, argv: job.argv,
+    }));
+  } catch {}
+}
+
+function clearLock() { try { fs.unlinkSync(JOB_LOCK); } catch {} }
+
+// What is running right now, from any source: this process, a job left over
+// from a previous server, or a bare lstmtraining someone started in a terminal.
+function activeJob() {
+  if (currentJob && pidAlive(currentJob.pid)) return { ...currentJob, source: "portal" };
+  const lock = readLock();
+  if (lock) return { ...lock, source: "lockfile" };
+  const t = trainingPids();
+  if (t.length) return { step: "train", pid: Number(t[0]), startedAt: null, source: "external" };
+  return null;
+}
+
+// Progress, scraped from the log the running step is already writing.
+//
+// Every long step here prints its own counters, so rather than instrumenting
+// each script we read what they already emit:
+//   02-make-lstmf.sh   "11800/13986 (84%)"
+//   run-pipeline.sh    "  3/9  Clean corpus"
+//   lstmtraining       "At iteration 109300/..., ..."
+function jobProgress() {
+  try {
+    const size = fs.statSync(P.logFile).size;
+    const want = Math.min(size, 64 * 1024);
+    const fd = fs.openSync(P.logFile, "r");
+    const buf = Buffer.alloc(want);
+    fs.readSync(fd, buf, 0, want, size - want);
+    fs.closeSync(fd);
+    const lines = buf.toString("utf8").split("\n").filter(l => l.trim());
+    const last = lines[lines.length - 1] || "";
+
+    let pct = null, phase = null, detail = null;
+    for (let i = lines.length - 1; i >= 0 && i > lines.length - 400; i--) {
+      const l = lines[i];
+      if (pct === null) {
+        let m = l.match(/(\d[\d,]*)\s*\/\s*(\d[\d,]*)\s*\((\d+)%\)/);
+        if (m) { pct = Number(m[3]); detail = `${m[1]} / ${m[2]}`; }
+        else {
+          m = l.match(/At iteration (\d+)\/(\d+)/);
+          if (m) { pct = Math.min(100, Math.round(100 * m[1] / Math.max(1, m[2])));
+                   detail = `iteration ${m[1]} / ${m[2]}`; }
+        }
+      }
+      if (phase === null) {
+        const m = l.match(/^\s*(\d+[a-z]?\/\d+)\s+(.+?)\s*$/);
+        if (m) phase = `${m[1]}  ${m[2]}`.slice(0, 90);
+      }
+      if (pct !== null && phase !== null) break;
+    }
+    return { pct, phase, detail, last: last.slice(0, 200) };
+  } catch { return { pct: null, phase: null, detail: null, last: "" }; }
+}
 
 app.post("/api/char-train/start", express.json(), (req, res) => {
   if (charTrainJob && charTrainJob.running) {

@@ -762,6 +762,29 @@ footer a:hover { text-decoration: underline; }
     </button>
   </div>
 
+  <!-- Running-job banner. Hidden until /api/job says something is live.
+       The portal previously gave no answer to "is this still going?" — the only
+       signal was the log, so a step that printed nothing for ten minutes looked
+       identical to one that had crashed. -->
+  <div id="job-banner" style="display:none;border:1.5px solid #3b82f6;background:#eff6ff;
+       border-radius:10px;padding:12px 16px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span class="spin" style="display:inline-block;animation:spin .7s linear infinite">◐</span>
+      <b id="job-step" style="font-size:.95rem"></b>
+      <span id="job-elapsed" style="color:var(--mute);font-size:.82rem"></span>
+      <span id="job-phase" style="color:#1d4ed8;font-size:.82rem"></span>
+      <span style="flex:1"></span>
+      <button class="btn" id="job-stop" onclick="stopJob()"
+        style="padding:5px 14px;font-size:.8rem;background:#dc2626;color:#fff;border-color:#dc2626">Stop</button>
+    </div>
+    <div id="job-barwrap" style="display:none;height:7px;background:#dbeafe;border-radius:4px;margin-top:10px">
+      <div id="job-bar" style="height:100%;width:0;background:#3b82f6;border-radius:4px;transition:width .4s"></div>
+    </div>
+    <div id="job-last" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+         font-size:.72rem;color:#475569;margin-top:8px;white-space:nowrap;overflow:hidden;
+         text-overflow:ellipsis"></div>
+  </div>
+
   <!-- ── Primary actions ────────────────────────────────────────────────
        Three steps instead of 25. The old grid exposed every internal stage as
        a peer button, which made the ORDER look optional — but the ordering is
@@ -2983,6 +3006,84 @@ async function loadCorpusStats() {
 // ── Run step ─────────────────────────────────────────────────────
 let dashLogSrc = null;
 
+// ── Running-job poller ──────────────────────────────────────────────────────
+// Single source of truth for "is anything running". Drives the banner AND
+// disables every step button, so the answer to "can I click this?" comes from
+// the server rather than from what the user remembers clicking.
+let JOB = { running: false };
+
+const JOB_LABELS = {
+  pipeline:'Preparing training data', train:'Training', package:'Packaging model',
+  render:'Rendering images', lstmf:'Building lstmf', inventory:'Character inventory',
+  covreport:'Measuring per-grapheme recognition', remediate:'Triaging failing characters',
+  coverage:'Scanning coverage', clean:'Cleaning corpus', wiki:'Downloading corpus',
+  prep:'Preparing base model', expandunichar:'Expanding unicharset',
+  specimen:'Generating specimen', 'render-a5-pages':'Rendering A5 pages',
+};
+
+function fmtElapsed(ms) {
+  if (ms == null) return '';
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60), h = Math.floor(m / 60);
+  return h ? `${h}h ${m % 60}m` : `${m}m ${s % 60}s`;
+}
+
+async function pollJob() {
+  try {
+    JOB = await (await fetch('/api/job')).json();
+  } catch { JOB = { running: false }; }
+
+  const el = id => document.getElementById(id);
+  const banner = el('job-banner');
+  if (!banner) return;
+
+  if (JOB.running) {
+    banner.style.display = 'block';
+    el('job-step').textContent = JOB_LABELS[JOB.step] || JOB.step;
+    el('job-elapsed').textContent = fmtElapsed(JOB.elapsedMs)
+      + (JOB.pid ? ` · pid ${JOB.pid}` : '');
+    el('job-phase').textContent = JOB.phase
+      || (JOB.detail ? JOB.detail : '')
+      || (JOB.source === 'external' ? 'started outside the portal' : '');
+    if (JOB.pct != null) {
+      el('job-barwrap').style.display = 'block';
+      el('job-bar').style.width = Math.max(1, Math.min(100, JOB.pct)) + '%';
+    } else {
+      el('job-barwrap').style.display = 'none';
+    }
+    el('job-last').textContent = JOB.last || '';
+    // An externally started lstmtraining has no child process we own, so Stop
+    // would be a lie. Say so instead of offering a button that does nothing.
+    el('job-stop').style.display = JOB.source === 'external' ? 'none' : '';
+  } else {
+    banner.style.display = 'none';
+  }
+
+  document.querySelectorAll('.step-run-btn').forEach(b => {
+    b.disabled = !!JOB.running;
+    b.title = JOB.running
+      ? `Blocked — "${JOB_LABELS[JOB.step] || JOB.step}" is running. `
+        + `These steps read and write the same files, so only one runs at a time.`
+      : '';
+  });
+}
+setInterval(pollJob, 2000);
+pollJob();
+
+async function stopJob() {
+  if (!confirm(`Stop "${JOB_LABELS[JOB.step] || JOB.step}"?\n\n`
+    + 'Most steps resume from where they left off — rendering and lstmf both\n'
+    + 'skip files that already exist, so stopping is cheap.\n\n'
+    + 'Training is the exception: it resumes from the last checkpoint, so any\n'
+    + 'iterations since then are lost.')) return;
+  try {
+    const r = await (await fetch('/api/job/stop', { method:'POST' })).json();
+    toast(r.ok ? `Stopped ${r.step}` : (r.message || 'Nothing running'));
+  } catch { toast('Server not running'); }
+  setTimeout(pollJob, 800);
+}
+
 async function run(step, force, mode, extraQuery) {
   const names = { prep:'Prep base', expandunichar:'Expanding unicharset', wiki:'Download corpus', clean:'Clean corpus',
                   specimen:'Generate specimen', render: force ? 'Re-render images (force)' : 'Render images',
@@ -3002,7 +3103,16 @@ async function run(step, force, mode, extraQuery) {
     if (extraQuery) qs += (qs ? '' : '') + extraQuery;   // extraQuery starts with '&'
     if (qs.startsWith('&')) qs = qs.slice(1);
     const url = '/api/run/'+step + (qs ? '?' + qs : '');
-    r = await (await fetch(url, { method: 'POST' })).json();
+    const resp = await fetch(url, { method: 'POST' });
+    r = await resp.json();
+    // 409 = something else is already running. Worth an explicit message: the
+    // old behaviour was to start a second process silently, and two of these
+    // steps writing the same files corrupts the training set without warning.
+    if (resp.status === 409) {
+      notify('⛔ ' + (r.message || 'Another step is running'), 'error', 9000);
+      pollJob();
+      return;
+    }
     if (!r.ok) { toast('Error: ' + (r.error || 'unknown')); return; }
   } catch(e) { toast('Server not running'); return; }
 

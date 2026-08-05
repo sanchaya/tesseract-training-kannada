@@ -99,3 +99,4 @@ corpus/coverage/
 test_aalt*.js
 test_analyze.js
 test_lang*.js
+output/.job.lock
