@@ -125,9 +125,26 @@ def main():
     maxu = max(len(u) for u in units)
     print(f"Unicharset: {len(units)} units from {td.relative_to(ROOT)}\n")
 
+    # (label, path, glob) — glob is None for a single file.
+    #
+    # Scan ground truth is mined too, and it matters more than its size
+    # suggests. Real scans are transcribed by hand from historical print, so
+    # they are the likeliest source of a conjunct no synthetic corpus contains.
+    # If a cluster only ever appears in a scan and is not mined here, the
+    # unicharset never learns it, and 02-make-lstmf.sh then drops that line at
+    # the encodability guard — quietly, as one more 'failed' in a count of
+    # thousands. Losing hand-transcribed lines that way is the most expensive
+    # kind of silent failure this project has.
+    #
+    # scan-holdout/ is mined as well: the unicharset must be able to REPRESENT
+    # held-out text even though the model never trains on it, or evaluation
+    # scores a vocabulary gap as a recognition error.
     sources = [
-        ('corpus', ROOT / 'corpus' / 'kan_corpus.txt'),
-        ('classical', ROOT / 'classical-corpus-kannada'),
+        ('corpus',       ROOT / 'corpus' / 'kan_corpus.txt',   None),
+        ('classical',    ROOT / 'classical-corpus-kannada',    '*/*.txt'),
+        ('scan-input',   ROOT / 'scan-input',                  '*.gt.txt'),
+        ('scan-holdout', ROOT / 'scan-holdout',                '*.gt.txt'),
+        ('scan-lines',   ROOT / 'scan-lines',                  '*/*.gt.txt'),
     ]
 
     missing = collections.Counter()
@@ -141,15 +158,17 @@ def main():
                 missing[bad] += 1
                 example.setdefault(bad, word)
 
-    for label, path in sources:
+    for label, path, pattern in sources:
         if not path.exists():
             continue
         if path.is_file():
             scan_text(path.read_text(encoding='utf-8', errors='ignore'))
+            print(f"  scanned {label}")
         else:
-            for txt in sorted(path.glob('*/*.txt')):
+            files = sorted(path.glob(pattern))
+            for txt in files:
                 scan_text(txt.read_text(encoding='utf-8', errors='ignore'))
-        print(f"  scanned {label}")
+            print(f"  scanned {label}  ({len(files)} file(s))")
 
     if not missing:
         print("\n✓ Every cluster in the corpus is encodable — nothing to add.")

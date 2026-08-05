@@ -141,7 +141,7 @@ started=0
 # 00c-expand-unicharset.sh, which the next stage turns into unicharset units.
 # Without this, gaps are found one at a time by training failures.
 if should_run coverage; then
-  stage "0/8  Coverage analysis  (find clusters the unicharset cannot encode)"
+  stage "1/9  Coverage analysis  (find clusters the unicharset cannot encode)"
   python3 -u scripts/find-missing-clusters.py --kannada-only --update-00c 2>&1 \
     | tee -a "${LOG_TARGETS[@]}" | tail -14
 fi
@@ -150,7 +150,7 @@ fi
 # MUST be first: it defines the recoder. Changing it later invalidates
 # everything built before it.
 if should_run unicharset; then
-  stage "1/8  Expand unicharset  (adds ಋ ಙ ಝ ಱ ೃ ಞ ೞ)"
+  stage "2/9  Expand unicharset  (adds ಋ ಙ ಝ ಱ ೃ ಞ ೞ)"
   ./scripts/00c-expand-unicharset.sh --force 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -5
   metric "unicharset units: $(
     combine_tessdata -u tessdata_expanded/kan.traineddata /tmp/_pl. >/dev/null 2>&1 &&
@@ -159,7 +159,7 @@ fi
 
 # ── 2. Corpus ────────────────────────────────────────────────────────────────
 if should_run corpus; then
-  stage "2/8  Clean corpus  (strip unassigned codepoints)"
+  stage "3/9  Clean corpus  (strip unassigned codepoints)"
   python3 -u corpus/clean-corpus.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -6
   metric "corpus lines: $(wc -l < corpus/kan_corpus.txt | tr -d ' ')"
 fi
@@ -168,7 +168,7 @@ fi
 # --force because a corpus or shaping change must overwrite existing images;
 # without it render-corpus.py skips every file that already exists.
 if should_run render; then
-  stage "3/8  Render synthetic lines  (--force)"
+  stage "4/9  Render synthetic lines  (--force)"
   python3 -u corpus/render-corpus.py --force 2>&1 \
     | tee -a "${LOG_TARGETS[@]}" \
     | awk 'NR%10==0 || /Total|ERROR|fail/'
@@ -177,7 +177,7 @@ fi
 
 # ── 4. Inventory ─────────────────────────────────────────────────────────────
 if should_run inventory; then
-  stage "4/8  Character inventory  (complete coverage set)"
+  stage "5/9  Character inventory  (complete coverage set)"
   mkdir -p corpus/coverage
   python3 -u corpus/generate-inventory.py \
     --complete --attested-only \
@@ -191,14 +191,14 @@ fi
 # training data, but it is what you LOOK at to judge whether shaping is correct —
 # so a stale gallery hides the very defect a rebuild was meant to fix.
 if should_run inventory; then
-  stage "4b/8 Portal gallery  (test-images/)"
+  stage "5b/9 Portal gallery  (test-images/)"
   python3 -u scripts/gen-char-images.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -3
   metric "gallery images: $(find test-images -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
 fi
 
 # ── 5. Classical (optional, slow) ────────────────────────────────────────────
 if [ $WITH_CLASSICAL -eq 1 ] && should_run classical; then
-  stage "5/8  Classical A5 → LINE images  (hours; ~430K files)"
+  stage "6/9  Classical A5 → LINE images  (hours; ~430K files)"
 
   if [ ! -d "$CLASSICAL_DIR" ]; then
     say "   ✗ classical corpus not found at: $CLASSICAL_DIR"
@@ -230,7 +230,7 @@ fi
 # ── 6. lstmf ─────────────────────────────────────────────────────────────────
 # Clear first: 02-make-lstmf.sh resumes from existing .lstmf files. After a
 # unicharset or corpus change the cached ones are stale and would be re-admitted.
-# ── 4c. Real scans → line images ─────────────────────────────────────────────
+# ── 7. Real scans → line images ─────────────────────────────────────────────
 # MUST run before lstmf. 02-make-lstmf.sh reads scan-lines/, not scan-input/,
 # because a whole scanned page is CTC-infeasible: the LSTM normalises input to
 # 48px tall, so an A5 page collapses to ~30 timesteps and cannot emit 500+
@@ -238,7 +238,7 @@ fi
 # which is why the model had never trained on a single real scan while scoring
 # 44-53% CER on them against stock Tesseract's 19.5%.
 if should_run scans; then
-  stage "4c/9  Segment real scans  (whole pages → line images)"
+  stage "7/9  Segment real scans  (whole pages → line images)"
   if ls scan-input/*.png scan-input/*.jpg scan-input/*.tif >/dev/null 2>&1; then
     python3 -u corpus/segment-scans.py 2>&1 | tee -a "${LOG_TARGETS[@]}" | tail -20
     metric "scan line samples: $(find scan-lines -name 'line*.png' 2>/dev/null | wc -l | tr -d ' ')"
@@ -249,7 +249,7 @@ if should_run scans; then
 fi
 
 if should_run lstmf; then
-  stage "6/8  Build lstmf  (clearing stale cache first)"
+  stage "8/9  Build lstmf  (clearing stale cache first)"
   rm -rf lstmf/rendered lstmf/inventory lstmf/classical lstmf/font-test lstmf/list.txt 2>/dev/null || true
   INVENTORY_DIR="$ROOT/inventory" \
   CLASSICAL_A5_DIR="$CLASSICAL_A5" \
@@ -259,7 +259,7 @@ fi
 
 # ── 7. Validate before committing hours of GPU time ──────────────────────────
 if should_run validate; then
-  stage "7/8  Validate training set"
+  stage "9/9  Validate training set"
   python3 -u - <<'PY' 2>&1 | tee -a "${LOG_TARGETS[@]}"
 import subprocess, tempfile, os, collections
 from pathlib import Path
@@ -274,7 +274,13 @@ with tempfile.TemporaryDirectory() as t:
     U = {l.split(' ')[0] for l in
          open(p + 'lstm-unicharset', encoding='utf-8', errors='replace').read().split('\n')[1:]
          if l.strip()}
-M = max(len(u) for u in U); EX = set(' \t\n್')
+M = max(len(u) for u in U)
+# Whitespace only. The virama used to be exempt here, which made this check MORE
+# permissive than Tesseract's: a bare virama has no unit of its own (the
+# unicharset stores virama+consonant as ONE unit), so exempting it let words
+# like ರ್ಘ pass validation and then fail in training with "Can't encode
+# transcription" — hiding exactly the gaps this stage exists to find.
+EX = set(' \t\n')
 
 def enc(s):
     i, n = 0, len(s)
@@ -286,7 +292,10 @@ def enc(s):
     return True
 
 srcs = {}
-for root in ('rendered', 'inventory', 'test-images', 'classical-corpus-kannada'):
+# scan-lines/ included: hand-transcribed scan text is the likeliest place for an
+# unencodable cluster, and it was the one source this check never looked at.
+for root in ('rendered', 'inventory', 'test-images', 'classical-corpus-kannada',
+             'scan-lines'):
     rp = Path(root)
     if rp.exists():
         for g in rp.rglob('*.gt.txt'):
@@ -328,6 +337,11 @@ if pct > 5:
 else:
     print("   ✓ training set is clean")
 PY
+
+  # Report the held-out split at the gate, so nobody commits hours to training
+  # on a set whose only error signal would come from its own training data.
+  python3 -u scripts/make-eval-split.py --report 2>&1 \
+    | tee -a "${LOG_TARGETS[@]}" | sed -n '2,20p'
 fi
 
 # ── 8. Train ─────────────────────────────────────────────────────────────────
