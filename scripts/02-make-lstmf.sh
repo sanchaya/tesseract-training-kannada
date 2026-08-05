@@ -270,6 +270,34 @@ _MAXUNIT = max((len(u) for u in _UNITS), default=1) if _UNITS else 1
 # ~99.6% of classical lines pass, and the remainder are genuine gaps.)
 _ENCODE_EXEMPT = set(' \t\n')
 
+# Derived from the network spec, not guessed. See Guard 2 for the derivation.
+CTC_STEPS_PER_PX   = 12.0   # w * 12/h — 36px normalise, then Mp3,3 divides by 3
+CTC_STEPS_PER_UNIT = 2.0    # recoder expansion + CTC blanks, measured on this corpus
+
+
+def _nunits(text):
+    """Number of unicharset units in text — the label count CTC must emit.
+
+    Counting CHARACTERS here instead is what made the old guard useless: a unit
+    is frequently several characters (ರ್ಘ, ತ್ತುಂ), so character count wildly
+    overstates the label count for conjunct-heavy Kannada and understates
+    nothing. Measured on this corpus, thresholding on units separates cleanly
+    where thresholding on characters does not — see Guard 2.
+    """
+    if not _UNITS:
+        return len(text)
+    i, n, count = 0, len(text), 0
+    while i < n:
+        for size in range(min(_MAXUNIT, n - i), 0, -1):
+            if text[i:i + size] in _UNITS:
+                i += size
+                count += 1
+                break
+        else:
+            i += 1
+            count += 1
+    return count
+
 def _encodable(text):
     """
     Greedy longest-match segmentation into unicharset units (Tesseract's encoder).
@@ -373,15 +401,44 @@ def _make_lstmf_impl(img_path_str):
         return _reject(f"not encodable in unicharset"
                        f"{f' (offending: {_bad})' if _bad else ''}")
 
-    # Guard 2 — CTC feasibility. The LSTM scales input to 48px height, so the
-    # timestep budget is roughly the width at that scale; CTC needs at least one
-    # timestep per label. A full PAGE image paired with the whole page's text
-    # (875x1241 → ~33 timesteps, ~700 labels) can never align, and lstmtraining
-    # reports "Compute CTC targets failed". Line images pass comfortably.
-    _timesteps = int(w * (48.0 / h)) if h else 0
-    if _txt and _timesteps < len(_txt):
-        return _reject(f"CTC infeasible — {len(_txt)} labels need > {_timesteps} "
-                       f"timesteps ({w}x{h}). Page-level image? Needs line segmentation.")
+    # Guard 2 — CTC feasibility.
+    #
+    # The old formula was int(w * (48.0/h)) >= len(text). It was wrong three
+    # ways, which is why 54 samples still died with "Compute CTC targets failed"
+    # after passing this very check.
+    #
+    #   1. Height. The network spec is
+    #        [1,36,0,1 Ct3,3,16 Mp3,3 Lfys64 Lfx96 Lrx96 Lfx384 O1c1]
+    #      Tesseract normalises input to 36px tall, not 48.
+    #
+    #   2. Mp3,3 divides WIDTH by three before the LSTM sees it. The old formula
+    #      counted input pixel columns as timesteps. Compounded with (1), it
+    #      overcounted the budget by 4x.
+    #
+    #        timesteps = w * (36/h) / 3  =  w * 12 / h
+    #
+    #   3. A character is not a label. Units are frequently multi-character
+    #      (ರ್ಘ, ತ್ತುಂ), so counting characters badly overstates the label count
+    #      for conjunct-heavy Kannada.
+    #
+    # Point 3 is what makes the guard usable. Measured on this corpus against
+    # the samples Tesseract actually rejected:
+    #
+    #     threshold   rejects good   catches failures
+    #        1.8         0.03%            79%
+    #        2.0         0.03%            97%     ← chosen
+    #        2.2         0.47%            97%
+    #        2.5         3.02%            97%
+    #
+    # Character-based thresholds have no such sweet spot: the equivalent 2.5
+    # rejected 10% of perfectly good lines. Units separate; characters do not.
+    _timesteps = int(w * CTC_STEPS_PER_PX / h) if h else 0
+    _labels = _nunits(_txt) if _txt else 0
+    _need = int(_labels * CTC_STEPS_PER_UNIT)
+    if _txt and _timesteps < _need:
+        return _reject(f"CTC infeasible — {_labels} units need ~{_need} timesteps, "
+                       f"image gives {_timesteps} ({w}x{h}). Page-level image? "
+                       f"Needs line segmentation.")
 
     # Resume: already built AND validated above
     if lstmf.exists():

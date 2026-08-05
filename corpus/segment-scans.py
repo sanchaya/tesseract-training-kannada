@@ -9,9 +9,11 @@
 #     scan_2026-06-28T12-43-21.png   1252x1778   gt=574 chars   timesteps=33
 #     Screenshot 2026-06-27 ...png   1048x1650   gt=1322 chars  timesteps=30
 #
-#   The LSTM normalises input to 48px tall, so a full A5 page collapses to
-#   ~30 horizontal timesteps. CTC needs at least one timestep per output label.
-#   Thirty timesteps cannot emit 574 characters, so the guard threw both away.
+#   The LSTM normalises input to 36px tall and then Mp3,3 divides the width by
+#   three, so a full A5 page collapses to a few dozen horizontal timesteps. CTC
+#   needs at least one timestep per output label, and the recoder expands each
+#   unicharset unit into several labels. A page can never align, so the guard
+#   threw both away.
 #
 #   Net effect: the model has been trained on ZERO real scans. Every measurement
 #   on 2026-08-05 showed 44–53% CER on real scans against stock Tesseract's
@@ -47,8 +49,10 @@ import csv
 import json
 import re
 import shutil
+import os
 import subprocess
 import sys
+import tempfile
 import unicodedata
 from pathlib import Path
 
@@ -68,7 +72,14 @@ PAD_Y = 10
 
 MIN_H = 16          # below this the LSTM has no vertical resolution to work with
 MIN_W = 40
-LSTM_H = 48.0       # Tesseract normalises every line to this height
+# Derived from the network spec, not guessed:
+#   [1,36,0,1 Ct3,3,16 Mp3,3 Lfys64 Lfx96 Lrx96 Lfx384 O1c1]
+# Input is normalised to 36px tall, then Mp3,3 divides width by 3, so the
+# timestep budget is w*(36/h)/3 = w*12/h. And a character is not a label — the
+# recoder expands each unicharset unit into several codes and CTC needs blanks
+# between repeats, measured at ~2.5 codes per character on this corpus.
+CTC_STEPS_PER_PX = 12.0
+CTC_STEPS_PER_UNIT = 2.0    # measured: 0.03% good rejected, 97% of failures caught
 
 
 def log(msg=''):
@@ -135,12 +146,56 @@ def detect_lines(img_path, psm=3):
     return boxes
 
 
+_UNITS, _MAXUNIT = None, 1
+
+
+def _load_units():
+    """Unicharset units, so we count LABELS rather than characters."""
+    global _UNITS, _MAXUNIT
+    if _UNITS is not None:
+        return
+    _UNITS = set()
+    with tempfile.TemporaryDirectory() as t:
+        pre = os.path.join(t, 'x.')
+        r = subprocess.run(['combine_tessdata', '-u',
+                            str(TESSDATA / 'kan.traineddata'), pre],
+                           capture_output=True)
+        f = Path(pre + 'lstm-unicharset')
+        if r.returncode == 0 and f.exists():
+            _UNITS = {l.split(' ')[0] for l in
+                      f.read_text(encoding='utf-8', errors='replace').split('\n')[1:]
+                      if l.strip()}
+    _MAXUNIT = max((len(u) for u in _UNITS), default=1)
+
+
+def nunits(text):
+    _load_units()
+    if not _UNITS:
+        return len(text)
+    i, n, c = 0, len(text), 0
+    while i < n:
+        for k in range(min(_MAXUNIT, n - i), 0, -1):
+            if text[i:i + k] in _UNITS:
+                i += k
+                c += 1
+                break
+        else:
+            i += 1
+            c += 1
+    return c
+
+
 def ctc_ok(w, h, text):
-    """Will this crop survive the CTC feasibility guard in 02-make-lstmf.sh?"""
+    """Will this crop survive the CTC feasibility guard in 02-make-lstmf.sh?
+
+    Counts unicharset UNITS, not characters. A unit is often several characters
+    (ರ್ಘ, ತ್ತುಂ), so a character count overstates the labels CTC must emit and
+    the two thresholds cannot be made to agree.
+    """
     if h <= 0:
         return False, 0
-    steps = int(w * (LSTM_H / h))
-    return steps >= len(text), steps
+    steps = int(w * CTC_STEPS_PER_PX / h)
+    return steps >= nunits(text) * CTC_STEPS_PER_UNIT, steps
 
 
 def segment_page(img_path, out_root, dry_run=False, psm=3):
@@ -189,7 +244,8 @@ def segment_page(img_path, out_root, dry_run=False, psm=3):
         ok, steps = ctc_ok(w, h, text)
         if not ok:
             result['rejected'].append(
-                (i, f'CTC {steps} steps < {len(text)} chars', text[:24]))
+                (i, f'CTC {steps} steps, needs ~{int(nunits(text)*CTC_STEPS_PER_UNIT)}',
+                 text[:24]))
             continue
         crops.append((i, (x0, y0, x1, y1), text))
 

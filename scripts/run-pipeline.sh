@@ -291,6 +291,17 @@ def enc(s):
         else: return False
     return True
 
+def nunits(s):
+    # Label count, not character count. A unit is often several characters
+    # (ರ್ಘ, ತ್ತುಂ), so characters overstate the labels CTC must emit — which is
+    # why the character-based guard could not separate good from bad.
+    i, n, c = 0, len(s), 0
+    while i < n:
+        for k in range(min(M, n - i), 0, -1):
+            if s[i:i+k] in U: i += k; c += 1; break
+        else: i += 1; c += 1
+    return c
+
 srcs = {}
 # scan-lines/ included: hand-transcribed scan text is the likeliest place for an
 # unencodable cluster, and it was the one source this check never looked at.
@@ -320,7 +331,10 @@ for ln in open('lstmf/list.txt', encoding='utf-8'):
         if c.exists(): img = c; break
     if img:
         w, h = Image.open(img).size
-        if txt and int(w * (48.0 / h)) < len(txt):
+        # w*12/h, not w*48/h: the net normalises to 36px and Mp3,3 divides width
+        # by 3. Threshold is 2.0 timesteps per UNIT — measured: 0.03% good
+        # rejected, 97% of real failures caught. See 02-make-lstmf.sh Guard 2.
+        if txt and int(w * 12.0 / h) < nunits(txt) * 2.0:
             bad_ctc.append(stem)
 
 print(f"   total entries : {total}")

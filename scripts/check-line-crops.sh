@@ -106,7 +106,10 @@ for f in crops:
         short += 1; examples.append(('sliver crop', f.name, f'{w}x{h}')); continue
     if ink < 0.001:
         blank += 1; examples.append(('blank', f.name, f'{w}x{h} {ink*100:.2f}% ink')); continue
-    if int(w * (48.0 / h)) < len(txt):
+    # w*12/h, not w*48/h: the net normalises to 36px and Mp3,3 divides width by
+    # 3. len(txt) is a coarse stand-in for the unit count here — this script has
+    # no unicharset loaded — so it flags a superset of what 02 will reject.
+    if int(w * 12.0 / h) < len(txt) * 2.0:
         noctc += 1; examples.append(('CTC infeasible', f.name, f'{len(txt)} labels')); continue
     ok += 1
 
