@@ -875,6 +875,12 @@ app.post("/api/run/:step", (req, res) => {
     // word list that 00c turns into unicharset units.
     coverage:      ["python3", [path.join(P.scripts, "find-missing-clusters.py"),
                                 "--kannada-only", "--update-00c"]],
+    // One action for the whole data build. run-pipeline.sh owns the ordering,
+    // which is load-bearing and easy to get wrong by hand: the unicharset
+    // defines the recoder, .lstmf caches ground truth, and 02-make-lstmf.sh
+    // resumes from cache. Running these out of order fails silently rather
+    // than loudly.
+    pipeline:      ["bash",    [path.join(P.scripts, "run-pipeline.sh")]],
     lstmf:         ["bash",    [path.join(P.scripts, "02-make-lstmf.sh")]],
     train:         ["bash",    [path.join(P.scripts, "03-train.sh")]],
     package:       ["bash",    [path.join(P.scripts, "04-package.sh")]],
@@ -907,6 +913,13 @@ app.post("/api/run/:step", (req, res) => {
   // generate-inventory.py defaults to the weights declared in fonts.yml;
   // ?all_fonts=1 widens it to every .ttf/.otf on disk.
   if (step === 'inventory' && req.query.all_fonts === '1') runArgs.push('--all-fonts');
+
+  // Pipeline options — surfaced as checkboxes rather than remembered flags.
+  if (step === 'pipeline') {
+    if (req.query.classical === '1') runArgs.push('--with-classical');
+    if (req.query.from)              runArgs.push('--from', String(req.query.from).replace(/[^a-z]/g, ''));
+    if (req.query.train === '1')     runArgs.push('--train');
+  }
 
   // Coverage inventory: the complete orthographic set (enumerated + attested).
   // ?attested=1 keeps only conjuncts real text uses — recommended for training

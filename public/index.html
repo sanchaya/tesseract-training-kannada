@@ -762,8 +762,43 @@ footer a:hover { text-decoration: underline; }
     </button>
   </div>
 
-  <!-- Step runner cards -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:14px">
+  <!-- ── Primary actions ────────────────────────────────────────────────
+       Three steps instead of 25. The old grid exposed every internal stage as
+       a peer button, which made the ORDER look optional — but the ordering is
+       load-bearing (the unicharset defines the recoder, .lstmf caches ground
+       truth, 02-make-lstmf resumes from cache), and getting it wrong fails
+       silently. run-pipeline.sh owns that ordering now.
+       Individual stages remain available below for when a single step needs
+       re-running. -->
+  <div class="card" style="margin-bottom:14px;border:1.5px solid #6ee7b7">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary step-run-btn" id="sb-pipeline"
+        onclick="runPipeline()"
+        style="font-size:.95rem;padding:9px 18px">① Prepare training data</button>
+      <button class="btn btn-primary step-run-btn" id="sb-train-main"
+        onclick="runWithPreflight('train','fresh')"
+        style="font-size:.95rem;padding:9px 18px">② Train</button>
+      <button class="btn btn-primary step-run-btn" id="sb-package-main"
+        onclick="run('package')"
+        style="font-size:.95rem;padding:9px 18px">③ Package &amp; evaluate</button>
+    </div>
+    <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:.78rem">
+      <input id="pl-classical" type="checkbox" style="margin-top:3px">
+      <span><strong>Include classical corpus</strong> — renders ~650K line images from the
+      historical texts. Adds hours; leave off for a quick rebuild.</span>
+    </label>
+    <p style="font-size:.75rem;color:var(--mute);margin:10px 0 0;line-height:1.5">
+      ① runs coverage → unicharset → corpus → render → inventory → gallery → lstmf → validate,
+      in that order, and stops at a validation gate so you can check the training set before
+      committing hours to ②.
+    </p>
+  </div>
+
+  <details style="margin-bottom:14px">
+    <summary style="cursor:pointer;font-size:.85rem;font-weight:600;color:var(--brand-d);padding:6px 0">
+      Individual stages — for re-running one step
+    </summary>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:10px 0 14px">
     <button class="btn btn-primary step-run-btn" onclick="run('prep')"               id="sb-prep">     ① Prep base</button>
     <button class="btn step-run-btn" onclick="run('expandunichar')" id="sb-expandunichar"
       title="Adds ಋ ಙ ಝ ಱ to kan.traineddata unicharset → tessdata_expanded/kan.traineddata (downloads cached after first run)"
@@ -805,6 +840,8 @@ footer a:hover { text-decoration: underline; }
       style="background:var(--card);color:#b45309;border:1.5px dashed #fde68a;font-size:0.8em;padding:4px 8px">Train (fresh+expanded)</button>
     <button class="btn btn-primary step-run-btn" onclick="run('package')"            id="sb-package">  ⑥ Package</button>
   </div>
+
+  </details>
 
   <!-- Inline live log panel (shown when a step is running) -->
   <div id="dash-log-panel" style="display:none;margin-top:6px">
@@ -2487,6 +2524,7 @@ async function loadStatus() {
   if (running) {
     const stepNames = { prep:'Prep base', expandunichar:'Expanding unicharset', wiki:'Downloading corpus', clean:'Cleaning corpus',
       render:'Rendering images', inventory:'Generating inventory', coverage:'Scanning coverage',
+      pipeline:'Preparing training data',
       lstmf:'Building lstmf', train:'Training', package:'Packaging' };
     badge.style.display = 'inline-flex';
     badge.textContent = `⚙ ${stepNames[running] || running}…`;
@@ -2629,6 +2667,21 @@ async function loadFonts() {
             title="Remove from fonts.yml. Font files are kept on disk."
             style="padding:3px 10px;font-size:.74rem;color:#b91c1c;border-color:#fca5a5">Remove</button></td>
     </tr>`).join('');
+}
+
+// Run the whole data build as one action. The stage ORDER is the thing that
+// matters and is easy to get wrong by hand, so run-pipeline.sh owns it.
+async function runPipeline() {
+  const classical = document.getElementById('pl-classical')?.checked;
+  if (!confirm('Prepare training data?\n\n'
+    + 'Runs: coverage → unicharset → corpus → render → inventory → gallery\n'
+    + '      → lstmf → validate\n\n'
+    + (classical
+        ? '⚠ Classical corpus INCLUDED — ~650K line images, several hours.\n\n'
+        : 'Classical corpus excluded (tick the box to include it).\n\n')
+    + 'Stops at a validation gate before training so you can check the\n'
+    + 'training set first. Watch progress in the log below.')) return;
+  run('pipeline', false, null, classical ? '&classical=1' : '');
 }
 
 // ── Review queue ─────────────────────────────────────────────────
@@ -2894,6 +2947,7 @@ async function run(step, force, mode, extraQuery) {
   const names = { prep:'Prep base', expandunichar:'Expanding unicharset', wiki:'Download corpus', clean:'Clean corpus',
                   specimen:'Generate specimen', render: force ? 'Re-render images (force)' : 'Render images',
                   inventory:'Character inventory', coverage:'Coverage scan',
+                  pipeline:'Preparing training data',
                   lstmf:'Make lstmf', train: mode === 'fresh' ? 'Train (fresh+expanded)' : 'Train', package:'Package' };
   if (STATIC_MODE) { toast('Training unavailable in static mode — run the Node.js server'); return; }
 
