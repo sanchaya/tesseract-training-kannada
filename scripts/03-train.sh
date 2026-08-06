@@ -269,6 +269,25 @@ else
     TRAIN_LIST="$LSTMF_DIR/list.txt"
 fi
 
+# ── Run, and survive Tesseract's macOS shutdown crash ───────────────────────
+#
+# On macOS, lstmtraining regularly aborts during teardown:
+#
+#   Finished! Selected model with minimal training error rate (BCER) = 0.389
+#   libc++abi: terminating due to uncaught exception of type
+#     std::__1::system_error: mutex lock failed: Invalid argument
+#   Abort trap: 6                                            (exit 134)
+#
+# Note the ORDER. "Finished!" is the last thing training prints; the abort comes
+# after it, in static destruction as the OpenMP thread pool is torn down. The
+# model is complete and every checkpoint is already on disk — nothing is lost.
+#
+# But exit 134 propagated, so this script reported failure and the portal
+# painted the step red. That is an expensive lie: it invites re-running a
+# nine-hour job that in fact succeeded. So if training printed "Finished!" and a
+# checkpoint exists, this is the known shutdown crash and the run is good. Any
+# other non-zero exit is a real failure and still propagates.
+set +e
 lstmtraining \
     --continue_from   "$CONTINUE_FROM" \
     --model_output    "$OUTPUT/$MODEL_NAME" \
@@ -278,7 +297,42 @@ lstmtraining \
     $EVAL_ARG \
     --learning_rate   "$LEARNING_RATE" \
     --max_iterations  "$MAX_ITERATIONS" \
-    --target_error_rate -1
+    --target_error_rate -1 2>&1 | tee "/tmp/lstmtrain.$$"
+TRAIN_RC=${PIPESTATUS[0]}
+set -e
+
+if [ "$TRAIN_RC" -ne 0 ]; then
+    if grep -q "Finished!" "/tmp/lstmtrain.$$" 2>/dev/null \
+       && ls "$OUTPUT/${MODEL_NAME}"_*.checkpoint >/dev/null 2>&1; then
+        echo ""
+        echo "  NOTE: lstmtraining exited $TRAIN_RC after printing \"Finished!\"."
+        echo "        Known macOS teardown crash (mutex lock failed during"
+        echo "        OpenMP shutdown). Training completed, checkpoints intact —"
+        echo "        treating as success."
+    else
+        echo ""
+        echo "  ✗ lstmtraining failed (exit $TRAIN_RC) without finishing."
+        rm -f "/tmp/lstmtrain.$$"
+        exit "$TRAIN_RC"
+    fi
+fi
+
+# ── Which checkpoint generalises best? ──────────────────────────────────────
+# Tesseract picks by TRAINING error — its closing line says so outright:
+# "Selected model with minimal training error rate (BCER)". Once an eval list
+# exists that is the wrong criterion, and the gap is not academic: in the
+# 2026-08-06 run the best EVAL BCER (0.879) came at iteration 55866 while
+# Tesseract selected the iteration-59738 checkpoint on training error 0.389.
+if [ -n "$EVAL_ARG" ]; then
+    echo ""
+    echo "  Held-out eval trajectory — this is the number that matters:"
+    grep -oE "At iteration [0-9]+, stage [0-9]+, BCER eval=[0-9.]+, BWER eval=[0-9.]+" \
+        "/tmp/lstmtrain.$$" 2>/dev/null | tail -12 | sed 's/^/     /' || true
+    echo ""
+    echo "  Still falling at the end → not yet overfit, more iterations would help."
+    echo "  Turned upward → package the checkpoint at the turn, not the last one."
+fi
+rm -f "/tmp/lstmtrain.$$"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

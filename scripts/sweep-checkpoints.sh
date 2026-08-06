@@ -94,6 +94,10 @@ for cp in "${PICKS[@]}"; do
 done
 
 echo ""
+echo "  Held-out eval BCER recorded during training, for comparison:"
+grep -oE "At iteration [0-9]+, stage [0-9]+, BCER eval=[0-9.]+" logs/training.log 2>/dev/null \
+  | tail -10 | sed 's/^/     /' || echo "     (none — was --eval_listfile used?)"
+echo ""
 echo "  Compare against the baseline you must beat:"
 echo "     stock tessdata_best on $SOURCE — run verify-ocr and read the first row."
 echo ""
