@@ -1041,6 +1041,9 @@ app.post("/api/run/:step", (req, res) => {
   if (step === 'remediate') {
     if (req.query.generate === '1') runArgs.push('--generate');
     if (req.query.render   === '1') runArgs.push('--render');
+    // Without --force a regenerate skips every existing image and reports zero
+    // work done, which looks exactly like a failure.
+    if (req.query.force    === '1') runArgs.push('--force');
   }
   if (step === 'pipeline') {
     if (req.query.classical === '1') runArgs.push('--with-classical');

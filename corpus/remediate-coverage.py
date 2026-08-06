@@ -107,11 +107,65 @@ def load_report():
     return d
 
 
+_UNITS, _MAXU = None, 1
+
+
+def _load_units():
+    """Unicharset units, for rejecting words training would discard anyway."""
+    global _UNITS, _MAXU
+    if _UNITS is not None:
+        return
+    import subprocess, tempfile, os
+    td = ROOT / 'tessdata_expanded' / 'kan.traineddata'
+    if not td.exists():
+        td = ROOT / 'tessdata_best' / 'kan.traineddata'
+    _UNITS = set()
+    with tempfile.TemporaryDirectory() as t:
+        pre = os.path.join(t, 'x.')
+        r = subprocess.run(['combine_tessdata', '-u', str(td), pre], capture_output=True)
+        f = Path(pre + 'lstm-unicharset')
+        if r.returncode == 0 and f.exists():
+            _UNITS = {l.split(' ')[0] for l in
+                      f.read_text(encoding='utf-8', errors='replace').split('\n')[1:]
+                      if l.strip()}
+    _MAXU = max((len(u) for u in _UNITS), default=1)
+
+
+def encodable(text):
+    _load_units()
+    if not _UNITS:
+        return True
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] in ' \t\n':
+            i += 1
+            continue
+        for k in range(min(_MAXU, n - i), 0, -1):
+            if text[i:i + k] in _UNITS:
+                i += k
+                break
+        else:
+            return False
+    return True
+
+
 def build_word_index(graphemes):
-    """Map grapheme → corpus words containing it. One pass over the corpus."""
+    """Map grapheme → corpus words containing it. One pass over the corpus.
+
+    Words the unicharset cannot encode are rejected here rather than downstream.
+    They come mostly from classical-corpus-kannada/, which is raw transcription
+    and never went through clean-corpus.py.
+
+    Skipping them matters more than it looks. Lines are six words joined, and
+    02-make-lstmf.sh discards a line if ANY word in it fails to encode — so one
+    bad word takes five good ones with it. Measured on the first run: 38% of
+    remediation images were built and then thrown away, and the loss fell
+    unevenly across exactly the graphemes the remediation existed to fix.
+    """
     targets = sorted(graphemes, key=len, reverse=True)
     index = collections.defaultdict(list)
     seen = collections.defaultdict(set)
+    rejected = [0]
     files = [p for p in CORPORA if p.exists()]
     if CLASSICAL.exists():
         files += sorted(CLASSICAL.glob('*/*.txt'))
@@ -122,10 +176,16 @@ def build_word_index(graphemes):
                 w = w.strip('।॥|.,;:!?()[]"\'')
                 if not (2 <= len(w) <= 24):
                     continue
+                if not encodable(w):
+                    rejected[0] += 1
+                    continue
                 for g in targets:
                     if g in w and w not in seen[g]:
                         seen[g].add(w)
                         index[g].append(w)
+    if rejected[0]:
+        log(f'  ({rejected[0]:,} corpus word(s) skipped — not encodable in the '
+            f'unicharset, so any line containing one would be discarded)')
     return index
 
 
@@ -137,6 +197,8 @@ def main():
     ap.add_argument('--render', action='store_true', help='also render images')
     ap.add_argument('--max-lines', type=int, default=MAX_LINES_PER_GRAPHEME)
     ap.add_argument('--workers', type=int, default=0)
+    ap.add_argument('--force', action='store_true',
+                    help='re-render images that already exist')
     args = ap.parse_args()
 
     data = load_report()
@@ -364,7 +426,7 @@ def main():
             degrade = font.get('degrade', False)
             for i, text in enumerate(lines):
                 tasks.append((str(fp), tag, i, text, degrade, aalt,
-                              hash((tag, i)) & 0xFFFFFFFF))
+                              hash((tag, i)) & 0xFFFFFFFF, args.force))
 
     log('')
     log(f'  Rendering {len(tasks)} images across '
@@ -374,7 +436,16 @@ def main():
     with multiprocessing.Pool(workers) as pool:
         res = pool.map(_render, tasks, chunksize=16)
     ok = sum(1 for r in res if r == 'ok')
-    log(f'  {ok} rendered, {len(res)-ok} skipped/failed → rendered/')
+    skipped = sum(1 for r in res if r == 'skip')
+    failed = len(res) - ok - skipped
+    # These were one number before, and it read as total failure: a rerun that
+    # correctly skipped 36,873 already-rendered images reported
+    # "0 rendered, 36873 skipped/failed" — indistinguishable from nothing working.
+    log(f'  rendered {ok}, already present {skipped}, failed {failed} → rendered/')
+    if failed:
+        log(f'  ⚠  {failed} render(s) failed. Re-run with --force to retry them.')
+    if skipped and not ok:
+        log('  Everything was already rendered — the images are on disk and ready.')
     log('')
     log('━' * 72)
     log('  Next:  ./scripts/02-make-lstmf.sh   then retrain')
@@ -392,11 +463,11 @@ def _render(t):
     from PIL import ImageFilter as _IF
     from shaping_render import render_text
 
-    fp, tag, idx, text, degrade, aalt, seed = t
+    fp, tag, idx, text, degrade, aalt, seed, force = t
     stem = RENDERED / f'{tag}_remed{idx:04d}'
     png = Path(str(stem) + '.png')
     gt = Path(str(stem) + '.gt.txt')
-    if png.exists() and gt.exists():
+    if not force and png.exists() and gt.exists():
         return 'skip'
     try:
         # NOTE the argument order: render_text(font_path, text, ...). Reversing
