@@ -60,8 +60,24 @@ ROOT = Path(__file__).resolve().parent.parent
 SCAN_DIR = ROOT / 'scan-input'
 OUT_DIR = ROOT / 'scan-lines'
 HOLDOUT_DIR = ROOT / 'scan-holdout'
-TESSDATA = ROOT / 'tessdata_expanded' if (ROOT / 'tessdata_expanded' / 'kan.traineddata').exists() \
-    else ROOT / 'tessdata_best'
+# Two directories, two jobs — and preferring the wrong one here would have been
+# silent and total.
+#
+#   LAYOUT_TESSDATA  drives `tesseract ... tsv`, which needs REAL WEIGHTS.
+#                    tessdata_expanded has none — 00c builds it with
+#                    combine_lang_model, producing a starter traineddata with
+#                    unicharset, recoder and dawgs but no `lstm`. Pointed at it,
+#                    layout analysis returns no line boxes, every page fails the
+#                    box-count check, and not one scan is ever segmented. Since
+#                    real scans are the whole point of this script, that would
+#                    have looked like "the segmenter doesn't work".
+#
+#   UNITS_TESSDATA   supplies the unicharset for counting labels, where the
+#                    expanded 273-unit set IS the right one.
+LAYOUT_TESSDATA = ROOT / 'tessdata_best'
+UNITS_TESSDATA = ROOT / 'tessdata_expanded' \
+    if (ROOT / 'tessdata_expanded' / 'kan.traineddata').exists() else ROOT / 'tessdata_best'
+TESSDATA = LAYOUT_TESSDATA          # kept: referenced by detect_lines()
 
 # Padding around each detected line box. Tesseract's boxes hug the ink, which
 # clips the tops of ೀ/ೈ and the bottoms of ottu conjuncts — exactly the marks
@@ -158,7 +174,7 @@ def _load_units():
     with tempfile.TemporaryDirectory() as t:
         pre = os.path.join(t, 'x.')
         r = subprocess.run(['combine_tessdata', '-u',
-                            str(TESSDATA / 'kan.traineddata'), pre],
+                            str(UNITS_TESSDATA / 'kan.traineddata'), pre],
                            capture_output=True)
         f = Path(pre + 'lstm-unicharset')
         if r.returncode == 0 and f.exists():
@@ -285,8 +301,8 @@ def main():
         log('✗ Pillow required:  pip3 install --break-system-packages Pillow')
         return 1
 
-    if not TESSDATA.joinpath('kan.traineddata').exists():
-        log(f'✗ no kan.traineddata in {TESSDATA.name}/ — run ① Prep base first.')
+    if not LAYOUT_TESSDATA.joinpath('kan.traineddata').exists():
+        log(f'✗ no kan.traineddata in {LAYOUT_TESSDATA.name}/ — run ① Prep base first.')
         return 1
 
     pages = sorted(p for p in SCAN_DIR.glob('*')
@@ -307,7 +323,8 @@ def main():
     log('━' * 72)
     log('  Scan segmentation — whole pages → line images')
     log(f'  source   : scan-input/  ({len(pages)} page{"s" if len(pages) != 1 else ""})')
-    log(f'  tessdata : {TESSDATA.name}/  (layout analysis only)')
+    log(f'  layout   : {LAYOUT_TESSDATA.name}/  (needs real weights)')
+    log(f'  units    : {UNITS_TESSDATA.name}/  (unicharset only)')
     if args.holdout:
         log(f'  holdout  : {args.holdout} page(s) reserved for evaluation')
     if args.dry_run:

@@ -68,7 +68,38 @@ ZWNJ = '‌'
 # reading from tessdata_best/ instead is how an entire day of measurements ended
 # up describing a model from a month earlier.
 MODEL_DIRS = [ROOT / 'best', ROOT / 'tessdata_best']
-BASE_DIRS = [ROOT / 'tessdata_expanded', ROOT / 'tessdata_best']
+
+# Two different needs, and conflating them reported stock Tesseract at 0.0%.
+#
+#   UNITS_DIRS     where the UNICHARSET comes from. tessdata_expanded is right:
+#                  it carries the 273-unit set training actually used.
+#
+#   BASELINE_DIRS  where the BASELINE RECOGNISER comes from. tessdata_expanded
+#                  is wrong, because it has no `lstm` component at all —
+#                  00c-expand-unicharset.sh builds it with combine_lang_model,
+#                  which produces a *starter* traineddata: unicharset, recoder
+#                  and dawgs, no weights. It is 2.6MB against stock's 9.8MB and
+#                  recognises nothing. Pointed at it, every baseline comparison
+#                  returned an empty string and scored zero — which reads as
+#                  "stock Tesseract cannot read Kannada at all" rather than
+#                  "this file was never a model".
+UNITS_DIRS = [ROOT / 'tessdata_expanded', ROOT / 'tessdata_best']
+BASELINE_DIRS = [ROOT / 'tessdata_best']
+
+
+def has_lstm(traineddata):
+    """Does this traineddata contain recogniser weights?
+
+    A starter traineddata is a trap: same name, same extension, loads without
+    complaint, and silently recognises nothing.
+    """
+    try:
+        out = subprocess.run(['combine_tessdata', '-d', str(traineddata)],
+                             capture_output=True, text=True, timeout=30)
+        return any(l.split(':')[1:2] == ['lstm']
+                   for l in (out.stdout + out.stderr).splitlines() if ':' in l)
+    except Exception:                                    # noqa: BLE001
+        return True                                      # don't block on a probe failure
 
 VOWEL_NAMES = {'A', 'AA', 'I', 'II', 'U', 'UU', 'E', 'EE', 'AI', 'O', 'OO', 'AU',
                'VOCALIC R', 'VOCALIC RR', 'VOCALIC L', 'VOCALIC LL'}
@@ -471,11 +502,18 @@ def main():
     REPORTS.mkdir(parents=True, exist_ok=True)
     fonts = set(args.fonts.split(',')) if args.fonts else None
 
-    base_dir = find_model(BASE_DIRS, args.baseline)
-    if not base_dir:
+    units_dir = find_model(UNITS_DIRS, args.baseline)
+    if not units_dir:
         print(f'✗ {args.baseline}.traineddata not found. Run ① Prep base first.')
         return 1
-    units = set(load_units(base_dir / f'{args.baseline}.traineddata'))
+    units = set(load_units(units_dir / f'{args.baseline}.traineddata'))
+
+    base_dir = find_model(BASELINE_DIRS, args.baseline)
+    if base_dir and not has_lstm(base_dir / f'{args.baseline}.traineddata'):
+        print(f'  ⚠  {base_dir.name}/{args.baseline}.traineddata has no lstm layer —')
+        print('     it cannot recognise anything. Skipping the baseline rather than')
+        print('     reporting it as 0%.')
+        base_dir = None
     if not units:
         print('✗ could not read the unicharset (is combine_tessdata on PATH?)')
         return 1
@@ -490,7 +528,9 @@ def main():
 
     print('━' * 72)
     print('  Kannada coverage report')
-    print(f'  unicharset : {len(units)} units from {base_dir.name}/')
+    print(f'  unicharset : {len(units)} units from {units_dir.name}/')
+    if base_dir:
+        print(f'  baseline   : {args.baseline} from {base_dir.name}/')
     if measured:
         print(f'  model      : {args.model} from {model_dir.name}/  (psm {args.psm})')
     print('━' * 72)
@@ -512,7 +552,7 @@ def main():
     if samples:
         print(f'  measuring {len(samples)} inventory samples on {args.jobs} workers…')
         cfg = {'model_dir': str(model_dir), 'model': args.model, 'psm': args.psm}
-        if not args.no_baseline:
+        if not args.no_baseline and base_dir:
             cfg['base_dir'] = str(base_dir)
             cfg['base'] = args.baseline
         with multiprocessing.Pool(args.jobs, _init, (cfg,)) as pool:

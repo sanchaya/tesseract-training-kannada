@@ -403,8 +403,21 @@ def main():
         _m = (_hist / 'kan_hist.traineddata').stat().st_mtime
         print(f"  kan_hist from {_hist.name}/  (built {_dt.datetime.fromtimestamp(_m):%Y-%m-%d %H:%M})")
         models.append(('kan_hist', _hist, 'kan_hist', '#a78bfa'))
+    # tessdata_expanded is NOT a recogniser and must never be scored as one.
+    # 00c-expand-unicharset.sh builds it with combine_lang_model, which produces
+    # a starter traineddata — unicharset, recoder and dawgs, no `lstm` weights.
+    # It loads without complaint and recognises nothing, so every run of this
+    # script has been reporting a row of ~100% CER for a file that was never a
+    # model. Its job is to supply the unicharset to training, nothing more.
     if (TESS_EXPANDED / 'kan.traineddata').exists():
-        models.append(('tessdata_expanded', TESS_EXPANDED, 'kan', '#34d399'))
+        import subprocess as _sp
+        _d = _sp.run(['combine_tessdata', '-d', str(TESS_EXPANDED / 'kan.traineddata')],
+                     capture_output=True, text=True)
+        if any(l.split(':')[1:2] == ['lstm'] for l in
+               (_d.stdout + _d.stderr).splitlines() if ':' in l):
+            models.append(('tessdata_expanded', TESS_EXPANDED, 'kan', '#34d399'))
+        else:
+            print("  (skipping tessdata_expanded — starter file, no lstm weights)")
     if not models:
         print("ERROR: No tessdata found.")
         sys.exit(1)
