@@ -83,6 +83,10 @@ WORDS_PER_LINE = 6
 MAX_LINES_PER_GRAPHEME = 40
 MIN_WORDS_NEEDED = 3
 
+# A grapheme is "font-specific" only if a real MAJORITY of fonts read it.
+# Anything less is a global failure that happens to have got lucky somewhere.
+FONT_SPECIFIC_MIN_OK = 0.5
+
 
 def log(m=''):
     print(m, flush=True)
@@ -150,8 +154,16 @@ def main():
         if g['acc'] > args.threshold:
             healthy.append(g)
             continue
+        # Bucket by the PROPORTION of fonts that fail, not by "did any font
+        # succeed". With 9-16 fonts per grapheme, a single lucky hit was enough
+        # to file a grapheme as font-specific — which is how 257 graphemes ended
+        # up in that bucket while every font was failing 200+ of them. That is
+        # not a font problem being described, it is a global one wearing the
+        # wrong label, and the label decides whether we generate data or go
+        # looking at images.
         oks = sum(1 for f in g['fonts'] if f['ok'])
-        (font_specific if oks > 0 else universal).append(g)
+        total = len(g['fonts']) or 1
+        (font_specific if oks / total >= FONT_SPECIFIC_MIN_OK else universal).append(g)
 
     # Structural failures with no sample at all (the Latin block) still matter.
     for g in data['graphemes']:
@@ -168,6 +180,12 @@ def main():
     log(f'  {len(structural):>5}  STRUCTURAL     not in the unicharset — training cannot fix')
     log(f'  {len(font_specific):>5}  FONT-SPECIFIC  works in some fonts — suspect the image, not the model')
     log(f'  {len(universal):>5}  UNIVERSAL      fails everywhere — more context data may help')
+    log('')
+    log('  Read these against how they were measured: one grapheme per image,')
+    log('  in isolation, at PSM 13. A model trained on running text is being')
+    log('  asked to read a single floating glyph with no neighbours, which is')
+    log('  harder than its real job. Treat the failures as a ranked list of')
+    log('  weak spots, not as an accuracy figure for the model.')
 
     # ── 1. Structural ───────────────────────────────────────────────────────
     if structural:

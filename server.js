@@ -91,6 +91,14 @@ function rotateLogIfNeeded() {
 
 // ── Middleware ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "50mb" }));
+// no-store on the dashboard itself. It is a single 158KB inline-script page,
+// so a cached copy means new buttons exist in the file and not in the browser —
+// clicking them calls a function the loaded page has never heard of, and the
+// only symptom is that nothing happens.
+app.use((req, res, next) => {
+  if (req.path === "/" || req.path.endsWith(".html")) res.set("Cache-Control", "no-store");
+  next();
+});
 app.use(express.static(P.public));
 app.use("/test-images", express.static(path.join(ROOT, "test-images")));
 // Generated HTML reports (unit coverage, sweeps). Written by scripts, read-only here.
@@ -881,6 +889,31 @@ app.get("/api/log/stream", (req, res) => {
 // The portal previously had no answer to "is this still going?" — the only
 // signal was the log, and a step that prints nothing for ten minutes was
 // indistinguishable from one that had died.
+// Triage results, so the dashboard can show what was found and offer the
+// follow-up action rather than leaving the user with a wall of log text.
+app.get("/api/remediation", (req, res) => {
+  const f = path.join(ROOT, "output", "reports", "remediation.json");
+  if (!fs.existsSync(f)) return res.json({ available: false });
+  try {
+    const d = JSON.parse(fs.readFileSync(f, "utf8"));
+    res.json({
+      available: true,
+      mtime: fs.statSync(f).mtimeMs,
+      structural: (d.structural || []).length,
+      fontSpecific: (d.font_specific || []).length,
+      universal: (d.universal || []).length,
+      generatedLines: d.generated_lines || 0,
+      starved: (d.starved || []).length,
+      confusions: (d.confusions || []).slice(0, 12),
+      hasLatin: (d.structural || []).some(g => /^[A-Za-z]$/.test(g)),
+      sample: {
+        universal: (d.universal || []).slice(0, 24),
+        fontSpecific: (d.font_specific || []).slice(0, 12),
+      },
+    });
+  } catch (e) { res.json({ available: false, error: e.message }); }
+});
+
 app.get("/api/job", (req, res) => {
   const job = activeJob();
   if (!job) return res.json({ running: false, completed: completedSteps });

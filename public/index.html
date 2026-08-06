@@ -812,7 +812,27 @@ footer a:hover { text-decoration: underline; }
         style="font-size:.85rem;padding:9px 14px">View ↗</a>
       <button class="btn step-run-btn" id="sb-remediate"
         onclick="runRemediate()"
-        style="font-size:.95rem;padding:9px 18px">Fix what's failing</button>
+        style="font-size:.95rem;padding:9px 18px">Diagnose failures</button>
+    </div>
+
+    <!-- Triage results. This panel is the missing half of the old
+         "Fix what's failing" button: that button ran a DIAGNOSIS, printed it to
+         the log, and offered no way to act on it — so it looked broken because
+         nothing ever got fixed. The generate step lives here now, enabled only
+         when the triage found something data can actually fix. -->
+    <div id="remed-panel" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <b style="font-size:.9rem">Diagnosis</b>
+        <span id="remed-when" style="color:var(--mute);font-size:.75rem"></span>
+      </div>
+      <div id="remed-counts" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+      <div id="remed-detail" style="font-size:.78rem;color:#475569;line-height:1.6"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;align-items:center">
+        <button class="btn btn-primary step-run-btn" id="sb-remed-gen"
+          onclick="runRemediateGenerate()" style="font-size:.85rem;padding:7px 14px">
+          Generate targeted training data</button>
+        <span id="remed-gen-note" style="font-size:.75rem;color:var(--mute)"></span>
+      </div>
     </div>
     <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:.78rem">
       <input id="pl-classical" type="checkbox" style="margin-top:3px">
@@ -2734,6 +2754,71 @@ async function runCoverageReport() {
 // Triage the coverage report, then optionally generate targeted data.
 // Two-stage on purpose: the triage usually says "training is not the fix",
 // and it is worth reading that before generating anything.
+// Render the triage so it is actionable rather than 60 lines of log text.
+async function loadRemediation() {
+  const el = id => document.getElementById(id);
+  const panel = el('remed-panel');
+  if (!panel) return;
+  let d;
+  try { d = await (await fetch('/api/remediation')).json(); } catch { return; }
+  if (!d.available) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  el('remed-when').textContent = new Date(d.mtime).toLocaleString();
+
+  const chip = (n, label, colour, title) =>
+    `<span title="${title}" style="border:1px solid ${colour};color:${colour};`
+    + `border-radius:6px;padding:4px 10px;font-size:.78rem;white-space:nowrap">`
+    + `<b style="font-size:.95rem">${n}</b> ${label}</span>`;
+  el('remed-counts').innerHTML =
+      chip(d.structural, 'structural', '#b91c1c',
+           'Not in the unicharset. No label exists to predict — training cannot fix these.')
+    + chip(d.fontSpecific, 'font-specific', '#b45309',
+           'A majority of fonts read these correctly. Suspect the image, not the model.')
+    + chip(d.universal, 'universal', '#0f766e',
+           'Encodable and correctly rendered, but read wrong nearly everywhere. The only class more data fixes.');
+
+  let h = '';
+  if (d.hasLatin) {
+    h += `<p style="margin:0 0 8px"><b>English letters are absent from the unicharset.</b>
+      The model cannot emit A–Z or a–z at all, so any line containing an English
+      word is dropped from training. Enabling it changes the unicharset and
+      forces a fresh run, so it is a deliberate choice:
+      <code>./scripts/00c-expand-unicharset.sh --with-latin</code></p>`;
+  }
+  if (d.confusions && d.confusions.length) {
+    h += '<p style="margin:0 0 4px"><b>Most consistent confusions</b> — these need contrast, not volume:</p><p style="margin:0 0 8px">'
+      + d.confusions.slice(0, 8).map(c =>
+          `<span style="display:inline-block;margin:0 10px 4px 0">${c.target} → ${c.read_as}
+           <span style="color:var(--mute)">(${c.fonts})</span></span>`).join('')
+      + '</p>';
+  }
+  h += `<p style="margin:0;color:var(--mute)">Measured one grapheme per image, in
+    isolation. A model trained on running text is being asked to read a single
+    floating glyph with no neighbours — harder than its real job. Read this as a
+    ranked list of weak spots, not as an accuracy figure.</p>`;
+  el('remed-detail').innerHTML = h;
+
+  const gen = el('sb-remed-gen');
+  gen.disabled = !d.universal;
+  el('remed-gen-note').textContent = d.universal
+    ? `Builds word-context lines for the ${d.universal} universal failures, then renders them.`
+    : 'Nothing here that more data would fix.';
+}
+
+// Stage 2: actually generate. Separate from the diagnosis on purpose — most
+// failures land in classes where adding data makes things worse, and the
+// triage is what tells you which.
+async function runRemediateGenerate() {
+  if (!confirm('Generate targeted training data?\n\n'
+    + 'Mines the corpus for real words containing each universal failure,\n'
+    + 'composes them into lines, and renders them across all fonts into\n'
+    + 'rendered/ — where 02-make-lstmf.sh will pick them up.\n\n'
+    + 'Capped at 40 lines per grapheme: uncapped oversampling makes the model\n'
+    + 'over-predict the rare thing everywhere and overall CER gets worse.\n\n'
+    + 'You will need to rebuild lstmf and retrain for this to have any effect.')) return;
+  run('remediate', false, null, '&generate=1&render=1');
+}
+
 async function runRemediate() {
   const go = confirm('Triage the failing characters?\n\n'
     + 'Sorts every failing grapheme into:\n'
@@ -2745,6 +2830,11 @@ async function runRemediate() {
     + 'first two classes, where adding data makes things worse, not better.');
   if (!go) return;
   run('remediate');
+  // The step runs in the background; poll for the report it writes.
+  const t = setInterval(async () => {
+    const j = await (await fetch('/api/job')).json().catch(() => ({}));
+    if (!j.running) { clearInterval(t); loadRemediation(); }
+  }, 3000);
 }
 
 // ── Review queue ─────────────────────────────────────────────────
@@ -3070,6 +3160,7 @@ async function pollJob() {
 }
 setInterval(pollJob, 2000);
 pollJob();
+loadRemediation();
 
 async function stopJob() {
   if (!confirm(`Stop "${JOB_LABELS[JOB.step] || JOB.step}"?\n\n`
