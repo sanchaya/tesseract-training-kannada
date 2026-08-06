@@ -144,6 +144,18 @@ def main():
         return 1
     rng = random.Random(SEED)
 
+    # unit-coverage-report.py already filters combinations to the standard mark
+    # set (nukta and the length marks are dropped). Nothing to re-filter here —
+    # but assert it, because triage silently generating training data for ಕ಼
+    # would be worse than not running at all.
+    STRAY = set('಼ೕೖೄ')
+    stray = [g['g'] for g in data['graphemes'] if STRAY & set(g['g'])]
+    if stray:
+        log(f'  ⚠  {len(stray)} grapheme(s) in the report use non-standard marks')
+        log(f'     ({" ".join(stray[:12])}). Re-run the coverage report — it should')
+        log('     have excluded these. Skipping them here.')
+        data['graphemes'] = [g for g in data['graphemes'] if not (STRAY & set(g['g']))]
+
     structural, font_specific, universal, healthy = [], [], [], []
     for g in data['graphemes']:
         if g['category'] in ('special',) or not g.get('n'):

@@ -73,6 +73,47 @@ BASE_DIRS = [ROOT / 'tessdata_expanded', ROOT / 'tessdata_best']
 VOWEL_NAMES = {'A', 'AA', 'I', 'II', 'U', 'UU', 'E', 'EE', 'AI', 'O', 'OO', 'AU',
                'VOCALIC R', 'VOCALIC RR', 'VOCALIC L', 'VOCALIC LL'}
 
+# The combining marks that belong in a Kannada conjunct/syllable coverage test.
+#
+#   ಾ ಿ ೀ ು ೂ ೃ ೆ ೇ ೈ ೊ ೋ ೌ   the twelve productive vowel signs
+#   ಂ ಃ                          anusvara, visarga
+#   ್                            virama (the ottu former)
+#
+# Deliberately EXCLUDED, though Unicode defines them for Kannada:
+#   ೄ  U+0CC4  VOWEL SIGN VOCALIC RR   — vanishingly rare, effectively unused
+#   ೕ  U+0CD5  LENGTH MARK             — a composition artefact, not a mark a
+#   ೖ  U+0CD6  AI LENGTH MARK            reader ever sees on its own
+#   ಼  U+0CBC  NUKTA                   — for foreign sounds; absent from
+#                                         historical Kannada printing entirely
+#
+# The nukta is the one that actually mattered: 26 combinations (ಕ಼ ಖ಼ ಗ಼ …) came
+# in from 00c-expand-unicharset.sh's word list and were being scored as OCR
+# failures. They are not failures worth chasing — no page in this corpus
+# contains them.
+COVERAGE_MARKS = set('ಾಿೀುೂೃೆೇೈೊೋೌಂಃ್')
+
+# Every combining mark Unicode assigns to Kannada, so exclusions can be
+# reported rather than silently applied.
+ALL_KANNADA_MARKS = set('ಾಿೀುೂೃೄೆೇೈೊೋೌ್ಂಃ಼ೕೖ')
+
+
+def marks_in(g):
+    return {c for c in g if c in ALL_KANNADA_MARKS}
+
+
+def wanted_grapheme(g, all_marks=False):
+    """Should this grapheme be part of the coverage test?
+
+    Keeps single characters (the base alphabet) always. For combinations, every
+    combining mark must be one we actually test — otherwise a grapheme no reader
+    will ever meet is scored alongside ones that matter, and a red cell for ಕ಼
+    reads exactly like a red cell for ಕ್ಕ.
+    """
+    if all_marks or len(g) == 1:
+        return True
+    ms = marks_in(g)
+    return not ms or ms <= COVERAGE_MARKS
+
 
 def find_model(dirs, lang):
     for d in dirs:
@@ -333,6 +374,41 @@ def render_html(data, path):
     p("<span style='margin-left:8px'><i class='sw' style='outline:2px dashed #dc2626;"
       "background:#fff'></i>not in unicharset — cannot ever be emitted</span></div>")
 
+    mc = meta.get('markCoverage') or {}
+    if mc:
+        thin = [m for m, v in mc.items() if v['combos'] < 20]
+        p("<h2>Mark coverage &nbsp;<span style='color:var(--mute);font-weight:400'>"
+          "(how many consonant combinations exist per mark)</span></h2>")
+        p("<table style='max-width:640px'><tr><th>mark</th><th>combinations</th>"
+          "<th>tested</th><th>accuracy</th></tr>")
+        for m, v in mc.items():
+            acc = f"{v['acc']:.0f}%" if v.get('acc') is not None else '—'
+            warn = " style='color:#b45309'" if v['combos'] < 20 else ""
+            p(f"<tr{warn}><td style='font-size:1.15rem'>{html.escape(m)} "
+              f"<span style='color:var(--mute);font-size:.7rem'>U+{ord(m):04X}</span></td>"
+              f"<td>{v['combos']}</td><td>{v['tested']}</td><td>{acc}</td></tr>")
+        p("</table>")
+        if thin:
+            p(f"<p class='note' style='margin-top:10px'><b>{len(thin)} mark(s) have almost "
+              f"nothing to test: {' '.join(html.escape(m) for m in thin)}.</b> "
+              "That is a gap in the <i>inventory</i>, not a model failure — the generator "
+              "ran with <code>--attested-only</code>, so combinations absent from the "
+              "corpus were never rendered, and nothing here can report on them either "
+              "way. Regenerate the inventory without that restriction to close it.</p>")
+
+    if meta.get('excluded'):
+        ex = meta['excluded']
+        p(f"<h2>Excluded from the test &nbsp;<span style='color:var(--mute);font-weight:400'>"
+          f"({len(ex)})</span></h2>")
+        p("<p style='font-size:.8rem;color:var(--mute);margin:0 0 8px'>Combinations using "
+          "marks outside the standard set — nukta, length marks, vocalic RR. No page in "
+          "this corpus contains them, so scoring them as failures is noise. "
+          "<code>--all-marks</code> puts them back.</p>")
+        p("<div class='grid'>" + ''.join(
+            f"<div class='cell' style='background:#f1f5f9;color:#64748b'>"
+            f"<div class='g'>{html.escape(g)}</div><div class='p'>skip</div></div>"
+            for g in ex[:60]) + "</div>")
+
     for cat in CATEGORY_ORDER:
         items = by_cat.get(cat)
         if not items:
@@ -387,6 +463,9 @@ def main():
     ap.add_argument('--psm', default='13', help='default 13 = raw line, as trained')
     ap.add_argument('--jobs', type=int, default=max(1, (os.cpu_count() or 4) - 1))
     ap.add_argument('--static', action='store_true', help='unicharset only, no OCR')
+    ap.add_argument('--all-marks', action='store_true',
+                    help='include combinations using marks outside the standard '
+                         'set (nukta, length marks, vocalic RR) — off by default')
     args = ap.parse_args()
 
     REPORTS.mkdir(parents=True, exist_ok=True)
@@ -450,6 +529,8 @@ def main():
         per[r['gt']].append(r)
 
     keys = set(per) | set(units) | _static_labels | REFERENCE
+    excluded = sorted(k for k in keys if not wanted_grapheme(k, args.all_marks))
+    keys = {k for k in keys if wanted_grapheme(k, args.all_marks)}
     graphemes = []
     for g in sorted(keys):
         rs = per.get(g, [])
@@ -481,6 +562,20 @@ def main():
         'never': sum(1 for g in tested if g['acc'] == 0),
         'unencodable': sum(1 for g in graphemes if not g['encodable']),
     }
+    # How well is each tested mark actually represented? A mark with one sample
+    # is not being tested, it is being sampled — and a green cell there means
+    # much less than a green cell for ್ with a thousand.
+    mark_cov = {}
+    for m in sorted(COVERAGE_MARKS):
+        n = sum(1 for g in graphemes if m in g['g'] and len(g['g']) > 1)
+        n_tested = sum(1 for g in graphemes if m in g['g'] and len(g['g']) > 1 and g['n'])
+        ok = sum(g['acc'] * g['n'] for g in graphemes
+                 if m in g['g'] and len(g['g']) > 1 and g['n'])
+        tot = sum(g['n'] for g in graphemes if m in g['g'] and len(g['g']) > 1 and g['n'])
+        mark_cov[m] = {'combos': n, 'tested': n_tested,
+                       'acc': (100 * ok / tot) if tot else None,
+                       'name': unicodedata.name(m, '')}
+
     data = {
         'meta': {
             'when': datetime.now().strftime('%Y-%m-%d %H:%M'),
@@ -489,6 +584,9 @@ def main():
             'base': args.baseline if has_base else None,
             'measured': measured and bool(tested),
             'summary': summary,
+            'excluded': excluded,
+            'markCoverage': mark_cov,
+            'allMarks': args.all_marks,
         },
         'graphemes': graphemes,
     }
@@ -512,6 +610,33 @@ def main():
         for c, k in worst.most_common(6):
             print(f'     {c:20} {k}')
     print(f'  not encodable    : {summary["unencodable"]}')
+
+    if excluded:
+        print('')
+        print(f'  excluded {len(excluded)} combination(s) using marks outside the')
+        print('  standard set (nukta, length marks, vocalic RR) — no page in this')
+        print('  corpus contains them, so scoring them as failures is noise:')
+        print(f'    {" ".join(excluded[:24])}')
+        print('    (--all-marks to include them)')
+
+    print('')
+    print('  Mark coverage — how many consonant combinations exist per mark:')
+    print(f'    {"mark":6} {"combos":>7} {"tested":>7} {"acc":>7}')
+    thin = []
+    for m, v in mark_cov.items():
+        acc = f'{v["acc"]:.0f}%' if v['acc'] is not None else '—'
+        flag = ''
+        if v['combos'] < 20:
+            flag = '  ← thin'
+            thin.append(m)
+        print(f'    {m:6} {v["combos"]:>7} {v["tested"]:>7} {acc:>7}{flag}')
+    if thin:
+        print('')
+        print(f'  {len(thin)} mark(s) have almost no combinations to test: {" ".join(thin)}')
+        print('  That is a gap in the INVENTORY, not a model failure — the generator')
+        print('  ran with --attested-only, so combinations absent from the corpus were')
+        print('  never rendered. Nothing here can report on them either way. To close')
+        print('  it, regenerate the inventory without that restriction.')
     print('')
     print('━' * 72)
     print(f'  {REPORTS.relative_to(ROOT)}/unit-coverage.html')
