@@ -131,10 +131,39 @@ def _load_units():
     _MAXU = max((len(u) for u in _UNITS), default=1)
 
 
+def _clean(t):
+    """Mirror of _clean_gt in 02-make-lstmf.sh.
+
+    Kept deliberately in step with it: if this is stricter, we reject words
+    training would have accepted; if looser, we generate lines training then
+    throws away. Either way the remediation silently misses its target.
+    """
+    t = t.replace('೦', 'ಂ')
+    t = re.sub(r'<[^>]+>', '', t)
+    t = re.sub(r'[।॥]', '', t)
+    t = re.sub(r'[०-९]', '', t)
+    t = re.sub(r'\([ಀ-೿]\)', '', t)
+    t = t.replace('+', '').replace('|', '')
+    t = re.sub(r'[\'"ʼ]', '', t)
+    t = re.sub(r'[a-zA-Z]', '', t)
+    # Word-final virama → virama + ZWNJ. The unicharset has ್‌ but no bare ್,
+    # so this single rule is the difference between 62% and 99.7% acceptance.
+    t = re.sub(r'್(?![ಕ-ಹೞೠೡ‌])', r'್‌', t)
+    return re.sub(r'\s+', ' ', t).strip()
+
+
 def encodable(text):
+    """Would 02-make-lstmf.sh accept this text?
+
+    Cleans FIRST. Checking the raw form is the trap: it reports 62% of these
+    lines unencodable when the true figure is 0.3%, because _clean_gt does real
+    work before its own check — most importantly appending ZWNJ to word-final
+    viramas so they reach the ್‌ half-form slot the unicharset actually has.
+    """
     _load_units()
     if not _UNITS:
         return True
+    text = _clean(text)
     i, n = 0, len(text)
     while i < n:
         if text[i] in ' \t\n':
@@ -152,15 +181,19 @@ def encodable(text):
 def build_word_index(graphemes):
     """Map grapheme → corpus words containing it. One pass over the corpus.
 
-    Words the unicharset cannot encode are rejected here rather than downstream.
-    They come mostly from classical-corpus-kannada/, which is raw transcription
-    and never went through clean-corpus.py.
+    Words are checked for encodability, but against the CLEANED form — the same
+    normalisation 02-make-lstmf.sh applies before its own check.
 
-    Skipping them matters more than it looks. Lines are six words joined, and
-    02-make-lstmf.sh discards a line if ANY word in it fails to encode — so one
-    bad word takes five good ones with it. Measured on the first run: 38% of
-    remediation images were built and then thrown away, and the loss fell
-    unevenly across exactly the graphemes the remediation existed to fix.
+    Checking the raw form instead is a trap I fell into and should record: it
+    says 62% of these lines are unencodable, when the true figure is 0.3%.
+    _clean_gt does real work first — strips editorial markup, dandas, stray
+    Latin, and (the big one) appends ZWNJ to word-final viramas so they map to
+    the ್‌ half-form slot the unicharset actually has. Judging a word before that
+    normalisation rejects thousands of perfectly usable ones.
+
+    The check still earns its place: a line is six words joined and 02 discards
+    the whole line if any word fails, so one bad word costs five good ones. But
+    it must model the real gate, not a stricter imaginary one.
     """
     targets = sorted(graphemes, key=len, reverse=True)
     index = collections.defaultdict(list)

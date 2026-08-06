@@ -21,9 +21,16 @@
 #   same font, same page, same rendering pipeline, often the same sentence
 #   fragment. The model can memorise its way to a good score on that.
 #
-#   So we hold out whole GROUPS. A group is one page of one title in one font
-#   (classical), or one font's inventory sheet. Held-out pages were never seen in
-#   any form, which is the only way the eval number means anything.
+#   So we hold out whole GROUPS, keyed by TEXT and never by font. A group is one
+#   physical page of one book, one corpus line, or one grapheme — with ALL of its
+#   font renderings on the same side of the split.
+#
+#   The font used to be part of that key, which quietly undid the whole exercise:
+#   page0007 in GMP and page0007 in GTN-Bold were independent groups, so one
+#   could sit in train while the other sat in eval. Same words, same line breaks,
+#   only the typeface differs. A model that has memorised the text scores well on
+#   the "held-out" copy, and the curve reports generalisation it has not achieved.
+#   Every source here is TEXT x FONT, so this affected all of it.
 #
 #   Real scans are handled separately and never enter the eval list here: they
 #   are too scarce to spend on it, and scan-holdout/ already reserves whole pages
@@ -58,24 +65,28 @@ SEED = 20260805      # fixed: the split must be identical across reruns, or
 
 def group_of(path):
     """
-    The unit we hold out as a whole.
+    The unit we hold out as a whole — keyed by TEXT, deliberately not by file.
 
-    classical/<title>__<font>_<style>/pageNNNN_lineNNN.lstmf
-        → ('classical', '<title>__<font>_<style>/pageNNNN')
-          One physical page. Lines from the same page share layout, ink
-          weight and hyphenation, so they must not straddle the split.
+    The font must not appear in this key. It used to, and that quietly undid the
+    entire point of the split: page0007 of pampashataka rendered in GMP and the
+    same page rendered in GTN-Bold were two independent groups, so one could sit
+    in train while the other sat in eval. Same words, same line breaks, same
+    hyphenation — only the typeface differs. A model that has memorised the text
+    scores well on the "held-out" copy, and the eval curve reports generalisation
+    it has not achieved.
 
-    inventory/<font>/char_XXXX.lstmf
-        → ('inventory', '<font>/char_XXXX')
-          Per-character, NOT per-font. Holding out a whole font's inventory
-          would leave that font's glyph shapes untaught for the sake of ~1.6K
-          eval lines. Individual inventory entries are genuinely distinct
-          labels — deliberately enumerated combinations, not near-duplicate
-          lines off the same page — so a per-character split is an honest test
-          without starving any font.
+    Every source here is the cross product of TEXT x FONT, so this affected all
+    of it: 96% classical, plus rendered and inventory. Stripping the font from
+    the key keeps all renderings of one text on the same side.
 
-    rendered/<...>/<file>.lstmf        → ('rendered', '<dir>')
-    scan/<page>/lineNNNN.lstmf         → ('scan', '<page>')
+    classical/<title>__<font>_<style>/pageNNNN_lineNNN
+        -> ('classical', '<title>/pageNNNN')          one physical page of one book
+    rendered/<fid>_<style>_lineNNNN                   (also _remedNNNN)
+        -> ('rendered', 'line:NNNN')                  one corpus line
+    inventory/<font>/char_XXXX
+        -> ('inventory', 'char_XXXX')                 one grapheme
+    scan/<page>/lineNNNN
+        -> ('scan', '<page>')                         already font-free
     """
     p = str(path)
     i = p.rfind('/lstmf/')
@@ -84,11 +95,20 @@ def group_of(path):
     kind = parts[0] if parts else 'other'
 
     if kind == 'classical' and len(parts) >= 3:
+        title = parts[1].split('__')[0]          # drop __<font>_<style>
         m = re.match(r'(page\d+)', parts[2])
-        page = m.group(1) if m else parts[2]
-        return kind, f'{parts[1]}/{page}'
+        return kind, f'{title}/{m.group(1) if m else parts[2]}'
+
+    if kind == 'rendered' and len(parts) >= 2:
+        # <fid>_<style>_line0042.lstmf / <fid>_<style>_remed0042.lstmf
+        m = re.search(r'_(line|remed)(\d+)', parts[1])
+        if m:
+            return kind, f'{m.group(1)}:{m.group(2)}'
+        return kind, Path(parts[1]).stem
+
     if kind == 'inventory' and len(parts) >= 3:
-        return kind, f'{parts[1]}/{Path(parts[2]).stem}'
+        return kind, Path(parts[2]).stem          # drop the font directory
+
     if len(parts) >= 2:
         return kind, parts[1]
     return kind, rel
