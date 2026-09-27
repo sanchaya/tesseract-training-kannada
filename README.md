@@ -3,13 +3,13 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-5B21B6.svg)](LICENSE)
 [![Fonts](https://img.shields.io/badge/fonts-SIL%20OFL%201.1-7C3AED.svg)](https://fonts.sanchaya.net)
 [![Model](https://img.shields.io/badge/model-kan__hist-059669.svg)](best/)
-[![Portal](https://img.shields.io/badge/portal-train--ocr.sanchaya.net-F59E0B.svg)](https://train-ocr.sanchaya.net)
+[![Portal](https://img.shields.io/badge/portal-trainocr.sanchaya.net-F59E0B.svg)](https://trainocr.sanchaya.net)
 
 `kan_hist.traineddata` is a fine-tuned Tesseract 5 LSTM model for OCR of Kannada text printed in 19th-century letterpress typefaces. It is trained on the [Karnata font family](https://fonts.sanchaya.net) — digital revivals of historical Kannada printing types developed by [Sanchaya](https://sanchaya.org).
 
 The standard `kan` model was trained on modern digital fonts and struggles with the distinctive stroke shapes, ink spread, and conjunct forms of historical letterpress material. `kan_hist` fills this gap.
 
-**TrainOCR** wraps the entire pipeline in a web portal — making Tesseract training approachable for librarians, archivists, and language communities, not just ML engineers. Try it at [train-ocr.sanchaya.net](https://train-ocr.sanchaya.net).
+**TrainOCR** wraps the entire pipeline in a web portal — making Tesseract training approachable for librarians, archivists, and language communities, not just ML engineers. Try it at [trainocr.sanchaya.net](https://trainocr.sanchaya.net).
 
 ---
 
@@ -54,7 +54,7 @@ python portal.py
 
 ### Deploying to a server
 
-To run the portal on a server behind nginx (as at train-ocr.sanchaya.net), use the deploy script from your own checkout:
+To run the portal on a server behind nginx (as at trainocr.sanchaya.net), use the deploy script from your own checkout:
 
 ```bash
 cp deploy/deploy.env.example deploy/deploy.env   # set DEPLOY_HOST, DOMAIN, …

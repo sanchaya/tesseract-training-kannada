@@ -1,4 +1,4 @@
-# Deploying TrainOCR to train-ocr.sanchaya.net
+# Deploying TrainOCR to trainocr.sanchaya.net
 
 `deploy/deploy.sh` runs on your laptop. It rsyncs this checkout to the
 server over SSH and runs `deploy/server-install.sh` there as root.
@@ -8,7 +8,7 @@ server over SSH and runs `deploy/server-install.sh` there as root.
 - Ubuntu 22.04/24.04 (or Debian), nginx allowed to be already installed
   and serving other sites — only a `trainocr` site is added
 - An SSH user with passwordless `sudo`
-- DNS A record for `train-ocr.sanchaya.net` pointing at the server
+- DNS A record for `trainocr.sanchaya.net` pointing at the server
   (needed before TLS can be issued)
 
 ## First deploy
