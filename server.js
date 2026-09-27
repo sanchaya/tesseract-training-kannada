@@ -12,8 +12,7 @@
  *   node --watch server.js  # dev with auto-restart
  *
  * Deploy:
- *   pm2 start ecosystem.config.js
- *   # Reverse-proxy with nginx → trainocr.sanchaya.net
+ *   ./deploy/deploy.sh   # see deploy/DEPLOY.md
  */
 
 "use strict";
@@ -2929,7 +2928,9 @@ app.get("*", (req, res) => {
 });
 
 // ── Start ──────────────────────────────────────────────────────────────────
-const server = app.listen(PORT, () => {
+// HOST=127.0.0.1 in production keeps the portal reachable only through nginx;
+// unset, it listens on every interface as before.
+const server = app.listen(PORT, process.env.HOST, () => {
   console.log(`\n${"━".repeat(52)}`);
   console.log(`  TrainOCR by Sanchaya`);
   console.log(`  http://localhost:${PORT}`);

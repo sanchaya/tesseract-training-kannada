@@ -15,6 +15,8 @@ PORT=8080 node server.js
 node --watch server.js
 ```
 
+In production the portal runs as the `trainocr` systemd service behind nginx — see [`deploy/DEPLOY.md`](../deploy/DEPLOY.md).
+
 ## REST API
 
 All API endpoints return JSON unless noted.
@@ -351,6 +353,7 @@ Returns a self-contained HTML report as a file download. Includes BCER chart, pi
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3000` | Port to listen on |
+| `HOST` | (all interfaces) | Address to bind; the deploy sets `127.0.0.1` so only nginx can reach the portal |
 | `BEST_CHECKPOINT` | (auto) | Override checkpoint for packaging step |
 
 ## Directory assumptions

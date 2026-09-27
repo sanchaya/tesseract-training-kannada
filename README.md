@@ -3,13 +3,13 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-5B21B6.svg)](LICENSE)
 [![Fonts](https://img.shields.io/badge/fonts-SIL%20OFL%201.1-7C3AED.svg)](https://fonts.sanchaya.net)
 [![Model](https://img.shields.io/badge/model-kan__hist-059669.svg)](best/)
-[![Portal](https://img.shields.io/badge/portal-trainocr.sanchaya.net-F59E0B.svg)](https://trainocr.sanchaya.net)
+[![Portal](https://img.shields.io/badge/portal-train--ocr.sanchaya.net-F59E0B.svg)](https://train-ocr.sanchaya.net)
 
 `kan_hist.traineddata` is a fine-tuned Tesseract 5 LSTM model for OCR of Kannada text printed in 19th-century letterpress typefaces. It is trained on the [Karnata font family](https://fonts.sanchaya.net) — digital revivals of historical Kannada printing types developed by [Sanchaya](https://sanchaya.org).
 
 The standard `kan` model was trained on modern digital fonts and struggles with the distinctive stroke shapes, ink spread, and conjunct forms of historical letterpress material. `kan_hist` fills this gap.
 
-**TrainOCR** wraps the entire pipeline in a web portal — making Tesseract training approachable for librarians, archivists, and language communities, not just ML engineers. Try it at [trainocr.sanchaya.net](https://trainocr.sanchaya.net).
+**TrainOCR** wraps the entire pipeline in a web portal — making Tesseract training approachable for librarians, archivists, and language communities, not just ML engineers. Try it at [train-ocr.sanchaya.net](https://train-ocr.sanchaya.net).
 
 ---
 
@@ -51,6 +51,18 @@ pip install -r requirements-portal.txt
 python portal.py
 # → http://localhost:5000
 ```
+
+### Deploying to a server
+
+To run the portal on a server behind nginx (as at train-ocr.sanchaya.net), use the deploy script from your own checkout:
+
+```bash
+cp deploy/deploy.env.example deploy/deploy.env   # set DEPLOY_HOST, DOMAIN, …
+./deploy/deploy.sh --setup --data                # first time
+./deploy/deploy.sh                               # every update after that
+```
+
+See [Deploying](#deploying) below.
 
 From the portal Dashboard, click each step button in order. Or run the scripts directly (see [Training workflow](#training-workflow) below).
 
@@ -106,6 +118,13 @@ kan_hist/
 ├── public/
 │   ├── index.html                TrainOCR portal (single-file app)
 │   └── sanchaya-logo.svg         local Sanchaya wordmark (Kannada ಸಂಚಯ)
+│
+├── deploy/
+│   ├── deploy.sh                 run locally: rsync to the server, install, restart
+│   ├── server-install.sh         runs on the server: packages, systemd, nginx, TLS
+│   ├── nginx.conf.template       nginx site (rendered per domain at install time)
+│   ├── deploy.env.example        settings template → deploy/deploy.env (gitignored)
+│   └── DEPLOY.md                 full deployment guide
 │
 ├── fonts.yml                     ← font registry — single source of truth
 ├── server.js                     Node.js/Express backend
@@ -471,6 +490,31 @@ The panel covers 86 characters: 15 vowels, 35 consonants, 24 conjuncts (virama c
 
 ---
 
+## Deploying
+
+`deploy/deploy.sh` runs on your laptop and deploys the working tree to an Ubuntu/Debian server over SSH. It needs an SSH user with passwordless `sudo` and, for HTTPS, DNS for the domain already pointing at the server. nginx may already be serving other sites — the script only adds a `trainocr` site.
+
+```bash
+cp deploy/deploy.env.example deploy/deploy.env
+./deploy/deploy.sh --setup --data   # first deploy
+./deploy/deploy.sh                  # sync code, reinstall deps if lockfiles changed, restart
+./deploy/deploy.sh --dry-run        # show what would be transferred
+./deploy/deploy.sh --data           # also push fonts, tessdata_best, corpus text, best/
+./deploy/deploy.sh --password       # change the basic-auth password
+```
+
+`--setup` installs Tesseract 5 with the training tools, Node 20, a Python venv, and Chrome for Puppeteer. It then:
+
+- runs the portal as the `trainocr` systemd service on `127.0.0.1:3000`, so only nginx can reach it
+- adds the nginx site with HTTP basic auth, because the portal has no login of its own and can start jobs and delete data
+- requests a Let's Encrypt certificate
+
+Server-side data (`rendered/`, `lstmf/`, `output/`, `best/`, `logs/`) is never deleted by a deploy. A running training or render job survives a deploy: only the portal restarts, and it re-finds the job through `output/.job.lock`.
+
+Full guide: [`deploy/DEPLOY.md`](deploy/DEPLOY.md).
+
+---
+
 ## Adding a new font
 
 1. Add an entry to `fonts.yml`:
@@ -617,7 +661,7 @@ See [`docs/AUDIT_2026-08.md`](docs/AUDIT_2026-08.md) for the August 2026 audit �
 
 | Branch | Contents | Start command |
 |--------|----------|---------------|
-| `master` | Node.js / Express portal + Docker | `node server.js` or `docker compose up` |
+| `master` | Node.js / Express portal + Docker + server deploy | `node server.js`, `docker compose up` or `./deploy/deploy.sh` |
 | `python-portal` | Flask / Python portal | `python portal.py` |
 | `static` | Standalone HTML frontend (no backend) | open `public/index.html` |
 

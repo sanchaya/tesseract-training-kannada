@@ -100,3 +100,6 @@ test_aalt*.js
 test_analyze.js
 test_lang*.js
 output/.job.lock
+
+# deploy settings (host, domain, auth user) — see deploy/deploy.env.example
+deploy/deploy.env

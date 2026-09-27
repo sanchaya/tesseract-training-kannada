@@ -1,0 +1,42 @@
+# nginx site for TrainOCR — rendered by deploy/server-install.sh.
+# The double-underscore placeholders are substituted at install time; certbot
+# then adds the 443 listener and the HTTP→HTTPS redirect to this file.
+# Edit this template, not /etc/nginx/sites-available/trainocr.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __DOMAIN__;
+
+    add_header X-Frame-Options        SAMEORIGIN;
+    add_header X-Content-Type-Options nosniff;
+    add_header Referrer-Policy        strict-origin-when-cross-origin;
+
+__AUTH__
+
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json;
+    gzip_comp_level 5;
+
+    # Scan uploads and traineddata files
+    client_max_body_size 200M;
+
+    location / {
+        proxy_pass         http://127.0.0.1:__PORT__;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_set_header   Connection        "";
+
+        # Training log is streamed with SSE, and some API calls run a
+        # tesseract/python step before answering: don't buffer, don't time out.
+        proxy_buffering    off;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+
+    access_log /var/log/nginx/trainocr.access.log;
+    error_log  /var/log/nginx/trainocr.error.log;
+}
