@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TrainOCR — Sanchaya</title>
+<title>TrainOCR - Sanchaya</title>
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="shortcut icon" href="/favicon.ico">
-<meta name="description" content="Tesseract training portal for historical Kannada OCR — Sanchaya">
+<meta name="description" content="Tesseract training portal for historical Kannada OCR - Sanchaya">
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://unpkg.com/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
@@ -686,22 +686,22 @@ footer a:hover { text-decoration: underline; }
   <div class="g4" style="margin-bottom:18px">
     <div class="card">
       <div class="card-label">Steps complete</div>
-      <div class="card-big" id="st-steps">—</div>
+      <div class="card-big" id="st-steps">-</div>
       <div class="card-sub" id="st-steps-total">of 7 pipeline steps</div>
     </div>
     <div class="card">
       <div class="card-label">Best BCER</div>
-      <div class="card-big" id="st-bcer">—</div>
+      <div class="card-big" id="st-bcer">-</div>
       <div class="card-sub">% character error</div>
     </div>
     <div class="card">
       <div class="card-label">Training images</div>
-      <div class="card-big" id="st-imgs">—</div>
+      <div class="card-big" id="st-imgs">-</div>
       <div class="card-sub" id="st-imgs-sub">PNG + gt.txt pairs</div>
     </div>
     <div class="card">
       <div class="card-label">Corpus lines</div>
-      <div class="card-big" id="st-corp">—</div>
+      <div class="card-big" id="st-corp">-</div>
       <div class="card-sub" id="st-corp-sub">training text lines</div>
     </div>
   </div>
@@ -753,7 +753,7 @@ footer a:hover { text-decoration: underline; }
     <div style="flex:1">
       <div style="font-weight:700;color:#92400e;font-size:.9rem">Training is running in the background</div>
       <div style="font-size:.78rem;color:#78350f;margin-top:2px">
-        Do not start another step — it will interrupt the current training run.
+        Do not start another step - it will interrupt the current training run.
         Watch progress in the Live Log tab or scroll down to the log panel.
       </div>
     </div>
@@ -763,7 +763,7 @@ footer a:hover { text-decoration: underline; }
   </div>
 
   <!-- Running-job banner. Hidden until /api/job says something is live.
-       The portal previously gave no answer to "is this still going?" — the only
+       The portal previously gave no answer to "is this still going?" - the only
        signal was the log, so a step that printed nothing for ten minutes looked
        identical to one that had crashed. -->
   <div id="job-banner" style="display:none;border:1.5px solid #3b82f6;background:#eff6ff;
@@ -787,7 +787,7 @@ footer a:hover { text-decoration: underline; }
 
   <!-- ── Primary actions ────────────────────────────────────────────────
        Three steps instead of 25. The old grid exposed every internal stage as
-       a peer button, which made the ORDER look optional — but the ordering is
+       a peer button, which made the ORDER look optional - but the ordering is
        load-bearing (the unicharset defines the recoder, .lstmf caches ground
        truth, 02-make-lstmf resumes from cache), and getting it wrong fails
        silently. run-pipeline.sh owns that ordering now.
@@ -817,7 +817,7 @@ footer a:hover { text-decoration: underline; }
 
     <!-- Triage results. This panel is the missing half of the old
          "Fix what's failing" button: that button ran a DIAGNOSIS, printed it to
-         the log, and offered no way to act on it — so it looked broken because
+         the log, and offered no way to act on it - so it looked broken because
          nothing ever got fixed. The generate step lives here now, enabled only
          when the triage found something data can actually fix. -->
     <div id="remed-panel" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
@@ -836,7 +836,7 @@ footer a:hover { text-decoration: underline; }
     </div>
     <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:.78rem">
       <input id="pl-classical" type="checkbox" style="margin-top:3px">
-      <span><strong>Include classical corpus</strong> — renders ~650K line images from the
+      <span><strong>Include classical corpus</strong> - renders ~650K line images from the
       historical texts. Adds hours; leave off for a quick rebuild.</span>
     </label>
     <p style="font-size:.75rem;color:var(--mute);margin:10px 0 0;line-height:1.5">
@@ -848,7 +848,7 @@ footer a:hover { text-decoration: underline; }
 
   <details style="margin-bottom:14px">
     <summary style="cursor:pointer;font-size:.85rem;font-weight:600;color:var(--brand-d);padding:6px 0">
-      Individual stages — for re-running one step
+      Individual stages - for re-running one step
     </summary>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:10px 0 14px">
     <button class="btn btn-primary step-run-btn" onclick="run('prep')"               id="sb-prep">     ① Prep base</button>
@@ -866,26 +866,26 @@ footer a:hover { text-decoration: underline; }
     <button class="btn btn-primary step-run-btn" onclick="run('specimen', true)"      id="sb-specimen" title="Generate systematic character coverage text and merge into corpus">Specimen</button>
     <button class="btn btn-primary step-run-btn" onclick="runWithPreflight('render')" id="sb-render">  ③ Render images</button>
     <button class="btn step-run-btn" onclick="run('render', true)" id="sb-force-render"
-      title="Re-render every image in place, overwriting existing files. Use after a shaping, font, or corpus change — no need to delete rendered/ first."
+      title="Re-render every image in place, overwriting existing files. Use after a shaping, font, or corpus change - no need to delete rendered/ first."
       style="background:var(--card);color:#b45309;border:1.5px dashed #fde68a;font-size:0.8em;padding:4px 8px">↺ Force re-render</button>
     <button class="btn step-run-btn" onclick="clearAndRerender()" id="sb-clear-render"
       title="Delete all rendered/ PNGs and .gt.txt files, then re-render from corpus"
       style="background:var(--card);color:#b45309;border:1.5px solid #fde68a">↺ Clear &amp; re-render</button>
     <button class="btn btn-primary step-run-btn" onclick="run('inventory')" id="sb-inventory"
-      title="Generate the character inventory — systematic vowel / consonant / conjunct baselines for every font declared in fonts.yml. Required for inventory-first training; ④ Make lstmf includes it automatically once generated.">Inventory</button>
+      title="Generate the character inventory - systematic vowel / consonant / conjunct baselines for every font declared in fonts.yml. Required for inventory-first training; ④ Make lstmf includes it automatically once generated.">Inventory</button>
     <button class="btn step-run-btn" onclick="run('coverage')" id="sb-coverage"
-      title="Scan the corpus for grapheme clusters the unicharset cannot encode (e.g. ರ್ಖ in ಮೂರ್ಖ), and append real example words to 00c-expand-unicharset.sh. Run this BEFORE Expand chars — otherwise gaps are only discovered later, as training failures."
+      title="Scan the corpus for grapheme clusters the unicharset cannot encode (e.g. ರ್ಖ in ಮೂರ್ಖ), and append real example words to 00c-expand-unicharset.sh. Run this BEFORE Expand chars - otherwise gaps are only discovered later, as training failures."
       style="background:var(--card);color:#6d28d9;border:1.5px solid #c4b5fd;font-size:0.8em;padding:4px 8px">🔍 Coverage scan</button>
     <button class="btn step-run-btn" onclick="runCoverageInventory()" id="sb-coverage-inv"
-      title="Generate the COMPLETE Kannada coverage set — every vowel, consonant, consonant×matra, conjunct, half form, anusvara/visarga and numeral, plus clusters mined from the corpus. Writes corpus/coverage/kannada-units.txt for the unicharset and renders images + ground truth for training."
+      title="Generate the COMPLETE Kannada coverage set - every vowel, consonant, consonant×matra, conjunct, half form, anusvara/visarga and numeral, plus clusters mined from the corpus. Writes corpus/coverage/kannada-units.txt for the unicharset and renders images + ground truth for training."
       style="background:var(--card);color:#6d28d9;border:1.5px dashed #c4b5fd;font-size:0.8em;padding:4px 8px">Coverage inventory</button>
     <button class="btn step-run-btn" onclick="showA5Panel()" id="sb-a5"
-      title="Render A5 page images from a classical corpus directory using headless Chrome — correct conjunct shaping for all fonts"
+      title="Render A5 page images from a classical corpus directory using headless Chrome - correct conjunct shaping for all fonts"
       style="background:var(--card);color:#065f46;border:1.5px solid #6ee7b7;font-size:0.8em;padding:4px 8px">🌐 A5 Browser Render</button>
     <button class="btn btn-primary step-run-btn" onclick="runWithPreflight('lstmf')"  id="sb-lstmf">   ④ Make lstmf</button>
     <button class="btn btn-primary step-run-btn" onclick="runWithPreflight('train')"  id="sb-train">   ⑤ Train</button>
     <button class="btn step-run-btn" onclick="runWithPreflight('train','expand')"
-      title="Continue from existing checkpoint AND switch to tessdata_expanded (ಋ ಙ ಝ ಱ). Output-layer remapping is applied automatically. Named checkpoints are preserved. Run once after Expand chars — future Resume runs will also use expanded chars."
+      title="Continue from existing checkpoint AND switch to tessdata_expanded (ಋ ಙ ಝ ಱ). Output-layer remapping is applied automatically. Named checkpoints are preserved. Run once after Expand chars - future Resume runs will also use expanded chars."
       style="background:var(--card);color:#6d28d9;border:1.5px solid #c4b5fd;font-size:0.8em;padding:4px 8px">Train (continue+expanded)</button>
     <button class="btn step-run-btn" onclick="runWithPreflight('train','fresh')"
       title="⚠ Destructive: backs up ALL existing checkpoints and restarts training from base kan.lstm weights using tessdata_expanded. Use only when you want a completely clean run."
@@ -909,9 +909,9 @@ footer a:hover { text-decoration: underline; }
 
   <!-- ── A5 Browser Render panel ────────────────────────────────────────── -->
   <div id="a5-panel" style="display:none;background:var(--card);border:1.5px solid #6ee7b7;border-radius:12px;padding:16px 18px;margin-top:10px">
-    <div style="font-weight:700;font-size:.9rem;margin-bottom:10px;color:#065f46">🌐 A5 Browser Render — correct conjunct shaping</div>
+    <div style="font-weight:700;font-size:.9rem;margin-bottom:10px;color:#065f46">🌐 A5 Browser Render - correct conjunct shaping</div>
     <p style="font-size:.8rem;color:var(--mute);margin-bottom:12px;line-height:1.5">
-      Renders a classical Kannada corpus as A5 page images using headless Chrome — the same
+      Renders a classical Kannada corpus as A5 page images using headless Chrome - the same
       text pipeline as fonts.sanchaya.net.  Conjuncts form correctly even for historical fonts
       (GMP, WMP, GTN) whose GSUB tables are incomplete.
     </p>
@@ -941,7 +941,7 @@ footer a:hover { text-decoration: underline; }
         <span style="font-size:.78rem;line-height:1.5">
           <strong>Line images (required for training)</strong><br>
           <span style="color:var(--mute)">Crops each page into one image per text line. Tesseract
-          cannot train on full-page images — a page paired with its whole text is CTC-infeasible and
+          cannot train on full-page images - a page paired with its whole text is CTC-infeasible and
           logs <em>“Compute CTC targets failed”</em>. Uncheck only to produce page images for visual
           inspection.</span>
         </span>
@@ -997,7 +997,7 @@ footer a:hover { text-decoration: underline; }
         <p style="font-size:.875rem;color:var(--ink2);line-height:1.7">
           <strong>Fine-tuning</strong> starts from the existing <code>kan</code> model (which already
           understands Kannada grammar and conjuncts) and teaches it the new letterforms by showing it
-          thousands of examples. The result is <code>kan_hist</code> — a model that handles historical
+          thousands of examples. The result is <code>kan_hist</code> - a model that handles historical
           typefaces without losing its understanding of modern Kannada.
         </p>
       </div>
@@ -1021,7 +1021,7 @@ footer a:hover { text-decoration: underline; }
           <div style="margin-left:14px;border-left:2px dashed var(--border2);padding-left:14px;font-size:.74rem;color:var(--mute)">BCER drops as model improves</div>
           <div style="display:flex;align-items:center;gap:10px;font-size:.82rem">
             <div style="width:28px;height:28px;border-radius:50%;background:var(--green);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">✓</div>
-            <span><strong>kan_hist.traineddata</strong> — ready to use</span>
+            <span><strong>kan_hist.traineddata</strong> - ready to use</span>
           </div>
         </div>
       </div>
@@ -1041,8 +1041,8 @@ footer a:hover { text-decoration: underline; }
         <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 2</div>
         <div style="font-weight:700;margin-bottom:5px">Build corpus</div>
         <div style="font-size:.8rem;color:var(--mute);line-height:1.55">
-          Downloads GT text for training images. <strong>Wikisource is the preferred source</strong> — it contains human-proofread transcriptions of 19th-century Kannada books in the same letterpress typefaces we train on. Wikipedia is used as a supplement for modern vocabulary and glyph coverage.<br><br>
-          <strong>③+ Specimen</strong> (optional but recommended) — generates a systematic coverage text: every consonant × matra combination, all common conjuncts, historical vocabulary, and 19th-century style sentences. Merges into the corpus so every character is guaranteed to appear in training across all fonts.
+          Downloads GT text for training images. <strong>Wikisource is the preferred source</strong> - it contains human-proofread transcriptions of 19th-century Kannada books in the same letterpress typefaces we train on. Wikipedia is used as a supplement for modern vocabulary and glyph coverage.<br><br>
+          <strong>③+ Specimen</strong> (optional but recommended) - generates a systematic coverage text: every consonant × matra combination, all common conjuncts, historical vocabulary, and 19th-century style sentences. Merges into the corpus so every character is guaranteed to appear in training across all fonts.
         </div>
       </div>
       <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
@@ -1058,19 +1058,19 @@ footer a:hover { text-decoration: underline; }
       <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
         <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 5</div>
         <div style="font-weight:700;margin-bottom:5px">Train</div>
-        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Runs <code>lstmtraining</code> for up to 400,000 iterations (default). BCER (character error rate) should fall steadily. Safe to stop any time — re-running this step resumes from the rolling checkpoint automatically, preserving full optimizer state. Note: <code>--max_iterations</code> is an absolute count, not relative — so resuming from a high iteration with a low limit will exit immediately.</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Runs <code>lstmtraining</code> for up to 400,000 iterations (default). BCER (character error rate) should fall steadily. Safe to stop any time - re-running this step resumes from the rolling checkpoint automatically, preserving full optimizer state. Note: <code>--max_iterations</code> is an absolute count, not relative - so resuming from a high iteration with a low limit will exit immediately.</div>
       </div>
       <div style="border:1px solid var(--border);border-radius:8px;padding:13px">
         <div style="font-size:.7rem;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Step 6</div>
         <div style="font-weight:700;margin-bottom:5px">Package</div>
-        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Selects the best checkpoint, exports it, and combines it with Kannada language data to produce the final <code>kan_hist.traineddata</code> file — ready to drop into your Tesseract tessdata folder.</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.55">Selects the best checkpoint, exports it, and combines it with Kannada language data to produce the final <code>kan_hist.traineddata</code> file - ready to drop into your Tesseract tessdata folder.</div>
       </div>
     </div>
   </div>
 
   <!-- Corpus sources -->
   <div class="card" style="margin-bottom:16px">
-    <h3 style="font-size:1rem;font-weight:700;color:var(--brand-d);margin-bottom:14px">Corpus sources — where the training text comes from</h3>
+    <h3 style="font-size:1rem;font-weight:700;color:var(--brand-d);margin-bottom:14px">Corpus sources - where the training text comes from</h3>
     <p style="font-size:.875rem;color:var(--ink2);line-height:1.7;margin-bottom:14px">
       The corpus is the text that gets rendered into training images. Quality and relevance matter: a model trained on 19th-century Kannada text will generalise far better to historical documents than one trained on modern web prose.
     </p>
@@ -1088,8 +1088,8 @@ footer a:hover { text-decoration: underline; }
           <a href="https://kn.wikisource.org" target="_blank" style="color:#7c3aed">kn.wikisource.org</a> contains scanned Kannada books with human-proofread transcriptions. Pages are quality-rated:
         </p>
         <div style="font-size:.78rem;color:#5b21b6;line-height:1.7">
-          <div>⭐⭐ <strong>Validated</strong> (quality 4) — reviewed by two people</div>
-          <div>⭐ <strong>Proofread</strong> (quality 3) — reviewed by one person</div>
+          <div>⭐⭐ <strong>Validated</strong> (quality 4) - reviewed by two people</div>
+          <div>⭐ <strong>Proofread</strong> (quality 3) - reviewed by one person</div>
           <div style="color:#9ca3af;margin-top:4px">Quality 1–2 pages are excluded</div>
         </div>
         <div style="margin-top:10px;padding:8px;background:rgba(124,58,237,.08);border-radius:6px;font-size:.76rem;font-family:monospace;color:#4c1d95">
@@ -1107,7 +1107,7 @@ footer a:hover { text-decoration: underline; }
           </div>
         </div>
         <p style="font-size:.8rem;color:var(--mute);line-height:1.6;margin-bottom:10px">
-          Modern Kannada prose — useful for Unicode glyph coverage and modern vocabulary. Less relevant than Wikisource for historical typeface training, but adds breadth.
+          Modern Kannada prose - useful for Unicode glyph coverage and modern vocabulary. Less relevant than Wikisource for historical typeface training, but adds breadth.
         </p>
         <div style="padding:8px;background:var(--card);border-radius:6px;font-size:.76rem;font-family:monospace;color:var(--ink2)">
           python3 corpus/download-wiki.py --lines 5000
@@ -1152,7 +1152,7 @@ footer a:hover { text-decoration: underline; }
         </p>
         <p style="font-size:.875rem;color:var(--ink2);line-height:1.7">
           <strong>Note:</strong> BCER on synthetic training data is not the same as accuracy on real
-          historical scans. A BCER of 1.5% might correspond to 5–8% on real documents — which is still
+          historical scans. A BCER of 1.5% might correspond to 5–8% on real documents - which is still
           dramatically better than the ~25% you'd get from the base <code>kan</code> model on these
           typefaces.
         </p>
@@ -1161,7 +1161,7 @@ footer a:hover { text-decoration: underline; }
         <div style="display:flex;flex-direction:column;gap:8px">
           <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:7px;background:var(--bg)">
             <div style="width:14px;height:14px;border-radius:3px;background:#dc2626;flex-shrink:0"></div>
-            <div><div style="font-size:.8rem;font-weight:700">BCER &gt; 10%</div><div style="font-size:.74rem;color:var(--mute)">Early training. Normal — the model is still adjusting.</div></div>
+            <div><div style="font-size:.8rem;font-weight:700">BCER &gt; 10%</div><div style="font-size:.74rem;color:var(--mute)">Early training. Normal - the model is still adjusting.</div></div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:7px;background:var(--bg)">
             <div style="width:14px;height:14px;border-radius:3px;background:#d97706;flex-shrink:0"></div>
@@ -1186,27 +1186,27 @@ footer a:hover { text-decoration: underline; }
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
       <div style="padding:12px;background:var(--bg);border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">📷 Scanning</div>
-        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Scan at 300 DPI or higher. Grayscale is fine — no need for colour. Avoid shadows; use a flat-bed scanner where possible. For bound books, a book scanner prevents warping.</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Scan at 300 DPI or higher. Grayscale is fine - no need for colour. Avoid shadows; use a flat-bed scanner where possible. For bound books, a book scanner prevents warping.</div>
       </div>
       <div style="padding:12px;background:var(--bg);border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">✍️ Ground truth quality</div>
-        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Transcribe exactly what you see — including archaic spelling, missing punctuation, and any unusual ligatures. Even 20 high-quality scan+GT pairs dramatically improve the model over synthetic data alone.</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Transcribe exactly what you see - including archaic spelling, missing punctuation, and any unusual ligatures. Even 20 high-quality scan+GT pairs dramatically improve the model over synthetic data alone.</div>
       </div>
       <div style="padding:12px;background:var(--bg);border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">📐 Crop for training</div>
-        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Crop scans to single text blocks or paragraphs. Avoid mixed-column pages or pages with decorative borders — those confuse the training signal. Simple, clean blocks of body text work best.</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Crop scans to single text blocks or paragraphs. Avoid mixed-column pages or pages with decorative borders - those confuse the training signal. Simple, clean blocks of body text work best.</div>
       </div>
       <div style="padding:12px;background:var(--bg);border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">⏱ When to stop training</div>
-        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Stop when BCER has not reached a new best for ~10,000 iterations. Beyond that, the model starts memorising training images and performs worse on real scans — this is overfitting. Use the checkpoint browser to package an earlier, better checkpoint.</div>
+        <div style="font-size:.8rem;color:var(--mute);line-height:1.6">Stop when BCER has not reached a new best for ~10,000 iterations. Beyond that, the model starts memorising training images and performs worse on real scans - this is overfitting. Use the checkpoint browser to package an earlier, better checkpoint.</div>
       </div>
       <div style="padding:12px;background:var(--bg);border-radius:8px">
-        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">🔍 OCR test — three modes</div>
+        <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">🔍 OCR test - three modes</div>
         <div style="font-size:.8rem;color:var(--mute);line-height:1.6">
           The <strong>OCR test</strong> tab has three sub-modes (tabs at the top of the panel):<br>
-          • <strong>Single image</strong> — drop any Kannada image; <code>kan</code> and <code>kan_hist</code> run in parallel; paste ground-truth text to get live CER/WER; export result as <code>.txt</code>.<br>
-          • <strong>Batch</strong> — select multiple images, OCR all at once, view results in a table, export as CSV.<br>
-          • <strong>Wikisource</strong> — paste a kn.wikisource.org page URL; fetches the human-proofread text and runs OCR side-by-side for direct comparison.<br><br>
+          • <strong>Single image</strong> - drop any Kannada image; <code>kan</code> and <code>kan_hist</code> run in parallel; paste ground-truth text to get live CER/WER; export result as <code>.txt</code>.<br>
+          • <strong>Batch</strong> - select multiple images, OCR all at once, view results in a table, export as CSV.<br>
+          • <strong>Wikisource</strong> - paste a kn.wikisource.org page URL; fetches the human-proofread text and runs OCR side-by-side for direct comparison.<br><br>
           <strong>Tip:</strong> always compare <code>kan</code> vs <code>kan_hist</code> on the same image to measure the improvement your training has achieved.
         </div>
       </div>
@@ -1214,16 +1214,16 @@ footer a:hover { text-decoration: underline; }
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">🔤 Kannada Unicode Reference &amp; per-font image testing</div>
         <div style="font-size:.8rem;color:var(--mute);line-height:1.6">
           Scroll to the bottom of the <strong>OCR test</strong> tab to find the Unicode Reference panel.<br><br>
-          <strong>Font tabs</strong> — select a font family (GTN, GMP, WMP, Kittel). Each font has TTF <em>and</em> OTF variants selectable from the dropdown — both formats are used for training to capture any rasterisation differences.<br><br>
-          <strong>Live preview</strong> — characters are rendered directly in your browser using the actual font file served from <code>/fonts/</code> via <code>@font-face</code>. No images needed — switch fonts and variants instantly.<br><br>
-          <strong>Generated PNGs</strong> — click <em>Generate images</em> to run <code>scripts/gen-char-images.py</code> (Pillow) which writes one PNG per character to <code>test-images/&lt;font&gt;/&lt;variant&gt;/</code>. Switch to PNG view to see exactly what Tesseract sees during recognition — the actual rasterised pixels.<br><br>
-          <strong>1:1 OCR test</strong> — appears after images are generated. Runs Tesseract.js on every character PNG and marks each cell ✓ green (correct) or ✗ red (shows what was returned instead). Results export as CSV per variant. Use this to identify specific characters or conjuncts where the model needs more training data.
+          <strong>Font tabs</strong> - select a font family (GTN, GMP, WMP, Kittel). Each font has TTF <em>and</em> OTF variants selectable from the dropdown - both formats are used for training to capture any rasterisation differences.<br><br>
+          <strong>Live preview</strong> - characters are rendered directly in your browser using the actual font file served from <code>/fonts/</code> via <code>@font-face</code>. No images needed - switch fonts and variants instantly.<br><br>
+          <strong>Generated PNGs</strong> - click <em>Generate images</em> to run <code>scripts/gen-char-images.py</code> (Pillow) which writes one PNG per character to <code>test-images/&lt;font&gt;/&lt;variant&gt;/</code>. Switch to PNG view to see exactly what Tesseract sees during recognition - the actual rasterised pixels.<br><br>
+          <strong>1:1 OCR test</strong> - appears after images are generated. Runs Tesseract.js on every character PNG and marks each cell ✓ green (correct) or ✗ red (shows what was returned instead). Results export as CSV per variant. Use this to identify specific characters or conjuncts where the model needs more training data.
         </div>
       </div>
       <div style="padding:12px;background:var(--bg);border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px">➕ Adding a new font</div>
         <div style="font-size:.8rem;color:var(--mute);line-height:1.6">
-          Edit <code>fonts.yml</code> — add the font's repo URL, <code>font_dir</code>, and list each file under <code>font_files</code>. Include both <code>.ttf</code> and <code>.otf</code> if the font ships both — the server registers them as separate training variants automatically.<br><br>
+          Edit <code>fonts.yml</code> - add the font's repo URL, <code>font_dir</code>, and list each file under <code>font_files</code>. Include both <code>.ttf</code> and <code>.otf</code> if the font ships both - the server registers them as separate training variants automatically.<br><br>
           Set <code>degrade: true</code> for historical/letterpress typefaces (adds ink-spread blur + noise). Set <code>degrade: false</code> for clean modern fonts.<br><br>
           Then re-run: <strong>Prep base → Render images → Make lstmf → Train</strong>. Training resumes from the last checkpoint, so no earlier work is lost.
         </div>
@@ -1232,13 +1232,13 @@ footer a:hover { text-decoration: underline; }
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px;color:#92400e">⚠️ Unicharset limitation</div>
         <div style="font-size:.8rem;color:#78350f;line-height:1.6">
           The base <code>kan.traineddata</code> unicharset (140 entries) is missing five archaic Kannada codepoints: <strong>ಋ ಙ ಝ ಞ ಱ</strong>. Ground-truth files containing these as standalone characters cause a <em>"Can't encode transcription"</em> error during lstmf generation.<br><br>
-          The pipeline filters them automatically. If you supply your own corpus, scan for these characters before running <strong>Make lstmf</strong>. The conjunct <strong>ಜ್ಞ</strong> works correctly — only the standalone codepoints are affected.
+          The pipeline filters them automatically. If you supply your own corpus, scan for these characters before running <strong>Make lstmf</strong>. The conjunct <strong>ಜ್ಞ</strong> works correctly - only the standalone codepoints are affected.
         </div>
       </div>
       <div style="padding:12px;background:#fef9c3;border:1px solid #fde68a;border-radius:8px">
         <div style="font-size:.85rem;font-weight:700;margin-bottom:5px;color:#92400e">⚠️ 1:1 character test caveat</div>
         <div style="font-size:.8rem;color:#78350f;line-height:1.6">
-          Tesseract is a <strong>line-level model</strong> — it expects a full line of text, not isolated characters. Testing individual character images (the 1:1 OCR test) always shows more errors than the model makes on real line images because it lacks the surrounding context it was trained with. Use full-line or Wikisource tests for a meaningful accuracy measurement of your trained model.
+          Tesseract is a <strong>line-level model</strong> - it expects a full line of text, not isolated characters. Testing individual character images (the 1:1 OCR test) always shows more errors than the model makes on real line images because it lacks the surrounding context it was trained with. Use full-line or Wikisource tests for a meaningful accuracy measurement of your trained model.
         </div>
       </div>
     </div>
@@ -1254,11 +1254,11 @@ footer a:hover { text-decoration: underline; }
       </div>
       <div style="border-left:3px solid #f59e0b;padding:12px 14px;background:var(--bg);border-radius:0 8px 8px 0">
         <div style="font-size:.82rem;font-weight:700;margin-bottom:6px">Fine-tuning scope</div>
-        <div style="font-size:.79rem;color:var(--mute);line-height:1.6">Fine-tuning from <code>kan.lstm</code> is constrained to the existing unicharset — you cannot add new characters without retraining from scratch. This is the right tradeoff for this project (5 archaic chars excluded, everything else preserved), but means <code>kan_hist</code> cannot recognise characters the base model does not know.</div>
+        <div style="font-size:.79rem;color:var(--mute);line-height:1.6">Fine-tuning from <code>kan.lstm</code> is constrained to the existing unicharset - you cannot add new characters without retraining from scratch. This is the right tradeoff for this project (5 archaic chars excluded, everything else preserved), but means <code>kan_hist</code> cannot recognise characters the base model does not know.</div>
       </div>
       <div style="border-left:3px solid #f59e0b;padding:12px 14px;background:var(--bg);border-radius:0 8px 8px 0">
         <div style="font-size:.82rem;font-weight:700;margin-bottom:6px">Synthetic vs. real training data</div>
-        <div style="font-size:.79rem;color:var(--mute);line-height:1.6">Most training images are synthetically rendered — digitally degraded to simulate letterpress. Even a small number of real scanned pages with careful ground truth significantly outweighs synthetic data for accuracy on real documents. Adding real scans via the Scan upload tab is the single highest-value improvement you can make after initial training.</div>
+        <div style="font-size:.79rem;color:var(--mute);line-height:1.6">Most training images are synthetically rendered - digitally degraded to simulate letterpress. Even a small number of real scanned pages with careful ground truth significantly outweighs synthetic data for accuracy on real documents. Adding real scans via the Scan upload tab is the single highest-value improvement you can make after initial training.</div>
       </div>
       <div style="border-left:3px solid #f59e0b;padding:12px 14px;background:var(--bg);border-radius:0 8px 8px 0">
         <div style="font-size:.82rem;font-weight:700;margin-bottom:6px">max_iterations is absolute</div>
@@ -1273,42 +1273,42 @@ footer a:hover { text-decoration: underline; }
     <div id="glossary-list">
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">BCER — Byte Character Error Rate</span>
+          <span class="gloss-term">BCER - Byte Character Error Rate</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">The fraction of character bytes the model transcribes incorrectly on its training data, expressed as a percentage. Lower is better. 1% BCER means 1 wrong character per 100. Note that this is measured on synthetic training data; real-world CER on scanned documents is typically higher.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">LSTM — Long Short-Term Memory</span>
+          <span class="gloss-term">LSTM - Long Short-Term Memory</span>
           <span class="gloss-arrow">▸</span>
         </button>
-        <div class="gloss-body">A type of recurrent neural network used by Tesseract 5. Unlike older template-matching OCR, LSTM can remember context across a line of text — important for recognising Kannada conjuncts (stacked characters) and vowel marks that depend on nearby letters.</div>
+        <div class="gloss-body">A type of recurrent neural network used by Tesseract 5. Unlike older template-matching OCR, LSTM can remember context across a line of text - important for recognising Kannada conjuncts (stacked characters) and vowel marks that depend on nearby letters.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">traineddata — the model file</span>
+          <span class="gloss-term">traineddata - the model file</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">A <code>.traineddata</code> file contains everything Tesseract needs for one language/style: the LSTM weights, language model (word lists, n-grams), and Unicode normalisation tables. Copy it to your tessdata directory and Tesseract can use it immediately.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">PSM — Page Segmentation Mode</span>
+          <span class="gloss-term">PSM - Page Segmentation Mode</span>
           <span class="gloss-arrow">▸</span>
         </button>
-        <div class="gloss-body">Tells Tesseract how to expect text to be laid out. PSM 3 (auto) tries to detect columns and paragraphs. PSM 6 assumes a single uniform block of text — best for cropped paragraphs. PSM 7 treats the whole image as a single text line — best for testing individual lines.</div>
+        <div class="gloss-body">Tells Tesseract how to expect text to be laid out. PSM 3 (auto) tries to detect columns and paragraphs. PSM 6 assumes a single uniform block of text - best for cropped paragraphs. PSM 7 treats the whole image as a single text line - best for testing individual lines.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">gt.txt — ground truth file</span>
+          <span class="gloss-term">gt.txt - ground truth file</span>
           <span class="gloss-arrow">▸</span>
         </button>
-        <div class="gloss-body">A plain-text file containing the exact correct transcription of the corresponding image. The filename must match the image (e.g. <code>page01.gt.txt</code> for <code>page01.png</code>). Ground truth quality is the single biggest factor in model quality — errors in GT become errors in the model.</div>
+        <div class="gloss-body">A plain-text file containing the exact correct transcription of the corresponding image. The filename must match the image (e.g. <code>page01.gt.txt</code> for <code>page01.png</code>). Ground truth quality is the single biggest factor in model quality - errors in GT become errors in the model.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">lstmf — binary training file</span>
+          <span class="gloss-term">lstmf - binary training file</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">An intermediate binary format produced by <code>tesseract … --psm 6 lstm.train</code>. It encodes both the image features and the ground truth in the format <code>lstmtraining</code> expects. Generated automatically by the make-lstmf step.</div>
@@ -1325,70 +1325,70 @@ footer a:hover { text-decoration: underline; }
           <span class="gloss-term">Rolling checkpoint vs. named checkpoints</span>
           <span class="gloss-arrow">▸</span>
         </button>
-        <div class="gloss-body">Every 100 iterations, <code>lstmtraining</code> saves two things: a named checkpoint file (<code>kan_hist_&lt;BCER&gt;_&lt;iter&gt;.checkpoint</code>) recording BCER and iteration in the filename, and the rolling checkpoint (<code>kan_hist_checkpoint</code>). The rolling checkpoint is updated on every save and always reflects the most recent training state including optimizer momentum — making it the correct file to resume from. Named checkpoints let you go back to a specific earlier point (useful if the model overfit after a plateau).</div>
+        <div class="gloss-body">Every 100 iterations, <code>lstmtraining</code> saves two things: a named checkpoint file (<code>kan_hist_&lt;BCER&gt;_&lt;iter&gt;.checkpoint</code>) recording BCER and iteration in the filename, and the rolling checkpoint (<code>kan_hist_checkpoint</code>). The rolling checkpoint is updated on every save and always reflects the most recent training state including optimizer momentum - making it the correct file to resume from. Named checkpoints let you go back to a specific earlier point (useful if the model overfit after a plateau).</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">Unicharset — what characters the model can recognise</span>
+          <span class="gloss-term">Unicharset - what characters the model can recognise</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">The unicharset is the list of Unicode characters (and multi-character clusters like virama combinations) that a trained model can output. It is fixed at training time and cannot be extended by fine-tuning alone. The base <code>kan.traineddata</code> unicharset has 140 entries and does not include five archaic Kannada codepoints (ಋ ಙ ಝ ಞ ಱ). Ground-truth files containing these cause a "Can't encode transcription" error during lstmf generation; the pipeline filters them automatically.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">CER — Character Error Rate</span>
+          <span class="gloss-term">CER - Character Error Rate</span>
           <span class="gloss-arrow">▸</span>
         </button>
-        <div class="gloss-body">The percentage of characters that differ between the OCR output and the ground truth, calculated using Levenshtein (edit) distance. Distinct from BCER: CER is measured on real held-out images (scans or rendered test lines), while BCER is measured on training data internally by lstmtraining. CER on real scans is always higher than BCER on training data — typically 3–5× for well-trained models on historical material.</div>
+        <div class="gloss-body">The percentage of characters that differ between the OCR output and the ground truth, calculated using Levenshtein (edit) distance. Distinct from BCER: CER is measured on real held-out images (scans or rendered test lines), while BCER is measured on training data internally by lstmtraining. CER on real scans is always higher than BCER on training data - typically 3–5× for well-trained models on historical material.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">CER / WER — Character / Word Error Rate</span>
+          <span class="gloss-term">CER / WER - Character / Word Error Rate</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">CER measures the edit distance (insertions + deletions + substitutions) between OCR output and reference text, divided by reference length. WER does the same at the word level. Used in the OCR test tab to compare model outputs against ground truth you paste in.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">Degradation — simulating letterpress</span>
+          <span class="gloss-term">Degradation - simulating letterpress</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">Historical fonts (degrade: true in fonts.yml) are rendered with: Gaussian blur (simulates ink spreading into paper fibres), salt-and-pepper noise (paper grain, foxing), and a slight random rotation (print misalignment). This makes the synthetic images look more like real letterpress scans so the model generalises better.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">Wikisource — proofread page quality</span>
+          <span class="gloss-term">Wikisource - proofread page quality</span>
           <span class="gloss-arrow">▸</span>
         </button>
-        <div class="gloss-body">Kannada Wikisource (kn.wikisource.org) uses the ProofreadPage extension to quality-rate each transcribed page. Level 3 (Proofread) means one volunteer has read and corrected the text against the scan. Level 4 (Validated) means a second volunteer has independently verified it. Only levels 3 and 4 are used for corpus building — lower levels may contain uncorrected OCR errors that would harm training quality.</div>
+        <div class="gloss-body">Kannada Wikisource (kn.wikisource.org) uses the ProofreadPage extension to quality-rate each transcribed page. Level 3 (Proofread) means one volunteer has read and corrected the text against the scan. Level 4 (Validated) means a second volunteer has independently verified it. Only levels 3 and 4 are used for corpus building - lower levels may contain uncorrected OCR errors that would harm training quality.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">Corpus — the training text</span>
+          <span class="gloss-term">Corpus - the training text</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">The corpus is the pool of Kannada text lines that get rendered into PNG training images. It must cover the full Unicode Kannada block (U+0C80–U+0CFF), including conjunct consonants formed with the virama (U+0CCD). A corpus sourced from historical books is preferable for kan_hist because it reflects actual vocabulary and typographic patterns the model will encounter on real historical scans. Wikipedia is added only as a supplement for glyph coverage.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">Virama &amp; conjuncts — how Kannada stacking works</span>
+          <span class="gloss-term">Virama &amp; conjuncts - how Kannada stacking works</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">In Kannada (and all Brahmic scripts), two consonants can be written as a single stacked glyph called a conjunct. The virama (ಹಲಂತ, U+0CCD) is an invisible combining character placed after the first consonant to suppress its inherent vowel and signal the stack. For example: ಕ + ್ + ತ → ಕ್ತ. Tesseract must learn these multi-codepoint sequences as single visual units. The Unicode Reference panel in the OCR tab shows all 24 common conjuncts used in training.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">TTF vs OTF — two font formats</span>
+          <span class="gloss-term">TTF vs OTF - two font formats</span>
           <span class="gloss-arrow">▸</span>
         </button>
         <div class="gloss-body">TrueType (.ttf) and OpenType/CFF (.otf) are two formats for the same underlying typeface design. They differ in how glyph outlines are mathematically described. When rasterised to pixels, small differences appear at low resolutions. TrainOCR uses both formats for fonts that provide them, giving the model slightly different pixel patterns and improving robustness on real scanned material.</div>
       </div>
       <div class="gloss-item">
         <button class="gloss-btn" onclick="toggleGloss(this)">
-          <span class="gloss-term">@font-face — live font preview</span>
+          <span class="gloss-term">@font-face - live font preview</span>
           <span class="gloss-arrow">▸</span>
         </button>
-        <div class="gloss-body">The Unicode Reference panel renders characters in the browser using CSS @font-face — the actual TTF or OTF file is served from /fonts/ and loaded directly by the browser. You see the exact glyph shapes of the historical typeface in real time, with no server processing. Compare this to PNG mode, which shows what Pillow rendered at 150 DPI — exactly what Tesseract sees during training.</div>
+        <div class="gloss-body">The Unicode Reference panel renders characters in the browser using CSS @font-face - the actual TTF or OTF file is served from /fonts/ and loaded directly by the browser. You see the exact glyph shapes of the historical typeface in real time, with no server processing. Compare this to PNG mode, which shows what Pillow rendered at 150 DPI - exactly what Tesseract sees during training.</div>
       </div>
  </div>
   </div>
@@ -1415,9 +1415,9 @@ footer a:hover { text-decoration: underline; }
 
 <!-- ═══ OCR TEST ═════════════════════════════════════════════════ -->
 <div id="pg-ocr" class="page">
-  <div class="sec"><h2>Test OCR — Tesseract.js in browser</h2></div>
+  <div class="sec"><h2>Test OCR - Tesseract.js in browser</h2></div>
   <p style="font-size:.84rem;color:var(--mute);margin-bottom:14px">
-    Runs entirely in your browser via Tesseract.js — no upload to any server.
+    Runs entirely in your browser via Tesseract.js - no upload to any server.
     <code>kan_hist</code> requires the Package step (⑦) to be complete.
   </p>
 
@@ -1451,7 +1451,7 @@ footer a:hover { text-decoration: underline; }
         <label style="font-size:.75rem;color:var(--mute);display:block;margin-bottom:4px">Font</label>
         <select id="preview-font" onchange="runPreview()"
           style="width:100%;padding:7px 8px;font-size:.82rem;border:1.5px solid var(--border2);border-radius:7px;background:var(--bg);color:var(--ink)">
-          <option value="">— loading fonts —</option>
+          <option value="">- loading fonts -</option>
         </select>
       </div>
       <div style="min-width:120px">
@@ -1480,31 +1480,31 @@ footer a:hover { text-decoration: underline; }
     <!-- ── Training confidence stats bar ─────────────────────── -->
     <div class="ocr-stat-bar">
       <div class="ocr-stat">
-        <span class="sv" id="stat-bcer">—</span>
+        <span class="sv" id="stat-bcer">-</span>
         <span class="sl">Training BCER</span>
       </div>
       <div class="ocr-stat">
-        <span class="sv" id="stat-iters">—</span>
+        <span class="sv" id="stat-iters">-</span>
         <span class="sl">Iterations</span>
       </div>
       <div class="ocr-stat">
-        <span class="sv" id="stat-images">—</span>
+        <span class="sv" id="stat-images">-</span>
         <span class="sl">Training images</span>
       </div>
       <div class="ocr-stat">
-        <span class="sv" id="stat-fonts">—</span>
+        <span class="sv" id="stat-fonts">-</span>
         <span class="sl">Font variants</span>
       </div>
       <div class="ocr-stat" id="stat-conf-wrap" style="display:none">
-        <span class="sv" id="stat-conf-val">—</span>
+        <span class="sv" id="stat-conf-val">-</span>
         <span class="sl">OCR confidence</span>
       </div>
       <div class="ocr-stat" id="stat-impr-wrap" style="display:none">
-        <span class="sv" id="stat-impr-val">—</span>
+        <span class="sv" id="stat-impr-val">-</span>
         <span class="sl">CER improvement</span>
       </div>
       <div class="ocr-stat" id="stat-chars-wrap" style="display:none">
-        <span class="sv" id="stat-chars-val">—</span>
+        <span class="sv" id="stat-chars-val">-</span>
         <span class="sl">Chars recognised</span>
       </div>
     </div>
@@ -1513,10 +1513,10 @@ footer a:hover { text-decoration: underline; }
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
       <label for="ocr-psm" style="display:inline;margin:0;font-size:.82rem">PSM</label>
       <select id="ocr-psm" style="width:auto;padding:5px 8px;font-size:.82rem">
-        <option value="3">3 — Auto</option>
-        <option value="6" selected>6 — Block</option>
-        <option value="7">7 — Single line</option>
-        <option value="11">11 — Sparse</option>
+        <option value="3">3 - Auto</option>
+        <option value="6" selected>6 - Block</option>
+        <option value="7">7 - Single line</option>
+        <option value="11">11 - Sparse</option>
       </select>
       <label style="display:inline-flex;align-items:center;gap:4px;font-size:.78rem;font-weight:400">
         <input type="checkbox" id="pp-binarize"> Binarize
@@ -1557,7 +1557,7 @@ footer a:hover { text-decoration: underline; }
           <span>kan <span style="font-weight:400;color:var(--mute)">(base)</span></span>
           <span id="kan-time" style="font-size:.7rem;color:var(--mute);font-weight:400"></span>
         </div>
-        <div class="ocr-result" id="kan-out" style="min-height:160px">—</div>
+        <div class="ocr-result" id="kan-out" style="min-height:160px">-</div>
         <div class="metric-row" id="kan-metrics"></div>
       </div>
 
@@ -1575,7 +1575,7 @@ footer a:hover { text-decoration: underline; }
 
         <!-- Output tab -->
         <div id="hist-tab-output">
-          <div class="ocr-result" id="hist-out" style="min-height:160px">—</div>
+          <div class="ocr-result" id="hist-out" style="min-height:160px">-</div>
           <div class="metric-row" id="hist-metrics"></div>
         </div>
 
@@ -1592,7 +1592,7 @@ footer a:hover { text-decoration: underline; }
           </div>
           <div id="hist-diff" style="display:none">
             <div style="font-size:.72rem;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">
-              Character diff — <span class="diff-wrong" style="padding:0 4px">red = error</span>
+              Character diff - <span class="diff-wrong" style="padding:0 4px">red = error</span>
               &nbsp;<span class="diff-ins" style="padding:0 4px">green = missing</span>
             </div>
             <div id="hist-diff-body" class="ocr-result" style="min-height:80px;font-size:.82rem;line-height:1.9"></div>
@@ -1620,9 +1620,9 @@ footer a:hover { text-decoration: underline; }
       <div style="flex:1;min-width:220px">
         <label style="font-size:.8rem;font-weight:600">PSM for batch</label>
         <select id="batch-psm" style="width:100%;padding:6px 10px;margin-bottom:8px">
-          <option value="3">3 — Auto</option>
-          <option value="6" selected>6 — Block</option>
-          <option value="7">7 — Single line</option>
+          <option value="3">3 - Auto</option>
+          <option value="6" selected>6 - Block</option>
+          <option value="7">7 - Single line</option>
         </select>
         <button class="btn btn-primary" onclick="runBatch()" id="batch-btn" style="width:100%">Run batch OCR</button>
         <button class="btn btn-outline" onclick="exportBatchResults()" id="batch-export-btn"
@@ -1694,7 +1694,7 @@ footer a:hover { text-decoration: underline; }
           kan <span style="font-weight:400;color:var(--mute)">(base model)</span>
           <span id="ws-kan-time" style="font-size:.72rem;color:var(--mute);margin-left:6px"></span>
         </div>
-        <div class="ocr-result" id="ws-kan-out">—</div>
+        <div class="ocr-result" id="ws-kan-out">-</div>
         <div class="metric-row" id="ws-kan-metrics"></div>
       </div>
       <div>
@@ -1703,7 +1703,7 @@ footer a:hover { text-decoration: underline; }
           <span id="ws-hist-badge" class="pill" style="margin-left:4px"></span>
           <span id="ws-hist-time" style="font-size:.72rem;color:var(--mute);margin-left:6px"></span>
         </div>
-        <div class="ocr-result" id="ws-hist-out">—</div>
+        <div class="ocr-result" id="ws-hist-out">-</div>
         <div class="metric-row" id="ws-hist-metrics"></div>
       </div>
     </div>
@@ -1770,7 +1770,7 @@ footer a:hover { text-decoration: underline; }
           🎓 Fine-tune model
         </button>
         <div id="char-train-pending" style="font-size:.74rem;color:var(--mute)">Generate PNGs first →</div>
-        <div style="font-size:.70rem;color:var(--mute);line-height:1.4">Trains only on this font's images — faster than full pipeline retrain. Use when one font has poor accuracy.</div>
+        <div style="font-size:.70rem;color:var(--mute);line-height:1.4">Trains only on this font's images - faster than full pipeline retrain. Use when one font has poor accuracy.</div>
       </div>
 
       <!-- Status -->
@@ -1814,23 +1814,23 @@ footer a:hover { text-decoration: underline; }
     <!-- ── Character grid ────────────────────────────────── -->
     <div id="unicode-ref-panel">
       <div style="margin-bottom:14px">
-        <div class="ucref-group-label">Vowels — ಸ್ವರಗಳು</div>
+        <div class="ucref-group-label">Vowels - ಸ್ವರಗಳು</div>
         <div id="unicode-vowels" class="unicode-grid" lang="kn" dir="ltr"></div>
       </div>
       <div style="margin-bottom:14px">
-        <div class="ucref-group-label">Consonants — ವ್ಯಂಜನಗಳು</div>
+        <div class="ucref-group-label">Consonants - ವ್ಯಂಜನಗಳು</div>
         <div id="unicode-consonants" class="unicode-grid" lang="kn" dir="ltr"></div>
       </div>
       <div style="margin-bottom:14px">
         <div class="ucref-group-label">Conjuncts with Virama ್ (U+0CCD)
           <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--mute);margin-left:8px">
-            — shown in Noto Sans Kannada (historical fonts render virama as a visible halanta mark; switch to Generated PNGs to see the actual font rendering)
+            - shown in Noto Sans Kannada (historical fonts render virama as a visible halanta mark; switch to Generated PNGs to see the actual font rendering)
           </span>
         </div>
         <div id="unicode-conjuncts" class="unicode-grid" lang="kn" dir="ltr"></div>
       </div>
       <div style="margin-bottom:6px">
-        <div class="ucref-group-label">Digits — ಅಂಕಿಗಳು</div>
+        <div class="ucref-group-label">Digits - ಅಂಕಿಗಳು</div>
         <div id="unicode-digits" class="unicode-grid"></div>
       </div>
       <div id="ocr-summary-row" style="display:none;margin-top:10px;padding:8px 12px;background:var(--bg);border-radius:6px;font-size:.78rem;color:var(--mute)"></div>
@@ -1847,10 +1847,10 @@ footer a:hover { text-decoration: underline; }
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <label style="font-size:.76rem;color:var(--mute)">Iterations:</label>
         <select id="train-iters" style="font-size:.78rem;padding:3px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--card)">
-          <option value="200">200 — quick test</option>
-          <option value="500" selected>500 — standard</option>
-          <option value="1000">1000 — thorough</option>
-          <option value="2000">2000 — deep</option>
+          <option value="200">200 - quick test</option>
+          <option value="500" selected>500 - standard</option>
+          <option value="1000">1000 - thorough</option>
+          <option value="2000">2000 - deep</option>
         </select>
         <button onclick="startCharTrain()" id="btn-start-train"
           style="font-size:.78rem;padding:5px 14px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer">
@@ -1905,7 +1905,7 @@ footer a:hover { text-decoration: underline; }
     </div>
     <div>
       <label for="scan-gt">Ground truth text</label>
-      <textarea id="scan-gt" rows="9" placeholder="Type the exact Kannada text that appears in the scan — required for training…"></textarea>
+      <textarea id="scan-gt" rows="9" placeholder="Type the exact Kannada text that appears in the scan - required for training…"></textarea>
       <div style="margin-top:10px;display:flex;align-items:center;gap:10px">
         <button class="btn btn-primary" onclick="uploadScan()" id="scan-btn">Upload scan</button>
         <span class="hint">A <code>.gt.txt</code> file is saved alongside the image.</span>
@@ -1933,7 +1933,7 @@ footer a:hover { text-decoration: underline; }
     <h2>Review &amp; correct</h2>
     <span class="hint">worst predictions first</span>
     <select id="rv-source" style="padding:4px 8px;border:1.5px solid var(--border2);border-radius:6px;font-size:.82rem;background:var(--bg)">
-      <option value="scan">Real scans — highest value</option>
+      <option value="scan">Real scans - highest value</option>
       <option value="rendered">Rendered lines (diagnostic)</option>
       <option value="classical">Classical lines (diagnostic)</option>
     </select>
@@ -1942,7 +1942,7 @@ footer a:hover { text-decoration: underline; }
   <div class="card" style="margin-bottom:16px">
     <p style="font-size:.78rem;color:var(--mute);line-height:1.55;margin:0 0 10px">
       Ranks images by how far the model's output differs from the stored ground truth, worst first.
-      <strong>Real scans are the only source where correcting adds new information</strong> — synthetic
+      <strong>Real scans are the only source where correcting adds new information</strong> - synthetic
       ground truth is generated from the source text and is correct by construction, so a high score
       there points at a model weakness, not a data error.
     </p>
@@ -1960,7 +1960,7 @@ footer a:hover { text-decoration: underline; }
   <div id="add-font-panel" class="card" style="display:none;margin-bottom:14px;border:1.5px solid #6ee7b7">
     <div style="font-weight:700;font-size:.9rem;margin-bottom:4px">Add a font to the registry</div>
     <p style="font-size:.78rem;color:var(--mute);line-height:1.55;margin-bottom:10px">
-      Put the font files in <code>fonts/&lt;id&gt;/</code> first — <strong>the folder name must
+      Put the font files in <code>fonts/&lt;id&gt;/</code> first - <strong>the folder name must
       match the id exactly</strong>, or the font stays invisible to every render path.
       Then enter the id below and press Scan to detect the files.
     </p>
@@ -1994,12 +1994,12 @@ footer a:hover { text-decoration: underline; }
       </div>
       <label style="display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:.78rem">
         <input id="af-degrade" type="checkbox" style="margin-top:3px">
-        <span><strong>Letterpress simulation</strong> (<code>degrade: true</code>) — blur, speckle and
+        <span><strong>Letterpress simulation</strong> (<code>degrade: true</code>) - blur, speckle and
         slight skew. On for historical revivals; off for modern digital faces.</span>
       </label>
       <label style="display:flex;gap:8px;align-items:flex-start;margin-top:6px;font-size:.78rem">
         <input id="af-aalt" type="checkbox" style="margin-top:3px">
-        <span><strong>Needs <code>aalt</code></strong> — only if this font keeps its conjunct (ottu)
+        <span><strong>Needs <code>aalt</code></strong> - only if this font keeps its conjunct (ottu)
         forms in the <code>aalt</code> GSUB feature, as GTN and WMP do. Wrong either way breaks
         conjuncts, so check the Images gallery after adding.</span>
       </label>
@@ -2109,20 +2109,20 @@ footer a:hover { text-decoration: underline; }
 <div id="pg-tjs" class="page">
 <div style="max-width:1100px;margin:0 auto;padding:28px 24px">
 
-  <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px">🔬 Live OCR — <code>kan_hist.traineddata</code></h2>
+  <h2 style="font-size:1rem;font-weight:700;margin:0 0 4px">🔬 Live OCR - <code>kan_hist.traineddata</code></h2>
   <p style="color:var(--mute);font-size:.8rem;margin:0 0 16px">Runs in your browser via Tesseract.js. Recognise text · verify confidence · correct and save as training pair.</p>
 
   <!-- ── Training stats bar ───────────────────────────────────────── -->
   <div class="ocr-stat-bar" style="margin-bottom:14px">
-    <div class="ocr-stat"><span class="sv" id="tjs-stat-bcer">—</span><span class="sl">Training BCER</span></div>
-    <div class="ocr-stat"><span class="sv" id="tjs-stat-iters">—</span><span class="sl">Iterations</span></div>
-    <div class="ocr-stat"><span class="sv" id="tjs-stat-images">—</span><span class="sl">Training images</span></div>
-    <div class="ocr-stat"><span class="sv" id="tjs-stat-fonts">—</span><span class="sl">Font variants</span></div>
+    <div class="ocr-stat"><span class="sv" id="tjs-stat-bcer">-</span><span class="sl">Training BCER</span></div>
+    <div class="ocr-stat"><span class="sv" id="tjs-stat-iters">-</span><span class="sl">Iterations</span></div>
+    <div class="ocr-stat"><span class="sv" id="tjs-stat-images">-</span><span class="sl">Training images</span></div>
+    <div class="ocr-stat"><span class="sv" id="tjs-stat-fonts">-</span><span class="sl">Font variants</span></div>
     <div class="ocr-stat" id="tjs-stat-conf-wrap" style="display:none">
-      <span class="sv" id="tjs-stat-conf-val">—</span><span class="sl">Avg confidence</span>
+      <span class="sv" id="tjs-stat-conf-val">-</span><span class="sl">Avg confidence</span>
     </div>
     <div class="ocr-stat" id="tjs-stat-words-wrap" style="display:none">
-      <span class="sv" id="tjs-stat-words-val">—</span><span class="sl">Words found</span>
+      <span class="sv" id="tjs-stat-words-val">-</span><span class="sl">Words found</span>
     </div>
   </div>
 
@@ -2182,7 +2182,7 @@ footer a:hover { text-decoration: underline; }
         <div id="tjs-words" lang="kn"
           style="font-family:'Noto Sans Kannada','Kannada Sangam MN',serif;
                  font-size:1rem;line-height:2.6;word-break:break-word;color:var(--mute)">
-          —
+          -
         </div>
       </div>
       <!-- Threshold controls -->
@@ -2209,7 +2209,7 @@ footer a:hover { text-decoration: underline; }
       <div class="ocr-panel-hdr">✏️ Correct &amp; save</div>
 
       <textarea id="tjs-correction" lang="kn" spellcheck="false"
-        placeholder="OCR result will appear here — fix any errors, then save as a training pair"
+        placeholder="OCR result will appear here - fix any errors, then save as a training pair"
         style="flex:1;width:100%;box-sizing:border-box;min-height:160px;
                font-family:'Noto Sans Kannada','Kannada Sangam MN',serif;
                font-size:.95rem;line-height:1.9;padding:10px 12px;
@@ -2310,7 +2310,7 @@ function showOfflineBanner() {
   const b = document.createElement('div');
   b.id = 'offline-banner';
   b.style.cssText = 'background:#fef3c7;border-bottom:1px solid #f59e0b;color:#92400e;padding:8px 24px;font-size:.84rem;text-align:center;';
-  b.innerHTML = '⚡ <strong>Offline / static mode</strong> — OCR testing works fully in-browser. Training pipeline requires a running server (<a href="https://github.com/sanchaya/tesseract-training-kannada" target="_blank" style="color:#92400e">see README</a>).';
+  b.innerHTML = '⚡ <strong>Offline / static mode</strong> - OCR testing works fully in-browser. Training pipeline requires a running server (<a href="https://github.com/sanchaya/tesseract-training-kannada" target="_blank" style="color:#92400e">see README</a>).';
   document.querySelector('header').after(b);
 }
 
@@ -2336,7 +2336,7 @@ async function loadCorpusSources() {
           <div class="chk-icon">📖</div>
           <div>
             <div class="chk-name">Kannada Wikisource (preferred)</div>
-            <div class="chk-ver">kn.wikisource.org — proofread historical pages</div>
+            <div class="chk-ver">kn.wikisource.org - proofread historical pages</div>
             <div class="chk-need">Run: python3 corpus/download-wikisource.py --pages 3000</div>
           </div>
         </div>
@@ -2344,7 +2344,7 @@ async function loadCorpusSources() {
           <div class="chk-icon">📰</div>
           <div>
             <div class="chk-name">Kannada Wikipedia (supplement)</div>
-            <div class="chk-ver">knwiki — modern Kannada prose + glyph coverage</div>
+            <div class="chk-ver">knwiki - modern Kannada prose + glyph coverage</div>
             <div class="chk-need">Run: python3 corpus/download-wiki.py --lines 5000</div>
           </div>
         </div>
@@ -2382,9 +2382,9 @@ async function loadCorpusSources() {
       '<div class="chk-grid">' + d.sources.map(card).join('') + '</div>' +
       (d.corpus_lines
         ? `<div style="margin-top:10px;font-size:.82rem;color:var(--mute)">
-             📄 <strong>kan_corpus.txt</strong> — ${d.corpus_lines.toLocaleString()} lines ready for rendering</div>`
+             📄 <strong>kan_corpus.txt</strong> - ${d.corpus_lines.toLocaleString()} lines ready for rendering</div>`
         : `<div style="margin-top:10px;font-size:.82rem;color:var(--red)">
-             ⚠ kan_corpus.txt not built yet — run Clean corpus after downloading</div>`);
+             ⚠ kan_corpus.txt not built yet - run Clean corpus after downloading</div>`);
   } catch(e) {
     document.getElementById('corpus-src-list').innerHTML =
       '<span style="color:var(--mute);font-size:.84rem">Server not available.</span>';
@@ -2397,9 +2397,9 @@ async function downloadCorpus(key) {
   if (card) card.querySelector('.chk-icon').textContent = '⏳';
   try {
     await fetch(`/api/corpus/download/${key}`, { method: 'POST' });
-    toast(`Downloading ${key} corpus — check Live log`);
+    toast(`Downloading ${key} corpus - check Live log`);
     setTimeout(loadCorpusSources, 3000);
-  } catch(e) { toast('Download failed — check server'); }
+  } catch(e) { toast('Download failed - check server'); }
 }
 
 // ── System checklist ─────────────────────────────────────────────
@@ -2417,12 +2417,12 @@ async function loadSyscheck() {
       { name:'combine_tessdata',         ok:null, detail:'bundled with Tesseract training tools' },
       { name:'Python 3.8+',             ok:null, detail:'python3 --version' },
       { name:'Pillow (PIL)',             ok:null, detail:'pip install Pillow' },
-      { name:'uharfbuzz',               ok:null, detail:'pip install uharfbuzz — required for Kannada conjunct rendering' },
-      { name:'freetype-py',             ok:null, detail:'pip install freetype-py — required for glyph rasterisation' },
+      { name:'uharfbuzz',               ok:null, detail:'pip install uharfbuzz - required for Kannada conjunct rendering' },
+      { name:'freetype-py',             ok:null, detail:'pip install freetype-py - required for glyph rasterisation' },
       { name:'Node.js 18+ (for portal)',ok:null, detail:'node --version' },
     ];
     const dataItems = [
-      { name:'Base model — kan.traineddata', detail:'Download from tessdata_best GitHub or run step ①' },
+      { name:'Base model - kan.traineddata', detail:'Download from tessdata_best GitHub or run step ①' },
       { name:'Rendered training images',     detail:'Run step ④ (render) after downloading fonts' },
       { name:'lstmf training files',         detail:'Run step ⑤ after rendering images' },
     ];
@@ -2463,8 +2463,8 @@ async function loadSyscheck() {
         <div>
           <div class="chk-name">${t.name}</div>
           ${t.ok || t.warn
-            ? `<div class="chk-ver">${t.ver}${t.warn ? ' — upgrade to v5 recommended' : ''}</div>`
-            : `<div class="chk-need">Not found — ${t.need}</div>`}
+            ? `<div class="chk-ver">${t.ver}${t.warn ? ' - upgrade to v5 recommended' : ''}</div>`
+            : `<div class="chk-need">Not found - ${t.need}</div>`}
         </div>
       </div>`).join('') + '</div>';
 
@@ -2500,7 +2500,7 @@ async function loadStatus() {
   } catch(e) {
     showOfflineBanner();
     document.getElementById('steps-list').innerHTML =
-      '<div style="color:var(--mute);padding:12px">Server not running — training steps unavailable.</div>';
+      '<div style="color:var(--mute);padding:12px">Server not running - training steps unavailable.</div>';
     return;
   }
   const steps = Object.values(d).filter(s => s && typeof s === 'object' && s.label);
@@ -2551,7 +2551,7 @@ async function loadStatus() {
     if (isTraining) {
       btn.disabled = true;
       btn.style.opacity = '0.4';
-      btn.title = 'Training in progress — wait until training stops before running another step';
+      btn.title = 'Training in progress - wait until training stops before running another step';
     } else {
       btn.disabled = false;
       btn.style.opacity = '';
@@ -2631,7 +2631,7 @@ async function loadStatus() {
       const stepNames = { prep:'Prep base', wiki:'Download corpus', clean:'Clean corpus',
         render:'Render images', lstmf:'Make lstmf', train:'Train', package:'Package' };
       if (c.ok) notify(`✓ <strong>${stepNames[_lastRunningStep]||_lastRunningStep}</strong> completed successfully`, 'success');
-      else      notify(`✗ <strong>${stepNames[_lastRunningStep]||_lastRunningStep}</strong> failed — check Live log`, 'error', 0);
+      else      notify(`✗ <strong>${stepNames[_lastRunningStep]||_lastRunningStep}</strong> failed - check Live log`, 'error', 0);
     }
   }
   _lastRunningStep = running || (d._training ? 'charTrain' : null);
@@ -2709,13 +2709,13 @@ async function loadFonts() {
       <td><span class="pill ${f.degrade ? 'pill-amber' : 'pill-brand'}"
                 title="${f.degrade
                   ? 'Letterpress simulation: blur, speckle, slight skew. Not a fault.'
-                  : 'Rendered clean — modern digital face.'}">${f.degrade ? 'Letterpress' : 'Clean'}</span></td>
+                  : 'Rendered clean - modern digital face.'}">${f.degrade ? 'Letterpress' : 'Clean'}</span></td>
       <td>${f.cloned
         ? '<span class="pill pill-green">✓ present</span>'
         : '<span class="pill pill-gray">missing</span>'}</td>
       <td>${f.rendered > 0
         ? `<span class="pill pill-green">${f.rendered.toLocaleString()}</span>`
-        : '—'}</td>
+        : '-'}</td>
       <td style="text-align:right"><button class="btn btn-outline"
             onclick="removeFont('${f.id}','${f.name.replace(/'/g, "\\'")}')"
             title="Remove from fonts.yml. Font files are kept on disk."
@@ -2731,7 +2731,7 @@ async function runPipeline() {
     + 'Runs: coverage → unicharset → corpus → render → inventory → gallery\n'
     + '      → lstmf → validate\n\n'
     + (classical
-        ? '⚠ Classical corpus INCLUDED — ~650K line images, several hours.\n\n'
+        ? '⚠ Classical corpus INCLUDED - ~650K line images, several hours.\n\n'
         : 'Classical corpus excluded (tick the box to include it).\n\n')
     + 'Stops at a validation gate before training so you can check the\n'
     + 'training set first. Watch progress in the log below.')) return;
@@ -2743,7 +2743,7 @@ async function runPipeline() {
 async function runCoverageReport() {
   if (!confirm('Measure per-grapheme recognition?\n\n'
     + 'Runs the packaged model (and stock kan, for comparison) over every\n'
-    + 'inventory image — ~15K samples across 9 fonts. Takes a while.\n\n'
+    + 'inventory image - ~15K samples across 9 fonts. Takes a while.\n\n'
     + 'Produces a colour-coded map of every vowel, consonant, matra and\n'
     + 'conjunct, showing which the model actually reads and which it never\n'
     + 'gets right in any font.\n\n'
@@ -2771,7 +2771,7 @@ async function loadRemediation() {
     + `<b style="font-size:.95rem">${n}</b> ${label}</span>`;
   el('remed-counts').innerHTML =
       chip(d.structural, 'structural', '#b91c1c',
-           'Not in the unicharset. No label exists to predict — training cannot fix these.')
+           'Not in the unicharset. No label exists to predict - training cannot fix these.')
     + chip(d.fontSpecific, 'font-specific', '#b45309',
            'A majority of fonts read these correctly. Suspect the image, not the model.')
     + chip(d.universal, 'universal', '#0f766e',
@@ -2786,7 +2786,7 @@ async function loadRemediation() {
       <code>./scripts/00c-expand-unicharset.sh --with-latin</code></p>`;
   }
   if (d.confusions && d.confusions.length) {
-    h += '<p style="margin:0 0 4px"><b>Most consistent confusions</b> — these need contrast, not volume:</p><p style="margin:0 0 8px">'
+    h += '<p style="margin:0 0 4px"><b>Most consistent confusions</b> - these need contrast, not volume:</p><p style="margin:0 0 8px">'
       + d.confusions.slice(0, 8).map(c =>
           `<span style="display:inline-block;margin:0 10px 4px 0">${c.target} → ${c.read_as}
            <span style="color:var(--mute)">(${c.fonts})</span></span>`).join('')
@@ -2794,7 +2794,7 @@ async function loadRemediation() {
   }
   h += `<p style="margin:0;color:var(--mute)">Measured one grapheme per image, in
     isolation. A model trained on running text is being asked to read a single
-    floating glyph with no neighbours — harder than its real job. Read this as a
+    floating glyph with no neighbours - harder than its real job. Read this as a
     ranked list of weak spots, not as an accuracy figure.</p>`;
   el('remed-detail').innerHTML = h;
 
@@ -2812,7 +2812,7 @@ async function runRemediateGenerate() {
   if (!confirm('Generate targeted training data?\n\n'
     + 'Mines the corpus for real words containing each universal failure,\n'
     + 'composes them into lines, and renders them across all fonts into\n'
-    + 'rendered/ — where 02-make-lstmf.sh will pick them up.\n\n'
+    + 'rendered/ - where 02-make-lstmf.sh will pick them up.\n\n'
     + 'Capped at 40 lines per grapheme: uncapped oversampling makes the model\n'
     + 'over-predict the rare thing everywhere and overall CER gets worse.\n\n'
     + 'You will need to rebuild lstmf and retrain for this to have any effect.')) return;
@@ -2822,11 +2822,11 @@ async function runRemediateGenerate() {
 async function runRemediate() {
   const go = confirm('Triage the failing characters?\n\n'
     + 'Sorts every failing grapheme into:\n'
-    + '  • STRUCTURAL — not in the unicharset; training cannot fix it\n'
-    + '  • FONT-SPECIFIC — works in some fonts; suspect the image, not the model\n'
-    + '  • UNIVERSAL — fails everywhere; more context data may help\n\n'
+    + '  • STRUCTURAL - not in the unicharset; training cannot fix it\n'
+    + '  • FONT-SPECIFIC - works in some fonts; suspect the image, not the model\n'
+    + '  • UNIVERSAL - fails everywhere; more context data may help\n\n'
     + 'OK = triage only (fast, safe).\n'
-    + 'Read the result before generating — usually most failures are in the\n'
+    + 'Read the result before generating - usually most failures are in the\n'
     + 'first two classes, where adding data makes things worse, not better.');
   if (!go) return;
   run('remediate');
@@ -2864,7 +2864,7 @@ async function loadReviewQueue() {
       <img src="${it.image}" style="max-width:100%;max-height:150px;border:1px solid var(--border2);border-radius:4px;background:#fff">
       <div style="font-size:.75rem;color:var(--mute);margin-top:6px">model read:</div>
       <div style="font-size:.86rem;font-family:monospace;background:var(--bg);padding:5px;border-radius:4px;white-space:pre-wrap">${(it.ocr||'(nothing)').replace(/</g,'&lt;')}</div>
-      <div style="font-size:.75rem;color:var(--mute);margin-top:6px">ground truth — edit to correct:</div>
+      <div style="font-size:.75rem;color:var(--mute);margin-top:6px">ground truth - edit to correct:</div>
       <textarea id="rv-gt-${i}" rows="3"
         style="width:100%;font-size:.86rem;padding:5px;border:1.5px solid var(--border2);border-radius:4px;background:var(--bg)">${it.gt.replace(/</g,'&lt;')}</textarea>
       <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
@@ -2887,7 +2887,7 @@ async function saveReviewCorrection(p, i) {
       body: JSON.stringify({ path: p, text }) });
     const d = await r.json();
     st.innerHTML = r.ok
-      ? `<span style="color:var(--green)">✓ saved — ${d.note}</span>`
+      ? `<span style="color:var(--green)">✓ saved - ${d.note}</span>`
       : `<span style="color:var(--red)">${d.error}</span>`;
   } catch (e) { st.textContent = e.message; }
 }
@@ -2920,7 +2920,7 @@ async function scanFontDir() {
        <code>${d.font_dir}</code></span><div style="color:var(--mute);margin-top:4px">
        ${d.font_files.slice(0, 6).join(', ')}${d.font_files.length > 6 ? ` … +${d.font_files.length - 6}` : ''}</div>` +
       (others.length ? `<div style="color:var(--mute);margin-top:4px">Other folders found:
-       ${others.map(o => `${o.dir} (${o.count})`).join(', ')} — change font_dir to scope elsewhere.</div>` : '');
+       ${others.map(o => `${o.dir} (${o.count})`).join(', ')} - change font_dir to scope elsewhere.</div>` : '');
   } catch (e) {
     out.innerHTML = `<span style="color:var(--red)">${e.message}</span>`;
   }
@@ -2948,7 +2948,7 @@ async function submitFont() {
     const d = await r.json();
     if (!r.ok) { status.innerHTML = `<span style="color:var(--red)">${d.error}</span>`; return; }
     document.getElementById('add-font-panel').style.display = 'none';
-    notify(`✓ ${body.name} added — ${d.next}`, 'info', 9000);
+    notify(`✓ ${body.name} added - ${d.next}`, 'info', 9000);
     loadFonts();
   } catch (e) { status.textContent = e.message; }
 }
@@ -2985,7 +2985,7 @@ async function removeFont(id, name) {
       notify(`${name} removed, but some files could not be deleted: ${d.failures.slice(0,2).join('; ')}`,
              'error', 12000);
     } else {
-      notify(`✓ ${name} removed — ${d.files_removed.toLocaleString()} generated files deleted. `
+      notify(`✓ ${name} removed - ${d.files_removed.toLocaleString()} generated files deleted. `
            + `Source kept at ${d.source_kept}`, 'info', 9000);
     }
     loadFonts();
@@ -3031,7 +3031,7 @@ async function packageCp(name) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ checkpoint: name }),
     })).json();
-    r.ok ? toast('Packaging started — watch Live log') : toast('Error: ' + r.error);
+    r.ok ? toast('Packaging started - watch Live log') : toast('Error: ' + r.error);
   } catch(e) { toast('Server not running'); }
 }
 
@@ -3045,7 +3045,7 @@ async function loadCorpusStats() {
   const el = document.getElementById('corpus-stats');
   if (!d) {
     el.innerHTML = '<span>Corpus not built yet.</span>';
-    document.getElementById('st-corp').textContent = '—';
+    document.getElementById('st-corp').textContent = '-';
     return;
   }
   const totalLines = d.total_lines || 0;
@@ -3072,7 +3072,7 @@ async function loadCorpusStats() {
     const moreCount = (d.classical_titles || []).length - titles.length;
     classicalHtml = `
     <div style="margin:12px 0 6px;border-top:1px solid var(--border);padding-top:10px">
-      <div style="font-size:.7rem;color:var(--mute);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Classical corpus — ${(d.classical_titles||[]).length} texts · ${d.classical_lines.toLocaleString()} source lines · ${(d.classical_pages||0).toLocaleString()} rendered pages</div>
+      <div style="font-size:.7rem;color:var(--mute);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Classical corpus - ${(d.classical_titles||[]).length} texts · ${d.classical_lines.toLocaleString()} source lines · ${(d.classical_pages||0).toLocaleString()} rendered pages</div>
       <div style="font-size:.73rem;color:var(--mute);line-height:1.8">${titlesStr}${moreCount > 0 ? ` · <em>+${moreCount} more</em>` : ''}</div>
     </div>`;
   }
@@ -3086,7 +3086,7 @@ async function loadCorpusStats() {
       <div><div style="font-size:.7rem;color:var(--mute);margin-bottom:2px">Classical texts</div>
         <strong>${(d.classical_lines||0).toLocaleString()}</strong></div>
     </div>
-    <div style="font-size:.7rem;color:var(--mute);margin-bottom:2px;margin-top:4px">Modern corpus — Kannada character coverage (${d.unique_kan||0} / 128 codepoints · ${d.kan_chars ? d.kan_chars.toLocaleString() : '—'} chars)</div>
+    <div style="font-size:.7rem;color:var(--mute);margin-bottom:2px;margin-top:4px">Modern corpus - Kannada character coverage (${d.unique_kan||0} / 128 codepoints · ${d.kan_chars ? d.kan_chars.toLocaleString() : '-'} chars)</div>
     <div class="prog"><div class="prog-bar" style="width:${w}%;background:${barColor}"></div></div>
     <div style="font-size:.73rem;color:var(--mute);margin-top:6px">
       ${d.coverage_pct}% · Most frequent: ${(d.top_chars||[]).map(c => `<span title="${c.count.toLocaleString()}">${c.ch}</span>`).join(' ')}
@@ -3153,7 +3153,7 @@ async function pollJob() {
   document.querySelectorAll('.step-run-btn').forEach(b => {
     b.disabled = !!JOB.running;
     b.title = JOB.running
-      ? `Blocked — "${JOB_LABELS[JOB.step] || JOB.step}" is running. `
+      ? `Blocked - "${JOB_LABELS[JOB.step] || JOB.step}" is running. `
         + `These steps read and write the same files, so only one runs at a time.`
       : '';
   });
@@ -3164,7 +3164,7 @@ loadRemediation();
 
 async function stopJob() {
   if (!confirm(`Stop "${JOB_LABELS[JOB.step] || JOB.step}"?\n\n`
-    + 'Most steps resume from where they left off — rendering and lstmf both\n'
+    + 'Most steps resume from where they left off - rendering and lstmf both\n'
     + 'skip files that already exist, so stopping is cheap.\n\n'
     + 'Training is the exception: it resumes from the last checkpoint, so any\n'
     + 'iterations since then are lost.')) return;
@@ -3183,7 +3183,7 @@ async function run(step, force, mode, extraQuery) {
                   remediate:'Coverage remediation',
                   pipeline:'Preparing training data',
                   lstmf:'Make lstmf', train: mode === 'fresh' ? 'Train (fresh+expanded)' : 'Train', package:'Package' };
-  if (STATIC_MODE) { toast('Training unavailable in static mode — run the Node.js server'); return; }
+  if (STATIC_MODE) { toast('Training unavailable in static mode - run the Node.js server'); return; }
 
   let r;
   try {
@@ -3209,7 +3209,7 @@ async function run(step, force, mode, extraQuery) {
 
   // If step was skipped (e.g. corpus already downloaded), show notification and stop
   if (r.skipped) {
-    notify(`⏭ ${names[step]} — ${r.reason}`, 'info', 8000);
+    notify(`⏭ ${names[step]} - ${r.reason}`, 'info', 8000);
     loadStatus();
     return;
   }
@@ -3255,7 +3255,7 @@ async function run(step, force, mode, extraQuery) {
       setTimeout(() => {
         loadStatus();
         stat.textContent = 'Done'; stat.className = 'pill pill-green';
-        label.textContent = `✓ ${names[step]} finished — run the next step`;
+        label.textContent = `✓ ${names[step]} finished - run the next step`;
       }, 800);
     } else if (/\[trainocr\].*✗ failed|exit [^0]/i.test(line)) {
       stat.textContent = 'Failed'; stat.className = 'pill pill-red';
@@ -3267,7 +3267,7 @@ async function run(step, force, mode, extraQuery) {
     stat.textContent = 'Disconnected'; stat.className = 'pill pill-amber';
   };
 
-  toast(`▶ ${names[step]} started — output streaming below`);
+  toast(`▶ ${names[step]} started - output streaming below`);
   // Also refresh status after a short delay
   setTimeout(loadStatus, 3000);
 }
@@ -3322,7 +3322,7 @@ async function attachDashLog(step) {
       const tail = await (await fetch('/api/log/tail?lines=40')).json();
       if (tail.exists) tail.lines.forEach(append);
       else append('(training log is empty)');
-    } catch (_) { append('Could not load log tail — is the server running?'); }
+    } catch (_) { append('Could not load log tail - is the server running?'); }
   }
 
   if (dashLogSrc) dashLogSrc.close();
@@ -3395,7 +3395,7 @@ async function syncAndConfirm() {
   btn.textContent = '⟳ Syncing…'; btn.disabled = true;
   try {
     const r = await (await fetch('/api/sync-test-images', { method: 'POST' })).json();
-    toast(`✓ Synced ${r.copied} training images to rendered/font-test/ — ready for pipeline`);
+    toast(`✓ Synced ${r.copied} training images to rendered/font-test/ - ready for pipeline`);
     btn.textContent = `✓ ${r.copied} images synced`;
   } catch(e) { toast('Sync failed: ' + e.message); }
   btn.disabled = false;
@@ -3407,7 +3407,7 @@ async function runWithPreflight(step, mode) {
   try {
     const st = await apiGet('/api/status');
     if (st._training || st._runningStep === 'train') {
-      notify('⚠ Training is already running — stop it before starting another step.', 'error', 6000);
+      notify('⚠ Training is already running - stop it before starting another step.', 'error', 6000);
       return;
     }
   } catch(_) {}
@@ -3435,11 +3435,11 @@ async function runWithPreflight(step, mode) {
 
   const html = `
     <div style="font-size:.85rem;color:var(--ink);margin-bottom:12px;font-weight:600">
-      Pre-flight check — before running <strong>${{render:'③ Render images',lstmf:'④ Make lstmf',train:'⑤ Train (LSTM fine-tune)'}[step]}</strong>
+      Pre-flight check - before running <strong>${{render:'③ Render images',lstmf:'④ Make lstmf',train:'⑤ Train (LSTM fine-tune)'}[step]}</strong>
     </div>
-    ${check(kanExists, `Base model: tessdata_best/kan.traineddata ${kanExists?'found':'MISSING — run ① Prep base first'}`)}
+    ${check(kanExists, `Base model: tessdata_best/kan.traineddata ${kanExists?'found':'MISSING - run ① Prep base first'}`)}
     ${check(imgsOk, `Font images: ${fv.ready}/${fv.total} variants ready (${fv.trainImages} line images)`)}
-    ${check(syncOk, `Synced to pipeline: ${synced.count} images in rendered/font-test/ ${syncOk?'':'— click Sync below'}`)}
+    ${check(syncOk, `Synced to pipeline: ${synced.count} images in rendered/font-test/ ${syncOk?'':'- click Sync below'}`)}
     ${check(rendOk, `rendered/ directory: ${rendered.count} corpus images ${rendered.count===0?'(will use font images only)':''}`)}
     ${(step === 'lstmf' || step === 'train') ? (() => {
         const noun = (a5Pages && a5Pages.lstmfReady && step === 'train')
@@ -3447,10 +3447,10 @@ async function runWithPreflight(step, mode) {
           : `${(a5Pages && a5Pages.count || 0).toLocaleString()} pages`;
         return check(a5Ok ? true : 'info',
           step === 'lstmf'
-            ? (a5Ok ? `Classical A5 corpus: ${noun} — will be converted to lstmf`
-                    : `Classical A5 corpus: not found — only synthetic images will be used`)
-            : (a5Ok ? `Classical A5 corpus: ${noun} ready — included in training`
-                    : `Classical A5 corpus: not found — training on synthetic images only`),
+            ? (a5Ok ? `Classical A5 corpus: ${noun} - will be converted to lstmf`
+                    : `Classical A5 corpus: not found - only synthetic images will be used`)
+            : (a5Ok ? `Classical A5 corpus: ${noun} ready - included in training`
+                    : `Classical A5 corpus: not found - training on synthetic images only`),
           a5Ok ? a5Pages.dir : 'Run 🌐 A5 Browser Render then ④ Make lstmf to include classical corpus'
         );
     })() : ''}
@@ -3597,7 +3597,7 @@ async function runOcr() {
   document.getElementById('kan-out').textContent   = kanText || '(no text)';
   document.getElementById('kan-time').textContent  = `${((t1-t0)/1000).toFixed(1)}s`;
   document.getElementById('kan-metrics').innerHTML = metricsHtml(kanText, gt);
-  setP(55, 'kan done — running kan_hist…');
+  setP(55, 'kan done - running kan_hist…');
 
   // Run kan_hist
   let histText = '', histOk = false, histConf = null;
@@ -3672,8 +3672,8 @@ function updateMetricsLive() {
   const gt      = (document.getElementById('ocr-gt') || {}).value || '';
   const kanText = document.getElementById('kan-out').textContent;
   const histText= document.getElementById('hist-out').textContent;
-  if (!kanText || kanText === '—' || kanText === '…' ||
-      !histText || histText === '—' || histText === '…') return;
+  if (!kanText || kanText === '-' || kanText === '…' ||
+      !histText || histText === '-' || histText === '…') return;
   document.getElementById('kan-metrics').innerHTML  = metricsHtml(kanText,  gt);
   document.getElementById('hist-metrics').innerHTML = metricsHtml(histText, gt);
   if (gt.trim()) {
@@ -3748,7 +3748,7 @@ function exportSingleResult() {
   const gt       = document.getElementById('ocr-gt').value;
   const fname    = ocrImg ? ocrImg.name.replace(/\.[^.]+$/,'') : 'result';
   const lines = [
-    '# TrainOCR — OCR Test Result',
+    '# TrainOCR - OCR Test Result',
     `# Image: ${ocrImg?.name || 'unknown'}`,
     `# Date: ${new Date().toISOString()}`,
     '',
@@ -3876,11 +3876,11 @@ function renderBatchResults(histOk) {
   tbody.innerHTML = batchResults.map(r => `
     <tr>
       <td style="font-family:monospace;font-size:.78rem">${r.name}</td>
-      <td style="color:${r.kanCer ? col(r.kanCer) : 'var(--mute)'}">${r.kanCer ? r.kanCer+'%' : '—'}</td>
-      <td style="color:${r.histCer ? col(r.histCer) : 'var(--mute)'}">${r.histCer ? r.histCer+'%' : (histOk?'—':'N/A')}</td>
-      <td>${r.kanWer ? r.kanWer+'%' : '—'}</td>
-      <td>${r.histWer ? r.histWer+'%' : (histOk?'—':'N/A')}</td>
-      <td style="color:var(--green);font-weight:600">${r.kanCer && r.histCer ? '▼'+(parseFloat(r.kanCer)-parseFloat(r.histCer)).toFixed(1)+'pp' : '—'}</td>
+      <td style="color:${r.kanCer ? col(r.kanCer) : 'var(--mute)'}">${r.kanCer ? r.kanCer+'%' : '-'}</td>
+      <td style="color:${r.histCer ? col(r.histCer) : 'var(--mute)'}">${r.histCer ? r.histCer+'%' : (histOk?'-':'N/A')}</td>
+      <td>${r.kanWer ? r.kanWer+'%' : '-'}</td>
+      <td>${r.histWer ? r.histWer+'%' : (histOk?'-':'N/A')}</td>
+      <td style="color:var(--green);font-weight:600">${r.kanCer && r.histCer ? '▼'+(parseFloat(r.kanCer)-parseFloat(r.histCer)).toFixed(1)+'pp' : '-'}</td>
     </tr>`).join('');
 
   document.getElementById('batch-results').style.display = '';
@@ -3991,13 +3991,13 @@ async function fetchWsPage() {
       document.getElementById('ws-img').src = imgUrl;
     } else {
       document.getElementById('ws-img').src = '';
-      document.getElementById('ws-img').alt = '(image not available — run OCR on GT text only)';
+      document.getElementById('ws-img').alt = '(image not available - run OCR on GT text only)';
     }
     document.getElementById('ws-gt-display').textContent = wsGtText || '(no text extracted)';
     document.getElementById('ws-preview-area').style.display = '';
     document.getElementById('ws-prog').style.display = 'none';
     document.getElementById('ws-ocr-btn').style.display = wsImgB64 || imgUrl ? '' : 'none';
-    if (quality < 3) toast('⚠ This page has not been proofread — GT may be unreliable');
+    if (quality < 3) toast('⚠ This page has not been proofread - GT may be unreliable');
 
   } catch(e) {
     document.getElementById('ws-prog').style.display = 'none';
@@ -4064,7 +4064,7 @@ async function runWsOcr() {
       logger: m => { if(m.status==='recognizing text') setWP(55+m.progress*40,'Running kan_hist…'); }});
     const { data: { text } } = await w2.recognize(src);
     histText = text.trim(); histOk=true; await w2.terminate();
-  } catch(e) { histText = 'Not packaged yet — complete step ⑦'; }
+  } catch(e) { histText = 'Not packaged yet - complete step ⑦'; }
   const t2 = Date.now();
 
   document.getElementById('ws-kan-out').textContent   = kanText || '(no text)';
@@ -4089,7 +4089,7 @@ function exportWsResult() {
   const kanOut = document.getElementById('ws-kan-out').textContent;
   const histOut= document.getElementById('ws-hist-out').textContent;
   const lines = [
-    '# TrainOCR — Wikisource OCR Comparison',
+    '# TrainOCR - Wikisource OCR Comparison',
     `# Page: ${title}`,
     `# Date: ${new Date().toISOString()}`,
     `# GT source: kn.wikisource.org (proofread transcription)`,
@@ -4146,7 +4146,7 @@ async function uploadScan() {
       document.getElementById('scan-file').value = '';
       loadScans();
     } else { toast('Error: ' + r.error); }
-  } catch(e) { toast('Server not running — scan upload unavailable'); }
+  } catch(e) { toast('Server not running - scan upload unavailable'); }
 }
 
 async function loadScans() {
@@ -4193,7 +4193,7 @@ function startLog() {
   const box  = document.getElementById('log-box');
   const stat = document.getElementById('log-stat');
   if (STATIC_MODE) {
-    appendLog('Running in static / offline mode — live log requires the Node.js server.');
+    appendLog('Running in static / offline mode - live log requires the Node.js server.');
     stat.textContent='Offline'; stat.className='pill pill-amber';
     return;
   }
@@ -4201,7 +4201,7 @@ function startLog() {
   fetch('/api/log/tail?lines=80').then(r=>r.json()).then(d => {
     if (d.exists) d.lines.forEach(l => appendLog(l));
   }).catch(() => {
-    appendLog('Server not running — live log unavailable.');
+    appendLog('Server not running - live log unavailable.');
     stat.textContent='Offline'; stat.className='pill pill-amber';
   });
   // Open SSE
@@ -4319,10 +4319,10 @@ function renderFontComparison() {
   if (!_fcData) return;
   const g = document.getElementById('imgs-grid');
   const FONT_LABELS = {
-    kan_gmp: 'GMP — German Mission Press',
-    kan_gtn: 'GTN — Kannada GTN',
-    kan_kittel: 'Kittel — F. Kittel',
-    kan_wmp: 'WMP — Wesleyan Mission Press',
+    kan_gmp: 'GMP - German Mission Press',
+    kan_gtn: 'GTN - Kannada GTN',
+    kan_kittel: 'Kittel - F. Kittel',
+    kan_wmp: 'WMP - Wesleyan Mission Press',
   };
 
   if (_imgTest === 'ALL') {
@@ -4351,7 +4351,7 @@ function renderFontComparison() {
       sentence_01:'Sentence 1', sentence_02:'Sentence 2', sentence_03:'Sentence 3',
     };
     const header = `<div style="font-size:.82rem;color:var(--mute);margin-bottom:12px">
-      Showing <strong>${TEST_NAMES[_imgTest]||_imgTest}</strong> rendered in each font — same Unicode text, different typefaces.
+      Showing <strong>${TEST_NAMES[_imgTest]||_imgTest}</strong> rendered in each font - same Unicode text, different typefaces.
     </div>`;
     const rows = _fcData.map(font => {
       const img = font.images.find(i => i.name === _imgTest);
@@ -4403,7 +4403,7 @@ async function runOcrQuality() {
   results.innerHTML = d.results.map(font => `
     <div class="ocrq-font">
       <div class="ocrq-font-head">
-        <span>${font.fontId.replace('kan_','')} — ${font.variant}</span>
+        <span>${font.fontId.replace('kan_','')} - ${font.variant}</span>
         <span class="cer-badge ${cerClass(font.avgCer)}">${cerEmoji(font.avgCer)} Avg CER: ${font.avgCer}%</span>
       </div>
       ${font.tests.map(t => `
@@ -4423,7 +4423,7 @@ function renderNextSteps(qdata, el) {
 
   items.push({
     icon: '✅',
-    title: 'Tesseract 5 confirmed — virama encoding is correct',
+    title: 'Tesseract 5 confirmed - virama encoding is correct',
     detail: 'Tesseract 5.5.2 is installed. Kannada virama (್) and all conjunct forms encode correctly in LSTM training. No action needed here.',
   });
 
@@ -4431,21 +4431,21 @@ function renderNextSteps(qdata, el) {
     const overall = qdata.overall;
 
     if (overall < 5) {
-      items.push({ icon: '✅', title: 'Model quality: Excellent', detail: `CER ${overall}% — the model reads the trained fonts very accurately. Package the best checkpoint and test on real historical scans.` });
+      items.push({ icon: '✅', title: 'Model quality: Excellent', detail: `CER ${overall}% - the model reads the trained fonts very accurately. Package the best checkpoint and test on real historical scans.` });
     } else if (overall < 15) {
-      items.push({ icon: '⚠️', title: 'Model quality: Moderate — improve training data', detail: `CER ${overall}% means roughly 1 in ${Math.round(100/overall)} characters is wrong. ` +
+      items.push({ icon: '⚠️', title: 'Model quality: Moderate - improve training data', detail: `CER ${overall}% means roughly 1 in ${Math.round(100/overall)} characters is wrong. ` +
         'To improve: generate more sentence-level training images from each font variant. ' +
         'Target 500+ lines per font variant (currently ~12 per variant).' });
     } else {
-      items.push({ icon: '❌', title: 'Model quality: Poor — needs more training data', detail: `CER ${overall}% is high. ` +
-        'The model has not learned the historical font shapes well. The font-test images (line + sentence) are too few — only ~12 per variant. ' +
+      items.push({ icon: '❌', title: 'Model quality: Poor - needs more training data', detail: `CER ${overall}% is high. ` +
+        'The model has not learned the historical font shapes well. The font-test images (line + sentence) are too few - only ~12 per variant. ' +
         'Run the character test image generator for all fonts, sync to pipeline, then retrain.' });
     }
 
     // Worst font
     const worst = [...qdata.results].sort((a,b)=>b.avgCer-a.avgCer)[0];
     if (worst && worst.avgCer > 10) {
-      items.push({ icon: '🎯', title: `Focus on ${worst.fontId.replace('kan_','')} font — CER ${worst.avgCer}%`,
+      items.push({ icon: '🎯', title: `Focus on ${worst.fontId.replace('kan_','')} font - CER ${worst.avgCer}%`,
         detail: 'This font variant has the most errors. Generate more training images from it, sync, and retrain. ' +
           'Consider rendering 5+ full paragraphs per font variant using the Character Testing tool.' });
     }
@@ -4495,13 +4495,13 @@ function toggleGloss(btn) {
 const TOUR_STEPS = [
   { tab: 'dash', sel: '#steps-list',
     title: 'Your training pipeline',
-    text: 'Each card shows one step. Green = done, amber = pending. Complete them in order — every step feeds the next.' },
+    text: 'Each card shows one step. Green = done, amber = pending. Complete them in order - every step feeds the next.' },
   { tab: 'dash', sel: '.actions',
     title: 'Run a step',
     text: 'Click any button to start that step in the background. Output streams to the Live log tab so you can watch progress in real time.' },
   { tab: 'ocr', sel: '#ocr-drop',
     title: 'Test your model',
-    text: 'Drop a historical Kannada scan here. Tesseract.js runs entirely in your browser — nothing is uploaded. You\'ll see both kan (base) and kan_hist results side by side.' },
+    text: 'Drop a historical Kannada scan here. Tesseract.js runs entirely in your browser - nothing is uploaded. You\'ll see both kan (base) and kan_hist results side by side.' },
   { tab: 'ocr', sel: '#ocr-results',
     title: 'Compare models',
     text: 'CER (character error rate) and WER (word error rate) tell you exactly how much better kan_hist is on your specific documents. Lower numbers = fewer corrections for your transcribers.' },
@@ -4510,10 +4510,10 @@ const TOUR_STEPS = [
     text: 'Synthetic training (rendered fonts) is a starting point. Uploading real scans with accurate transcriptions is the fastest way to improve accuracy on your specific collection.' },
   { tab: 'train', sel: '#bcer-chart',
     title: 'Watch BCER fall',
-    text: 'A healthy training run looks like a steadily decreasing curve. Stop training when BCER has not reached a new low for ~10,000 iterations — that\'s the plateau signal.' },
+    text: 'A healthy training run looks like a steadily decreasing curve. Stop training when BCER has not reached a new low for ~10,000 iterations - that\'s the plateau signal.' },
   { tab: 'train', sel: '#cp-tbody',
     title: 'Package any checkpoint',
-    text: 'Every 100 iterations saves a checkpoint. The star (★) marks the best BCER. You can package any checkpoint as kan_hist.traineddata — useful if the model overfit later.' },
+    text: 'Every 100 iterations saves a checkpoint. The star (★) marks the best BCER. You can package any checkpoint as kan_hist.traineddata - useful if the model overfit later.' },
   { tab: 'log', sel: '#log-box',
     title: 'Live training log',
     text: 'Green lines = BCER updates. Red = errors. Purple = portal events. If you see many red lines in a row, check that lstmtraining is installed and lstmf/list.txt is not empty.' },
@@ -4717,7 +4717,7 @@ function showA5Panel() {
 // ── A5 render: Start / Stop / Resume ─────────────────────────────────────
 let _a5PollTimer  = null;
 let _a5CorpusDir  = '';
-let _a5PeakCount  = 0;   // highest PNG count seen — used for indeterminate bar
+let _a5PeakCount  = 0;   // highest PNG count seen - used for indeterminate bar
 
 function _a5SetState(state, msg = '') {
   // state: 'idle' | 'running' | 'stopped' | 'done' | 'error'
@@ -4732,7 +4732,7 @@ function _a5SetState(state, msg = '') {
     startBtn.style.display = 'none';
     stopBtn.style.display  = '';
     wrapEl.style.display   = 'block';
-    labelEl.textContent    = 'Rendering — see live log for detail';
+    labelEl.textContent    = 'Rendering - see live log for detail';
     statusEl.textContent   = msg || '';
     // Indeterminate shimmer: oscillate bar between 10 % and 90 %
     barEl.style.transition = 'none';
@@ -4742,7 +4742,7 @@ function _a5SetState(state, msg = '') {
     startBtn.textContent   = '▶ Resume';
     startBtn.style.display = '';
     stopBtn.style.display  = 'none';
-    labelEl.textContent    = 'Stopped — safe to resume';
+    labelEl.textContent    = 'Stopped - safe to resume';
     barEl.style.width      = '0%';
     statusEl.textContent   = msg || '';
   } else if (state === 'done') {
@@ -4784,7 +4784,7 @@ function _a5StartPoll() {
         clearInterval(_a5PollTimer);
         _a5PollTimer = null;
         if (pd.stopped) {
-          _a5SetState('stopped', `Paused at ${count} pages — Resume picks up where it left off`);
+          _a5SetState('stopped', `Paused at ${count} pages - Resume picks up where it left off`);
         } else {
           _a5SetState('done', `${count} pages → ${pd.a5_dir}`);
         }
@@ -4806,8 +4806,8 @@ async function startA5Render() {
   }
 
   _a5CorpusDir = corpusDir;
-  _a5SetState('running', lines ? 'Starting Chrome workers — line mode…'
-                               : 'Starting Chrome workers — PAGE mode (not trainable)…');
+  _a5SetState('running', lines ? 'Starting Chrome workers - line mode…'
+                               : 'Starting Chrome workers - PAGE mode (not trainable)…');
 
   try {
     const r = await fetch('/api/render-a5-pages', {
@@ -4853,7 +4853,7 @@ async function runPreview() {
   if (all && fontRegistry) {
     fontRegistry.forEach(f => {
       f.variants.forEach(v => {
-        if (v.fontUrl) targets.push({ label: `${f.name} — ${v.name}`, font_path: v.fontUrl.replace(/^\//, '') });
+        if (v.fontUrl) targets.push({ label: `${f.name} - ${v.name}`, font_path: v.fontUrl.replace(/^\//, '') });
       });
     });
   } else if (fontSel?.value) {
@@ -4944,7 +4944,7 @@ function selectFont(fontId) {
 
   // Update "Generate images" button label with short font name
   const genBtn = document.getElementById('btn-gen-imgs');
-  if (genBtn) genBtn.textContent = `🖼 Generate — ${font.name.replace('Karnata ', '')}`;
+  if (genBtn) genBtn.textContent = `🖼 Generate - ${font.name.replace('Karnata ', '')}`;
 
   // Populate variant dropdown
   const sel = document.getElementById('variant-select');
@@ -5066,7 +5066,7 @@ async function loadVariantPngs() {
     });
     st.textContent = d.files?.length
       ? `${d.files.length} images loaded for ${uVariant}`
-      : 'No images found — click Generate images first';
+      : 'No images found - click Generate images first';
     st.style.color = d.files?.length ? 'var(--green)' : 'var(--amber)';
   } catch(e) {
     st.style.color = 'var(--red)'; st.textContent = `✗ ${e.message}`;
@@ -5204,7 +5204,7 @@ async function clearAndRerender() {
     const dr = await fetch('/api/rendered', { method: 'DELETE' });
     const dd = await dr.json();
     if (!dr.ok) throw new Error(dd.error || 'Clear failed');
-    btn.textContent = `✓ Cleared ${dd.pngs} PNGs — re-rendering…`;
+    btn.textContent = `✓ Cleared ${dd.pngs} PNGs - re-rendering…`;
     // Kick off the render step via the normal run() pathway
     await run('render');
   } catch(e) {
@@ -5311,7 +5311,7 @@ async function runCharOcrTest() {
 
   if (!testPairs.length) {
     st.style.color = 'var(--amber)';
-    st.textContent = 'No images loaded — generate them first.';
+    st.textContent = 'No images loaded - generate them first.';
     btn.disabled = false;
     return;
   }
@@ -5734,7 +5734,7 @@ function tjsUpdateConfLabel() {
   const hi  = spans.filter(s => parseFloat(s.dataset.conf) >= green).length;
   const lo  = spans.filter(s => parseFloat(s.dataset.conf) <  red).length;
   const mid = spans.length - hi - lo;
-  const avg = window._tjsAvgConf ?? '—';
+  const avg = window._tjsAvgConf ?? '-';
   document.getElementById('tjs-conf').innerHTML =
     `Avg ${avg}% &nbsp;·&nbsp; ` +
     `<span style="color:#065f46">●</span> ${hi} &nbsp;` +
@@ -5813,14 +5813,14 @@ async function tjsSaveGroundTruth() {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Upload failed');
 
-    st.innerHTML = `✓ Saved as <code>${d.saved}</code> —
+    st.innerHTML = `✓ Saved as <code>${d.saved}</code> -
       <button onclick="run('lstmf')"
         style="font-size:.75rem;padding:2px 8px;background:#7c3aed;color:#fff;
                border:none;border-radius:4px;cursor:pointer;margin-left:4px">
         Re-run ⑤ Make lstmf
       </button>`;
     st.style.color = 'var(--green)';
-    toast('✓ Training pair saved — re-run Make lstmf to include it in training');
+    toast('✓ Training pair saved - re-run Make lstmf to include it in training');
     if (typeof loadScans === 'function') loadScans();
   } catch(e) {
     st.textContent = '✗ ' + e.message;
