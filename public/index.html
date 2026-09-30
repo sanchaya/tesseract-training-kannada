@@ -2530,12 +2530,12 @@ async function loadStatus() {
 
   // ── Restore the inline log panel for runs we did not start ──────
   // The panel is normally opened by run(), so it stayed hidden and empty when a
-  // step was launched from the CLI, or when the page was reloaded mid-run —
+  // step was launched from the CLI, or when the page was reloaded mid-run -
   // the banner told you to watch the live log while showing you nothing.
   if (isTraining || running) {
     attachDashLog(running || 'train');
   } else if (dashLogAttached) {
-    // Run finished — release the stream so a later run can re-attach cleanly.
+    // Run finished - release the stream so a later run can re-attach cleanly.
     dashLogAttached = false;
     if (dashLogSrc) { dashLogSrc.close(); dashLogSrc = null; }
     const s = document.getElementById('dash-log-stat');
@@ -2558,10 +2558,10 @@ async function loadStatus() {
       // restore title if we cleared it
     }
   });
-  // ⑤ Train button — show spinner when running
+  // ⑤ Train button - show spinner when running
   if (trainBtn) {
     if (isTraining && !running) {
-      // Background training not started via this session — show pulsing state
+      // Background training not started via this session - show pulsing state
       trainBtn.classList.add('running');
       trainBtn.disabled = true;
       trainBtn.innerHTML = '<span class="spin">⚙</span> Training…';
@@ -2597,7 +2597,7 @@ async function loadStatus() {
   if (d._training || running === 'train') {
     loadBcer();
     loadCheckpoints();
-    // Corpus stats change rarely — refresh every ~2 min (every 6th status poll)
+    // Corpus stats change rarely - refresh every ~2 min (every 6th status poll)
     _corpusRefreshTick = ((_corpusRefreshTick || 0) + 1) % 6;
     if (_corpusRefreshTick === 0) loadCorpusStats();
   }
@@ -2636,7 +2636,7 @@ async function loadStatus() {
   }
   _lastRunningStep = running || (d._training ? 'charTrain' : null);
 
-  // Pipeline steps list — rich cards
+  // Pipeline steps list - rich cards
   document.getElementById('steps-list').innerHTML = steps.map(s => {
     const isRunning = running && s.label.toLowerCase().includes(running.split(':')[0]);
     const cls = isRunning ? 'running' : s.done ? 'ok' : 'pend';
@@ -2805,7 +2805,7 @@ async function loadRemediation() {
     : 'Nothing here that more data would fix.';
 }
 
-// Stage 2: actually generate. Separate from the diagnosis on purpose — most
+// Stage 2: actually generate. Separate from the diagnosis on purpose - most
 // failures land in classes where adding data makes things worse, and the
 // triage is what tells you which.
 async function runRemediateGenerate() {
@@ -3288,8 +3288,8 @@ async function runCoverageInventory() {
 
 // ── Attach the dashboard log panel to an already-running step ────────────
 // run() opens the panel for steps started from this page. This does the same
-// for a step that is already in flight — training launched from the terminal,
-// or a page reload during a long run — so the panel is never empty while the
+// for a step that is already in flight - training launched from the terminal,
+// or a page reload during a long run - so the panel is never empty while the
 // "training is running" banner is telling you to watch it.
 let dashLogAttached = false;
 async function attachDashLog(step) {
@@ -3544,7 +3544,7 @@ async function runOcr() {
   const btn = document.getElementById('ocr-btn');
   btn.disabled = true;
   document.getElementById('ocr-prog').style.display = 'block';
-  // Reset outputs (don't hide #ocr-results — it holds the image drop zone too)
+  // Reset outputs (don't hide #ocr-results - it holds the image drop zone too)
   document.getElementById('kan-out').textContent   = '…';
   document.getElementById('hist-out').textContent  = '…';
   document.getElementById('kan-metrics').innerHTML  = '';
@@ -3604,7 +3604,7 @@ async function runOcr() {
   try {
     const w2 = await Tesseract.createWorker('kan_hist', 1, {
       langPath: LANG,
-      // cacheMethod:'none' — Tesseract.js caches the fetched model in IndexedDB
+      // cacheMethod:'none' - Tesseract.js caches the fetched model in IndexedDB
       // keyed by language NAME. Re-packaging writes the same kan_hist.traineddata
       // filename, so the cache is never invalidated and the browser keeps running
       // whichever build it saw first. This panel exists to test the model you
@@ -3813,7 +3813,7 @@ async function runBatch() {
     histW = await Tesseract.createWorker('kan_hist', 1, { langPath: LANG, cacheMethod: 'none' });
     await histW.setParameters({ tessedit_pageseg_mode: psm });
     histOk = true;
-  } catch(e) { /* kan_hist not packaged yet — run kan only */ }
+  } catch(e) { /* kan_hist not packaged yet - run kan only */ }
 
   for (let i=0; i<total; i++) {
     const f   = batchFiles[i];
@@ -3936,7 +3936,7 @@ async function fetchWsPage() {
     const wikitext = page.revisions?.[0]?.slots?.main?.['*'] || '';
     const quality  = parseInt(page.pageprops?.['proofread-quality'] || 0);
 
-    // Extract GT text — strip Wikisource templates
+    // Extract GT text - strip Wikisource templates
     wsGtText = wikitext
       .replace(/\{\{[Rr](?:unning)?[Hh](?:eader)?[^}]*\}\}/g, '')
       .replace(/\{\{[^{}]*\}\}/g, '').replace(/\{\{[^{}]*\}\}/g, '')
@@ -4614,7 +4614,7 @@ async function loadTrainingStats() {
       ['stat-iters', 'tjs-stat-iters'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = best.iter.toLocaleString(); });
     }
 
-    // Training images — rendered + classical total
+    // Training images - rendered + classical total
     if (st && (st._rendered !== undefined || st._classical !== undefined)) {
       const total = (st._rendered || 0) + (st._classical || 0);
       ['stat-images', 'tjs-stat-images'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = total.toLocaleString(); });
@@ -4626,12 +4626,12 @@ async function loadTrainingStats() {
       }
     }
 
-    // Font variants — total font files across all families
+    // Font variants - total font files across all families
     if (fonts && fonts.length) {
       const total = fonts.reduce((s, f) => s + (f.styles || 1), 0);
       ['stat-fonts', 'tjs-stat-fonts'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = total; });
     }
-  } catch(e) { /* server offline — dashes remain */ }
+  } catch(e) { /* server offline - dashes remain */ }
 }
 
 async function loadAll() {
@@ -4982,11 +4982,11 @@ function selectVariant(variantName) {
   document.getElementById('run-char-test-btn').style.display  = hasImgs ? 'inline-block' : 'none';
   const runPending = document.getElementById('run-char-test-pending');
   if (runPending) runPending.style.display = hasImgs ? 'none' : 'block';
-  // Fine-tune available whenever images exist — no need to run OCR test first
+  // Fine-tune available whenever images exist - no need to run OCR test first
   document.getElementById('btn-char-train').style.display  = hasImgs ? 'inline-block' : 'none';
   const trainPending = document.getElementById('char-train-pending');
   if (trainPending) trainPending.style.display = hasImgs ? 'none' : 'block';
-  // CSV only valid after a test run — always reset on variant switch
+  // CSV only valid after a test run - always reset on variant switch
   document.getElementById('export-char-csv-btn').style.display = 'none';
   window._lastCharOcrCsv = null;
 
@@ -5122,11 +5122,11 @@ function buildUnicodeCell(item, type) {
 
 // ── Render full grid ───────────────────────────────────────────
 function renderUnicodeGrid() {
-  // Historical Karnata fonts render virama as a visible halanta mark — correct for print,
+  // Historical Karnata fonts render virama as a visible halanta mark - correct for print,
   // but useless as a character reference. Conjuncts always use Noto Sans Kannada so the
   // reference is legible. Other sections use the selected font for live comparison.
   // Historical fonts (GTN/WMP) store their correct conjunct forms in the GSUB
-  // aalt feature, which browsers do not enable by default — apply it for the
+  // aalt feature, which browsers do not enable by default - apply it for the
   // selected font so the live preview matches the training images.
   const selFont        = fontRegistry?.find(f => f.id === uFontId);
   const fontFeatures   = (selFont && selFont.font_features) || '';
@@ -5134,13 +5134,13 @@ function renderUnicodeGrid() {
 
   // Conjuncts use the SELECTED font, like every other row.
   //
-  // They were previously pinned to "'Noto Sans Kannada', 'Kannada Sangam MN'" —
+  // They were previously pinned to "'Noto Sans Kannada', 'Kannada Sangam MN'" -
   // a workaround from when virama conjuncts rendered detached in the historical
   // fonts. That cause is understood now: GTN and WMP keep their correct ottu
   // forms in the OpenType 'aalt' feature, which browsers do not enable by
   // default (docs/CONJUNCT_RENDERING.md). The workaround silently showed a
-  // system font instead of the font under test — precisely the comparison this
-  // panel exists to make — and hid whether the real font shapes correctly.
+  // system font instead of the font under test - precisely the comparison this
+  // panel exists to make - and hid whether the real font shapes correctly.
   const groups = [
     { id:'unicode-vowels',     items:KANNADA_VOWELS,     type:'vowel',    ff: fontFamily, fs: fontFeatures },
     { id:'unicode-consonants', items:KANNADA_CONSONANTS, type:'consonant',ff: fontFamily, fs: fontFeatures },
@@ -5184,7 +5184,7 @@ function renderUnicodeGrid() {
 
 // ── Toggle chart visibility ────────────────────────────────────
 function toggleUnicodeRef() {
-  // Legacy — panel is always visible now; kept in case called elsewhere
+  // Legacy - panel is always visible now; kept in case called elsewhere
   if (!fontRegistry) loadFontRegistry();
 }
 
@@ -5230,7 +5230,7 @@ async function clearAndRegenImages() {
   if (tp) tp.style.display = 'block';
   window._lastCharOcrCsv = null;
 
-  // force=true tells the server to wipe and regenerate — no separate DELETE call needed
+  // force=true tells the server to wipe and regenerate - no separate DELETE call needed
   await genTestImages(true, true);
   btn.disabled = false;
 }
@@ -5260,7 +5260,7 @@ async function genTestImages(all = false, force = false) {
       document.getElementById('run-char-test-btn').style.display = 'inline-block';
       const rp = document.getElementById('run-char-test-pending');
       if (rp) rp.style.display = 'none';
-      // Reset post-test state — images are new
+      // Reset post-test state - images are new
       document.getElementById('export-char-csv-btn').style.display = 'none';
       document.getElementById('btn-char-train').style.display      = 'none';
       const tp = document.getElementById('char-train-pending');
@@ -5484,7 +5484,7 @@ async function startCharTrain() {
   btnStart.style.display = 'none';
   btnStop.style.display = 'inline-block';
   document.getElementById('btn-char-train').disabled = true;
-  // Hide CSV export while training is running — no need to re-export mid-run
+  // Hide CSV export while training is running - no need to re-export mid-run
   document.getElementById('export-char-csv-btn').style.display = 'none';
 
   // Remove any previous completion message
@@ -5669,7 +5669,7 @@ async function tjsOcr(src) {
     corrEl.value = window._tjsPlainText;
     tjsCheckUnsupported(corrEl.value);
 
-    // Overall confidence — store for recolor updates
+    // Overall confidence - store for recolor updates
     window._tjsAvgConf = Math.round(data.confidence);
     tjsUpdateConfLabel();
 
@@ -5758,14 +5758,14 @@ function tjsRecolor() {
 }
 
 // Characters missing from tessdata_best/kan.traineddata unicharset.
-// ಞ (U+0C9E) IS present — was incorrectly filtered before.
+// ಞ (U+0C9E) IS present - was incorrectly filtered before.
 // Run scripts/00c-expand-unicharset.sh to add ಋ ಙ ಝ ಱ, then retrain.
 // After expansion + retraining, clear this set entirely.
 const _TJS_UNSUPPORTED = new Set([...'ಋಙಝಱ']);
 
 function tjsFilterGt(text) {
   // Remove words that contain any unsupported standalone character
-  // (same logic as corpus filter — preserves ಜ್ಞ conjunct sequences)
+  // (same logic as corpus filter - preserves ಜ್ಞ conjunct sequences)
   return text.split('\n').map(line =>
     line.split(' ')
         .filter(tok => ![..._TJS_UNSUPPORTED].some(ch => tok === ch))

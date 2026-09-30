@@ -1,5 +1,5 @@
 """
-portal.py — TrainOCR by Sanchaya (Flask / Python backend)
+portal.py - TrainOCR by Sanchaya (Flask / Python backend)
 
 Alternative to the Node.js server.js. Serves the same public/index.html
 and exposes a compatible REST API for all pipeline operations.

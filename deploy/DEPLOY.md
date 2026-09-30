@@ -6,7 +6,7 @@ server over SSH and runs `deploy/server-install.sh` there as root.
 ## Server requirements
 
 - Ubuntu 22.04/24.04 (or Debian), nginx allowed to be already installed
-  and serving other sites — only a `trainocr` site is added
+  and serving other sites - only a `trainocr` site is added
 - An SSH user with passwordless `sudo`
 - DNS A record for `trainocr.sanchaya.net` pointing at the server
   (needed before TLS can be issued)
@@ -56,4 +56,4 @@ The nginx site is rendered from `deploy/nginx.conf.template`. Edit the
 template and re-run `--setup`; hand edits to
 `/etc/nginx/sites-available/trainocr` are overwritten.
 
-`rendered/` and `scan-input/` grow large — watch disk usage.
+`rendered/` and `scan-input/` grow large - watch disk usage.

@@ -1,6 +1,6 @@
-# Research Notes — Training Tesseract 5 for Historical Kannada OCR
+# Research Notes - Training Tesseract 5 for Historical Kannada OCR
 
-**Project:** `kan_hist.traineddata` — fine-tuned Tesseract 5 LSTM model for 19th-century Kannada letterpress typefaces  
+**Project:** `kan_hist.traineddata` - fine-tuned Tesseract 5 LSTM model for 19th-century Kannada letterpress typefaces  
 **Organisation:** Sanchaya / Sanchi Foundation  
 **Fonts:** Karnata font family (digital revivals of German Mission Press, Wesleyan Mission Press, Basel Mission Press, G.T. Narayana Rao)  
 **Base model:** `kan.traineddata` from Tesseract tessdata_best (Apache 2.0)  
@@ -14,11 +14,11 @@ These notes document technical findings, problems encountered, and decisions mad
 
 The Tesseract 5 `kan` model was trained on modern digital Kannada fonts. Historical Kannada letterpress typefaces from the 1830s–1900s (German Mission Press, Wesleyan Mission Press, Basel Mission Press) differ from modern digital fonts in several systematic ways:
 
-- **Stroke weight variation** — letterpress inking is uneven; strokes swell and thin in ways no digital font reproduces
-- **Ink spread** — ink bleeds into paper fibres, rounding sharp corners and merging closely-spaced elements
-- **Baseline instability** — type was hand-set; characters sit at slightly different heights along a line
-- **Conjunct variation** — some conjunct forms (stacked consonants) were rendered differently in 19th-century presses than in modern Unicode fonts
-- **Paper texture** — foxing, show-through, and irregular grain add visual noise
+- **Stroke weight variation** - letterpress inking is uneven; strokes swell and thin in ways no digital font reproduces
+- **Ink spread** - ink bleeds into paper fibres, rounding sharp corners and merging closely-spaced elements
+- **Baseline instability** - type was hand-set; characters sit at slightly different heights along a line
+- **Conjunct variation** - some conjunct forms (stacked consonants) were rendered differently in 19th-century presses than in modern Unicode fonts
+- **Paper texture** - foxing, show-through, and irregular grain add visual noise
 
 The result: the base `kan` model achieves an estimated CER of ~25% on historical letterpress scans, compared to <5% on modern typeset text.
 
@@ -33,17 +33,17 @@ We chose fine-tuning from `kan.lstm` (the raw LSTM weights extracted from `kan.t
 - The base model already encodes Kannada language structure, conjunct recognition, and virama handling learned from a large corpus of modern Kannada text
 - Fine-tuning requires orders of magnitude fewer training examples (thousands vs. millions)
 - Training from scratch is impractical without GPU infrastructure for a community project
-- The unicharset (set of characters the model can output) is inherited from the base model — the 4 characters absent from it (`ಋ ಙ ಝ ಱ`) are rare in our target documents
+- The unicharset (set of characters the model can output) is inherited from the base model - the 4 characters absent from it (`ಋ ಙ ಝ ಱ`) are rare in our target documents
 
-**Tradeoff:** Fine-tuning is constrained by the base unicharset. Characters absent from `kan.traineddata`'s unicharset must be added via `combine_lang_model` before they can be learned. This is possible without retraining from scratch — see §3.6.
+**Tradeoff:** Fine-tuning is constrained by the base unicharset. Characters absent from `kan.traineddata`'s unicharset must be added via `combine_lang_model` before they can be learned. This is possible without retraining from scratch - see §3.6.
 
 ### 2.2 Synthetic training data with simulated degradation
 
 Because we do not have large volumes of ground-truth scans, the primary training data is synthetic: corpus lines rendered with Pillow at 150 DPI in each Karnata font variant, with degradation applied to historical typefaces:
 
-- **Gaussian blur** σ = 0.6 — simulates ink spread
-- **Salt-and-pepper noise** at 1–2% pixel level — simulates paper grain
-- **Rotation** ±0.8° — simulates hand-set type baseline variation
+- **Gaussian blur** σ = 0.6 - simulates ink spread
+- **Salt-and-pepper noise** at 1–2% pixel level - simulates paper grain
+- **Rotation** ±0.8° - simulates hand-set type baseline variation
 
 The degradation parameters were chosen empirically by visual comparison with real German Mission Press and Wesleyan Mission Press scans.
 
@@ -53,7 +53,7 @@ The degradation parameters were chosen empirically by visual comparison with rea
 Human-proofread transcriptions of scanned Kannada books. Many Wikisource books were typeset in the exact same presses (German Mission Press, Wesleyan Mission Press) that the Karnata fonts revive. This gives the training text authentic letter co-occurrence statistics for historical letterpress material. Pages are quality-rated; we use quality ≥ 3 (reviewed by at least one human proofreader).
 
 **Supplement: Kannada Wikipedia**  
-Modern Kannada prose — adds Unicode coverage and modern vocabulary. Less relevant to historical typeface recognition, but ensures the model does not forget modern Kannada during fine-tuning.
+Modern Kannada prose - adds Unicode coverage and modern vocabulary. Less relevant to historical typeface recognition, but ensures the model does not forget modern Kannada during fine-tuning.
 
 **Key insight:** corpus relevance to the target typeface matters more than corpus size. A smaller corpus of 19th-century Wikisource text produces better results on historical scans than a larger Wikipedia corpus, because the character co-occurrence patterns in 19th-century prose are different from modern Kannada.
 
@@ -93,7 +93,7 @@ Extracted the `kan.traineddata` unicharset:
 combine_tessdata -u tessdata_best/kan.traineddata /tmp/kan_base
 ```
 
-The unicharset has **140 entries** — a subset of the Kannada Unicode block (U+0C80–U+0CFF). Most "missing" codepoints in that range are unassigned or extremely rare. After careful verification, exactly **four** Kannada characters relevant to real Kannada text are absent as standalone entries:
+The unicharset has **140 entries** - a subset of the Kannada Unicode block (U+0C80–U+0CFF). Most "missing" codepoints in that range are unassigned or extremely rare. After careful verification, exactly **four** Kannada characters relevant to real Kannada text are absent as standalone entries:
 
 | Character | Unicode | Name | Occurrence |
 |---|---|---|---|
@@ -104,15 +104,15 @@ The unicharset has **140 entries** — a subset of the Kannada Unicode block (U+
 
 These characters were absent from the Wikipedia corpus that `tessdata_best/kan.traineddata` was built on.
 
-### 3.3 ಞ (U+0C9E) — NOT missing (corrected)
+### 3.3 ಞ (U+0C9E) - NOT missing (corrected)
 
 Early analysis incorrectly listed `ಞ` (NYA, U+0C9E) as missing. It is **present** in the unicharset. This error arose because the "Can't encode" cascade (see §3.4) made it appear absent.
 
-`ಞ` as a standalone character is confirmed present. The common conjunct `ಜ್ಞ` (jña, as in ಜ್ಞಾನ — knowledge) also encodes correctly: Tesseract matches it as `ಜ` + `್ಞ` (virama cluster), which is in the unicharset as a composite entry.
+`ಞ` as a standalone character is confirmed present. The common conjunct `ಜ್ಞ` (jña, as in ಜ್ಞಾನ - knowledge) also encodes correctly: Tesseract matches it as `ಜ` + `್ಞ` (virama cluster), which is in the unicharset as a composite entry.
 
 ### 3.4 The error cascade effect
 
-When Tesseract hits the first unsupported character in a line, it aborts encoding for the entire line and reports every subsequent byte as a separate failure. A single unsupported character at position 7 in a 30-character line produces an error listing bytes 7–30 — making it appear as though many characters are unsupported when only one is.
+When Tesseract hits the first unsupported character in a line, it aborts encoding for the entire line and reports every subsequent byte as a separate failure. A single unsupported character at position 7 in a 30-character line produces an error listing bytes 7–30 - making it appear as though many characters are unsupported when only one is.
 
 **Diagnostic rule:** the number of characters listed in the error ≠ number of characters missing from the unicharset. To verify: extract the unicharset and search directly.
 
@@ -125,26 +125,26 @@ for ch in 'ಋಙಝಞಱ':
 "
 ```
 
-### 3.5 Workaround — filter missing characters from training data
+### 3.5 Workaround - filter missing characters from training data
 
 The immediate fix to unblock training: strip the 4 missing characters from all ground-truth files before box/lstmf generation. Applied at two layers:
 
 **`02-make-lstmf.sh`** (Python block inside):
 ```python
-_UNSUPPORTED = set('ಋಙಝಱ')  # ಞ is NOT missing — do not include
+_UNSUPPORTED = set('ಋಙಝಱ')  # ಞ is NOT missing - do not include
 _tokens = [t for t in _raw.split(' ') if not (len(t)==1 and t in _UNSUPPORTED)]
 gt_text = re.sub(r'\s+', ' ', ' '.join(_tokens)).strip()
 ```
 
 This allows training to proceed, but the resulting `kan_hist.traineddata` cannot recognise ಋ ಙ ಝ ಱ.
 
-### 3.6 Proper fix — expand the unicharset
+### 3.6 Proper fix - expand the unicharset
 
 Adding characters to an existing Tesseract 5 LSTM model requires:
 
 1. **Merge the new codepoints into the unicharset** via `unicharset_extractor` + `merge_unicharsets`
 2. **Rebuild `kan.traineddata`** with the expanded unicharset + updated recoder via `combine_lang_model`
-3. **Continue training from the existing checkpoint** — Tesseract auto-expands the LSTM output layer for new chars, preserving all existing weights; new-char output nodes start with random weights and learn from training examples
+3. **Continue training from the existing checkpoint** - Tesseract auto-expands the LSTM output layer for new chars, preserving all existing weights; new-char output nodes start with random weights and learn from training examples
 
 Script: `scripts/00c-expand-unicharset.sh`  
 Output: `tessdata_expanded/kan.traineddata` (140 → 144 unicharset entries)
@@ -164,7 +164,7 @@ After running the expansion:
 
 `lstmtraining --max_iterations N` counts from iteration 0, not from the current checkpoint's iteration. This is not clearly documented.
 
-**Consequence:** resuming from a checkpoint at iteration 183,976 with `--max_iterations 100,000` causes lstmtraining to exit at the first step (183,976 > 100,000). The training log shows the startup message but no iteration output — this looks like the process is stuck or produced no output, not like it exited.
+**Consequence:** resuming from a checkpoint at iteration 183,976 with `--max_iterations 100,000` causes lstmtraining to exit at the first step (183,976 > 100,000). The training log shows the startup message but no iteration output - this looks like the process is stuck or produced no output, not like it exited.
 
 **Fix:** set `MAX_ITERATIONS` higher than any checkpoint the pipeline will ever resume from. Default changed to 400,000. Exposed as an environment variable for easy override.
 
@@ -172,8 +172,8 @@ After running the expansion:
 
 `lstmtraining` saves two types of checkpoint:
 
-- **Rolling checkpoint** (`kan_hist_checkpoint`) — updated every save. Contains the full model state including optimizer momentum (Adam/Adagrad history). Always reflects the most recent training state.
-- **Named checkpoints** (`kan_hist_<BCER>_<iter>.checkpoint`) — snapshots at specific iterations. Useful for rolling back to an earlier state if the model overfits.
+- **Rolling checkpoint** (`kan_hist_checkpoint`) - updated every save. Contains the full model state including optimizer momentum (Adam/Adagrad history). Always reflects the most recent training state.
+- **Named checkpoints** (`kan_hist_<BCER>_<iter>.checkpoint`) - snapshots at specific iterations. Useful for rolling back to an earlier state if the model overfits.
 
 **Important:** the rolling checkpoint is the correct file to resume from. Named checkpoints are useful for selecting a specific earlier iteration (e.g. if BCER plateaued and then degraded).
 
@@ -182,14 +182,14 @@ After running the expansion:
 To find the most recent named checkpoint without the rolling checkpoint:
 
 ```bash
-# WRONG — sorts by BCER field (k3), picks the worst checkpoint
+# WRONG - sorts by BCER field (k3), picks the worst checkpoint
 ls output/kan_hist_*.checkpoint | sort -t_ -k3 -n | tail -1
 
-# CORRECT — sorts by iteration field (k4)
+# CORRECT - sorts by iteration field (k4)
 ls output/kan_hist_*.checkpoint | grep -v '_checkpoint$' | sort -t_ -k4 -n | tail -1
 ```
 
-The filename pattern is `kan_hist_<BCER>_<iter>.checkpoint`. The `_` delimiter is shared between the model name components (`kan`, `hist`) and the numeric fields. With `-t_`, field 1 = `kan`, 2 = `hist`, 3 = BCER, 4 = iteration. Sorting on k3 (BCER) selected the checkpoint with the *highest error rate*, not the most recent one — the exact opposite of the intended behaviour.
+The filename pattern is `kan_hist_<BCER>_<iter>.checkpoint`. The `_` delimiter is shared between the model name components (`kan`, `hist`) and the numeric fields. With `-t_`, field 1 = `kan`, 2 = `hist`, 3 = BCER, 4 = iteration. Sorting on k3 (BCER) selected the checkpoint with the *highest error rate*, not the most recent one - the exact opposite of the intended behaviour.
 
 ### 4.4 UnicodeDecodeError on real scan images
 
@@ -212,7 +212,7 @@ This replaces non-decodable bytes with `�` (Unicode replacement character) and
 
 ### 5.1 TTF vs. OTF rasterisation
 
-Where a font ships both `.ttf` and `.otf` variants (GMP, WMP, GTN), both are used for training. The two formats are rasterised slightly differently by FreeType: OTF uses PostScript outlines (CFF) while TTF uses TrueType quadratic curves. At 150 DPI these differences are subtle but real — sub-pixel hinting differs, and edge sharpness varies slightly. Using both formats effectively doubles the training diversity for free.
+Where a font ships both `.ttf` and `.otf` variants (GMP, WMP, GTN), both are used for training. The two formats are rasterised slightly differently by FreeType: OTF uses PostScript outlines (CFF) while TTF uses TrueType quadratic curves. At 150 DPI these differences are subtle but real - sub-pixel hinting differs, and edge sharpness varies slightly. Using both formats effectively doubles the training diversity for free.
 
 ### 5.2 Font families
 
@@ -238,7 +238,7 @@ These were calibrated empirically against real German Mission Press scans from t
 
 A naive quality test ran Tesseract on individual single-character images (one PNG per Kannada codepoint per font variant) and measured character accuracy. This systematically underestimates model quality because:
 
-1. Tesseract is a line-level LSTM model — it uses left-to-right context to disambiguate characters. Isolated characters lack this context.
+1. Tesseract is a line-level LSTM model - it uses left-to-right context to disambiguate characters. Isolated characters lack this context.
 2. The model's confusion patterns on isolated glyphs do not predict its confusion on real text.
 3. Some Kannada characters are visually similar in isolation but unambiguous in context (e.g. ಳ vs ಲ preceded by a vowel mark).
 
@@ -262,14 +262,14 @@ The corpus download step is idempotent: re-downloading the Wikisource dump when 
 
 This pattern should be applied to any step where re-running from scratch wastes significant time without producing different output.
 
-### 6.3 BCER measurement — training vs. test
+### 6.3 BCER measurement - training vs. test
 
 The BCER reported in training logs is measured on training data, not held-out data. Tesseract's training does not have a separate validation set by default. This means:
-- BCER will always decrease (or plateau) — it cannot increase unless you restart training with a different dataset
+- BCER will always decrease (or plateau) - it cannot increase unless you restart training with a different dataset
 - It cannot detect overfitting on its own
 - Real-world performance must be validated externally
 
-The portal's OCR quality tab addresses this by running the packaged model against held-out rendered test images and computing CER via Levenshtein distance — providing a true held-out accuracy estimate.
+The portal's OCR quality tab addresses this by running the packaged model against held-out rendered test images and computing CER via Levenshtein distance - providing a true held-out accuracy estimate.
 
 ---
 
@@ -277,7 +277,7 @@ The portal's OCR quality tab addresses this by running the packaged model agains
 
 ### 7.1 Wikisource quality levels
 
-Quality level 3 (proofread by one human) is sufficient for training. Quality level 4 (validated by two humans) is preferable for building a small high-quality evaluation set. In practice, the difference in OCR model quality between training on level-3 vs. level-4 data appears small — the primary benefit of level-4 data is reduced noise in the evaluation metrics, not improved model training.
+Quality level 3 (proofread by one human) is sufficient for training. Quality level 4 (validated by two humans) is preferable for building a small high-quality evaluation set. In practice, the difference in OCR model quality between training on level-3 vs. level-4 data appears small - the primary benefit of level-4 data is reduced noise in the evaluation metrics, not improved model training.
 
 ### 7.2 Character frequency in historical text
 

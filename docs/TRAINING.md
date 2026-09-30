@@ -1,4 +1,4 @@
-# Training reference — kan_hist
+# Training reference - kan_hist
 
 Deep-dive on training parameters, quality targets, and how to tune the model.
 
@@ -13,8 +13,8 @@ The training data is synthetic: the Karnata fonts are rendered against a real Ka
 | Parameter | Value | Notes |
 |---|---|---|
 | `--learning_rate` | `0.001` | Standard starting point for fine-tuning. Reduce to `0.0001` if BCER oscillates or does not converge. |
-| `--max_iterations` | `500,000` | Upper bound — absolute, not relative to checkpoint. In practice, convergence occurs between 20,000–60,000 iterations. Set high so resuming from a late checkpoint does not exit immediately. |
-| `--target_error_rate` | `-1` | Disabled — we stop manually when BCER plateaus. |
+| `--max_iterations` | `500,000` | Upper bound - absolute, not relative to checkpoint. In practice, convergence occurs between 20,000–60,000 iterations. Set high so resuming from a late checkpoint does not exit immediately. |
+| `--target_error_rate` | `-1` | Disabled - we stop manually when BCER plateaus. |
 
 ### When to stop training
 
@@ -24,12 +24,12 @@ Practical targets for a well-functioning model:
 
 | BCER | Assessment |
 |---|---|
-| > 5% | Poor — likely a corpus or rendering issue |
-| 2–5% | Adequate — usable for lightly degraded material |
-| 1–2% | Good — suitable for typical mission press scans |
-| < 1% | Excellent — test carefully on real held-out scans |
+| > 5% | Poor - likely a corpus or rendering issue |
+| 2–5% | Adequate - usable for lightly degraded material |
+| 1–2% | Good - suitable for typical mission press scans |
+| < 1% | Excellent - test carefully on real held-out scans |
 
-**Observed result (June 2026, ~5,400 synthetic Karnata images):** BCER reached **0.092%** at iteration 9,589. This is well under the excellent threshold and was reached early — a consequence of the high rendering consistency of the Karnata fonts. Verify on real historical scans before treating this as a real-world accuracy figure.
+**Observed result (June 2026, ~5,400 synthetic Karnata images):** BCER reached **0.092%** at iteration 9,589. This is well under the excellent threshold and was reached early - a consequence of the high rendering consistency of the Karnata fonts. Verify on real historical scans before treating this as a real-world accuracy figure.
 
 BCER (Byte Character Error Rate) measures how many characters the model gets wrong in training data, not on real documents. A BCER of 1.5% on synthetic images might correspond to 5–10% error on actual historical scans, depending on their condition.
 
@@ -43,7 +43,7 @@ BCER (Byte Character Error Rate) measures how many characters the model gets wro
 ```
 They ensure the model sees every glyph at least once, regardless of corpus frequency.
 
-> **Unicharset note:** Four characters — `ಋ ಙ ಝ ಱ` — are absent from `tessdata_best/kan.traineddata`'s unicharset. Coverage lines containing them are silently filtered by `02-make-lstmf.sh` unless you first run `scripts/00c-expand-unicharset.sh` to produce `tessdata_expanded/kan.traineddata`. After expansion, the filter is automatically lifted. `ಞ` is present in the unicharset and does not need special handling.
+> **Unicharset note:** Four characters - `ಋ ಙ ಝ ಱ` - are absent from `tessdata_best/kan.traineddata`'s unicharset. Coverage lines containing them are silently filtered by `02-make-lstmf.sh` unless you first run `scripts/00c-expand-unicharset.sh` to produce `tessdata_expanded/kan.traineddata`. After expansion, the filter is automatically lifted. `ಞ` is present in the unicharset and does not need special handling.
 
 ### Specimen corpus
 
@@ -51,13 +51,13 @@ They ensure the model sees every glyph at least once, regardless of corpus frequ
 
 ### Wikipedia prose
 
-After coverage lines, the corpus uses Kannada Wikipedia prose for natural word and sentence context. Prose lines train the model on real word shapes, spacing, and conjunct frequency — things coverage lines cannot provide.
+After coverage lines, the corpus uses Kannada Wikipedia prose for natural word and sentence context. Prose lines train the model on real word shapes, spacing, and conjunct frequency - things coverage lines cannot provide.
 
 ### Corpus quality rules (applied by `clean-corpus.py`)
 
 - Minimum 8 Kannada characters per line (short lines produce unusable training images)
 - Lines over 80 characters are split at word boundaries
-- Non-Kannada content stripped (except spaces, digits, and common punctuation: `.,;:()-—'"`)
+- Non-Kannada content stripped (except spaces, digits, and common punctuation: `.,;:()--'"`)
 - Lines with fewer than 60% Kannada characters dropped
 
 ## Rendering parameters (`render-corpus.py`)
@@ -65,7 +65,7 @@ After coverage lines, the corpus uses Kannada Wikipedia prose for natural word a
 | Parameter | Value | Rationale |
 |---|---|---|
 | `FONT_SIZE` | 36 px | Matches typical letterpress point size at 150 DPI |
-| `DPI` | 150 | Standard for Tesseract training (not 300 — Tesseract's internal resolution) |
+| `DPI` | 150 | Standard for Tesseract training (not 300 - Tesseract's internal resolution) |
 | `PAD_X / PAD_Y` | 20 / 12 px | Enough margin to avoid clipping descenders |
 | `MIN_H` | 60 px | Tesseract minimum accepted image height |
 
@@ -73,9 +73,9 @@ After coverage lines, the corpus uses Kannada Wikipedia prose for natural word a
 
 Applied only when `degrade: true` in `fonts.yml`:
 
-1. **Gaussian blur, radius 0.6** — simulates ink spread into paper fibres
-2. **Salt-and-pepper noise, 0.3% of pixels** — simulates paper grain and foxing
-3. **Random rotation ±0.8°** — simulates print misalignment
+1. **Gaussian blur, radius 0.6** - simulates ink spread into paper fibres
+2. **Salt-and-pepper noise, 0.3% of pixels** - simulates paper grain and foxing
+3. **Random rotation ±0.8°** - simulates print misalignment
 
 These values are conservative by design. Over-degrading makes the model brittle on clean scans.
 
@@ -120,7 +120,7 @@ Synthetic training (Pillow-rendered fonts) is a baseline. Real scanned pages in 
 
 1. Scan at 300 DPI or higher, grayscale or bitonal.
 2. Crop to a single text block or paragraph (avoid mixed columns).
-3. Transcribe the text exactly as it appears — including archaic spelling, missing punctuation, and ligature forms.
+3. Transcribe the text exactly as it appears - including archaic spelling, missing punctuation, and ligature forms.
 4. Save as `scan-input/page001.png` + `scan-input/page001.gt.txt`.
 
 The portal's Scan upload tab handles this via drag-and-drop.

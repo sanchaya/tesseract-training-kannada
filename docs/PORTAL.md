@@ -1,4 +1,4 @@
-# Portal reference — kan_hist Training Portal
+# Portal reference - kan_hist Training Portal
 
 The portal is a Node.js / Express app (`server.js`) that provides a browser UI for the full `kan_hist` training pipeline.
 
@@ -15,7 +15,7 @@ PORT=8080 node server.js
 node --watch server.js
 ```
 
-In production the portal runs as the `trainocr` systemd service behind nginx — see [`deploy/DEPLOY.md`](../deploy/DEPLOY.md).
+In production the portal runs as the `trainocr` systemd service behind nginx - see [`deploy/DEPLOY.md`](../deploy/DEPLOY.md).
 
 ## REST API
 
@@ -29,7 +29,7 @@ Returns completion state of each pipeline step plus whether `lstmtraining` is cu
 
 ```json
 {
-  "00_unichar": { "label": "Expand unicharset", "done": false, "detail": "Not done — ಋ ಙ ಝ ಱ missing" },
+  "00_unichar": { "label": "Expand unicharset", "done": false, "detail": "Not done - ಋ ಙ ಝ ಱ missing" },
   "01_prep":    { "label": "1. Prep base",      "done": true,  "detail": "kan.traineddata ✓  fonts 4/4" },
   "02_corpus":  { "label": "2. Corpus",         "done": true,  "detail": "5,200 lines" },
   "03_render":  { "label": "3. Render images",  "done": true,  "detail": "31,200 PNG images" },
@@ -128,7 +128,7 @@ Valid step values: `expandunichar`, `prep`, `wiki`, `clean`, `specimen`, `render
 | `clean` | `corpus/clean-corpus.py` | Clean corpus; drops unencodable lines |
 | `specimen` | `corpus/generate-specimen.py --merge` | Generate systematic glyph-coverage corpus |
 | `render` | `corpus/render-corpus.py` | Render PNG+gt.txt pairs |
-| `inventory` | `corpus/generate-inventory.py` | Character baselines — required for inventory-first training |
+| `inventory` | `corpus/generate-inventory.py` | Character baselines - required for inventory-first training |
 | `lstmf` | `scripts/02-make-lstmf.sh` | PNG+gt.txt → .lstmf files |
 | `train` | `scripts/03-train.sh` | Fine-tune LSTM |
 | `package` | `scripts/04-package.sh` | Export `kan_hist.traineddata` |
@@ -138,7 +138,7 @@ Query parameters:
 | Param | Applies to | Effect |
 |---|---|---|
 | `?force=1` | `expandunichar` | passes `--force` |
-| `?force=1` | `render` | passes `--force` — re-render in place after a shaping/corpus change |
+| `?force=1` | `render` | passes `--force` - re-render in place after a shaping/corpus change |
 | `?force=1` | `wiki` | re-download even if the corpus exists |
 | `?all_fonts=1` | `inventory` | use every `.ttf`/`.otf` on disk, not just fonts.yml entries |
 | `?mode=fresh\|expand` | `train` | sets `TRAIN_MODE` |
@@ -167,7 +167,7 @@ Registered fonts with per-font image counts.
    "cloned": true, "rendered": 3600 }]
 ```
 
-`cloned` means *font files are present on disk* — it does not require a `.git`
+`cloned` means *font files are present on disk* - it does not require a `.git`
 directory, since Google Fonts families arrive as downloads.
 
 #### `GET /api/fonts/scan/:id`
@@ -201,7 +201,7 @@ duplicate ids, and any edit that would produce invalid YAML. Writes
 
 #### `GET /api/fonts/:id/footprint`
 
-Every generated file belonging to a font, without deleting anything — used to
+Every generated file belonging to a font, without deleting anything - used to
 preview a purge.
 
 ```json
@@ -213,7 +213,7 @@ preview a purge.
 #### `DELETE /api/fonts/:id[?purge=1]`
 
 Removes the registry entry. With `?purge=1` also deletes every generated
-artefact — rendered, inventory, gallery, lstmf, classical — and prunes
+artefact - rendered, inventory, gallery, lstmf, classical - and prunes
 `lstmf/list.txt`.
 
 Source font files in `fonts/<id>/` are **always kept**: they are pipeline input,
@@ -229,7 +229,7 @@ throughout the run), and refuses to remove the last remaining font.
 
 > Deletion is not the only defence. `02-make-lstmf.sh` filters by registry at
 > collection time, so images belonging to a font absent from `fonts.yml` are
-> skipped whatever remains on disk — a purge that is declined, fails partway, or
+> skipped whatever remains on disk - a purge that is declined, fails partway, or
 > misses later output cannot let an unregistered font back into training.
 
 ### Checkpoints
@@ -311,7 +311,7 @@ Serves traineddata files for Tesseract.js. The Live OCR tab fetches models from 
 - `kan_hist.traineddata` → served from `best/`
 - `kan_hist.traineddata.gz` → gzip-compressed on-the-fly (Tesseract.js v5 always requests `.gz`)
 
-Tesseract.js v5 requests the `.gz` form first. The server compresses the file on-the-fly using Node's built-in `zlib` — no pre-compressed copy needed. Only `.traineddata` files are served; other extensions return 403.
+Tesseract.js v5 requests the `.gz` form first. The server compresses the file on-the-fly using Node's built-in `zlib` - no pre-compressed copy needed. Only `.traineddata` files are served; other extensions return 403.
 
 #### `DELETE /api/rendered`
 
@@ -344,7 +344,7 @@ Returns the last `n` lines of `training.log` (default: 100).
 
 #### `GET /report`
 
-Returns a self-contained HTML report as a file download. Includes BCER chart, pipeline status table, font list, and sample images — no server required to view.
+Returns a self-contained HTML report as a file download. Includes BCER chart, pipeline status table, font list, and sample images - no server required to view.
 
 ---
 

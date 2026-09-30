@@ -1,21 +1,21 @@
-# TrainOCR — Tesseract training for historical Kannada
+# TrainOCR - Tesseract training for historical Kannada
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-5B21B6.svg)](LICENSE)
 [![Fonts](https://img.shields.io/badge/fonts-SIL%20OFL%201.1-7C3AED.svg)](https://fonts.sanchaya.net)
 [![Model](https://img.shields.io/badge/model-kan__hist-059669.svg)](best/)
 [![Portal](https://img.shields.io/badge/portal-trainocr.sanchaya.net-F59E0B.svg)](https://trainocr.sanchaya.net)
 
-`kan_hist.traineddata` is a fine-tuned Tesseract 5 LSTM model for OCR of Kannada text printed in 19th-century letterpress typefaces. It is trained on the [Karnata font family](https://fonts.sanchaya.net) — digital revivals of historical Kannada printing types developed by [Sanchaya](https://sanchaya.org).
+`kan_hist.traineddata` is a fine-tuned Tesseract 5 LSTM model for OCR of Kannada text printed in 19th-century letterpress typefaces. It is trained on the [Karnata font family](https://fonts.sanchaya.net) - digital revivals of historical Kannada printing types developed by [Sanchaya](https://sanchaya.org).
 
 The standard `kan` model was trained on modern digital fonts and struggles with the distinctive stroke shapes, ink spread, and conjunct forms of historical letterpress material. `kan_hist` fills this gap.
 
-**TrainOCR** wraps the entire pipeline in a web portal — making Tesseract training approachable for librarians, archivists, and language communities, not just ML engineers. Try it at [trainocr.sanchaya.net](https://trainocr.sanchaya.net).
+**TrainOCR** wraps the entire pipeline in a web portal - making Tesseract training approachable for librarians, archivists, and language communities, not just ML engineers. Try it at [trainocr.sanchaya.net](https://trainocr.sanchaya.net).
 
 ---
 
 ## Quick start
 
-### Option A — Docker (recommended)
+### Option A - Docker (recommended)
 
 ```bash
 git clone https://github.com/sanchaya/tesseract-training-kannada.git
@@ -24,7 +24,7 @@ docker compose up --build
 # → http://localhost:3000
 ```
 
-### Option B — Native Node.js
+### Option B - Native Node.js
 
 ```bash
 git clone https://github.com/sanchaya/tesseract-training-kannada.git
@@ -42,7 +42,7 @@ node server.js
 # → http://localhost:3000
 ```
 
-### Option C — Python / Flask (python-portal branch)
+### Option C - Python / Flask (python-portal branch)
 
 ```bash
 git clone -b python-portal https://github.com/sanchaya/tesseract-training-kannada.git
@@ -81,7 +81,7 @@ All fonts are from the Sanchaya Karnata family (SIL Open Font License 1.1). Karn
 
 **Clean** = rendered faithfully. **Degraded** = Gaussian blur + salt-and-pepper noise + ±0.8° rotation, simulating real letterpress ink spread and paper texture.
 
-Both TTF and OTF variants are used for training where available — the two formats are rasterised slightly differently, adding diversity that improves model robustness. This gives 18 training variants in total across the four font families.
+Both TTF and OTF variants are used for training where available - the two formats are rasterised slightly differently, adding diversity that improves model robustness. This gives 18 training variants in total across the four font families.
 
 ---
 
@@ -100,9 +100,9 @@ kan_hist/
 │   ├── generate-specimen.py      systematic glyph-coverage corpus
 │   ├── render-corpus.py          render corpus lines → PNG+gt.txt pairs
 │   ├── render-a5-pages.py        render classical corpus as A5 page images (browser)
-│   ├── browser_render.js         headless Chrome renderer — correct conjunct shaping
+│   ├── browser_render.js         headless Chrome renderer - correct conjunct shaping
 │   ├── shaping_render.py         HarfBuzz + FreeType renderer (modern fonts only)
-│   ├── cache/                    downloaded dumps (gitignored — large files)
+│   ├── cache/                    downloaded dumps (gitignored - large files)
 │   └── kan_corpus.txt            cleaned training text (generated)
 │
 ├── fonts/                        font repos cloned by 01-prep-base.sh
@@ -126,7 +126,7 @@ kan_hist/
 │   ├── deploy.env.example        settings template → deploy/deploy.env (gitignored)
 │   └── DEPLOY.md                 full deployment guide
 │
-├── fonts.yml                     ← font registry — single source of truth
+├── fonts.yml                     ← font registry - single source of truth
 ├── server.js                     Node.js/Express backend
 ├── package.json
 │
@@ -156,13 +156,13 @@ kan_hist/
 | Puppeteer (Node) | `npm install` (in repo root) | `npm install` |
 | Git | `brew install git` | `apt install git` |
 
-> **Browser rendering:** `browser_render.js` and `render-a5-pages.py` require Node.js and Chrome. If Chrome is not installed system-wide, run `npx puppeteer browsers install chrome` inside the repo root to download a pinned version — it is detected automatically at runtime. The standard `render-corpus.py` (line-level images) does not require a browser.
+> **Browser rendering:** `browser_render.js` and `render-a5-pages.py` require Node.js and Chrome. If Chrome is not installed system-wide, run `npx puppeteer browsers install chrome` inside the repo root to download a pinned version - it is detected automatically at runtime. The standard `render-corpus.py` (line-level images) does not require a browser.
 
 ---
 
 ## Training workflow
 
-### Step 0c — Expand unicharset *(one-time, run before first training)*
+### Step 0c - Expand unicharset *(one-time, run before first training)*
 
 `tessdata_best/kan.traineddata` is missing four Kannada characters: `ಋ ಙ ಝ ಱ`. Training lines containing them are silently skipped unless the unicharset is expanded first.
 
@@ -171,20 +171,20 @@ kan_hist/
 ```
 
 What it does:
-1. Downloads `kan/kan.unicharset` from [tesseract-ocr/langdata_lstm](https://github.com/tesseract-ocr/langdata_lstm/tree/main/kan) — the authoritative upstream unicharset (cached in `tmp/langdata_lstm/`)
+1. Downloads `kan/kan.unicharset` from [tesseract-ocr/langdata_lstm](https://github.com/tesseract-ocr/langdata_lstm/tree/main/kan) - the authoritative upstream unicharset (cached in `tmp/langdata_lstm/`)
 2. Merges `ಋ ಙ ಝ ಱ` into it
-3. Writes the result back to `tmp/langdata_lstm/kan/kan.unicharset` and symlinks `Kannada/Kannada.unicharset` → `../kan/kan.unicharset` — one source of truth
+3. Writes the result back to `tmp/langdata_lstm/kan/kan.unicharset` and symlinks `Kannada/Kannada.unicharset` → `../kan/kan.unicharset` - one source of truth
 4. Runs `combine_lang_model` → `tessdata_expanded/kan.traineddata`
 
 After this, `03-train.sh` and `02-make-lstmf.sh` automatically detect `tessdata_expanded/` and use it. No manual changes needed.
 
-> **Note:** `ಞ` (U+0C9E) is *present* in the base unicharset and does NOT need to be added. It was previously misidentified as missing — see [docs/RESEARCH_NOTES.md](docs/RESEARCH_NOTES.md#33-ಞ-u0c9e--not-missing-corrected) for details.
+> **Note:** `ಞ` (U+0C9E) is *present* in the base unicharset and does NOT need to be added. It was previously misidentified as missing - see [docs/RESEARCH_NOTES.md](docs/RESEARCH_NOTES.md#33-ಞ-u0c9e--not-missing-corrected) for details.
 
 **Portal:** click **Expand chars** on the Dashboard (purple outline button next to ① Prep base).
 
 ---
 
-### Step 1 — Prep base model and fonts
+### Step 1 - Prep base model and fonts
 
 ```bash
 ./scripts/01-prep-base.sh
@@ -196,21 +196,21 @@ Downloads `kan.traineddata` from tessdata_best, extracts `kan.lstm`, and clones 
 
 ---
 
-### Step 2 — Build the corpus
+### Step 2 - Build the corpus
 
 The corpus is Kannada GT text that is rendered into training images. Two sources are available; Wikisource is strongly preferred for `kan_hist`.
 
 #### Preferred: Kannada Wikisource (proofread pages)
 
-[kn.wikisource.org](https://kn.wikisource.org) contains human-proofread transcriptions of scanned Kannada books — many of them 19th-century texts typeset in the same letterpress fonts (German Mission Press, Wesleyan Mission Press, Basel Mission Press) that `kan_hist` is trained on. This is the highest-quality GT source for historical Kannada OCR.
+[kn.wikisource.org](https://kn.wikisource.org) contains human-proofread transcriptions of scanned Kannada books - many of them 19th-century texts typeset in the same letterpress fonts (German Mission Press, Wesleyan Mission Press, Basel Mission Press) that `kan_hist` is trained on. This is the highest-quality GT source for historical Kannada OCR.
 
 Wikisource pages carry a quality rating:
 | Level | Meaning |
 |---|---|
 | 1 | Not proofread |
 | 2 | Problematic |
-| **3** | **Proofread** — reviewed by one human ✓ |
-| **4** | **Validated** — reviewed by two humans ✓✓ |
+| **3** | **Proofread** - reviewed by one human ✓ |
+| **4** | **Validated** - reviewed by two humans ✓✓ |
 
 ```bash
 # Download proofread + validated pages (quality ≥ 3, dumps ~80 MB, cached)
@@ -224,14 +224,14 @@ The script downloads the knwikisource XML dump (~80 MB, cached in `corpus/cache/
 
 #### Supplement: Kannada Wikipedia (modern prose)
 
-Wikipedia provides modern Kannada prose — useful for Unicode coverage but less relevant to historical typography. Use it to supplement, not replace, Wikisource.
+Wikipedia provides modern Kannada prose - useful for Unicode coverage but less relevant to historical typography. Use it to supplement, not replace, Wikisource.
 
 ```bash
 # Download modern Kannada text (~150 MB dump, cached)
 python3 corpus/download-wiki.py --lines 5000
 ```
 
-`download-wiki.py` also generates character coverage lines — one line per Kannada Unicode codepoint (U+0C80–U+0CFF) — to guarantee complete glyph coverage regardless of corpus content.
+`download-wiki.py` also generates character coverage lines - one line per Kannada Unicode codepoint (U+0C80–U+0CFF) - to guarantee complete glyph coverage regardless of corpus content.
 
 #### Clean and prepare
 
@@ -241,11 +241,11 @@ python3 corpus/clean-corpus.py
 
 The cleaner keeps lines with ≥ 8 Kannada characters, strips markdown/wiki artifacts (`*`, `#`, `==`), and drops lines longer than 80 characters. Output is `corpus/kan_corpus.txt`.
 
-You can also supply your own corpus — write lines to `corpus/raw_kannada.txt` and run `clean-corpus.py`.
+You can also supply your own corpus - write lines to `corpus/raw_kannada.txt` and run `clean-corpus.py`.
 
 #### Classical Kannada corpus (pre-classical and medieval texts)
 
-`download-classical.py` imports text from the [classical-corpus-kannada](https://github.com/sanchaya/classical-corpus-kannada) project — 16 classical Kannada texts (Pampa's *Vikramarjuna Vijaya*, Ranna's *Gadhayuddha*, Jaimini *Bharata*, *Vaddaradhane*, and more) spanning the 10th–19th centuries. This vocabulary is especially valuable for historical OCR because it contains archaic forms, rare conjuncts, and literary registers absent from modern Wikipedia text.
+`download-classical.py` imports text from the [classical-corpus-kannada](https://github.com/sanchaya/classical-corpus-kannada) project - 16 classical Kannada texts (Pampa's *Vikramarjuna Vijaya*, Ranna's *Gadhayuddha*, Jaimini *Bharata*, *Vaddaradhane*, and more) spanning the 10th–19th centuries. This vocabulary is especially valuable for historical OCR because it contains archaic forms, rare conjuncts, and literary registers absent from modern Wikipedia text.
 
 ```bash
 # Append classical corpus text to raw_kannada.txt
@@ -259,7 +259,7 @@ python3 corpus/download-classical.py \
 
 The script filters lines by Kannada character ratio (≥ 35%), strips verse-number suffixes (`।। ೧ ।।`), and collapses whitespace. After importing, run `clean-corpus.py` as usual.
 
-**Classical corpus as A5 page images:** the classical corpus can also be rendered directly as full A5-page training images (875 × 1241 px at 150 DPI) — one page per chunk of text, all 9 font styles. This produces large-scale page-level training data in addition to the line-level `render-corpus.py` output. See [Step 3 — A5 page images](#step-3--render-training-images) below.
+**Classical corpus as A5 page images:** the classical corpus can also be rendered directly as full A5-page training images (875 × 1241 px at 150 DPI) - one page per chunk of text, all 9 font styles. This produces large-scale page-level training data in addition to the line-level `render-corpus.py` output. See [Step 3 - A5 page images](#step-3--render-training-images) below.
 
 ```
 16 titles × 9 fonts × ~200 pages avg = ~28,800 page images
@@ -270,13 +270,13 @@ The classical corpus source files are at:
 
 #### Option: Specimen corpus (systematic glyph coverage)
 
-Instead of or in addition to random prose, you can generate a *specimen corpus* — a deliberately designed text that guarantees every Kannada vowel, every consonant × matra combination, all common conjuncts, and historical vocabulary all appear in training:
+Instead of or in addition to random prose, you can generate a *specimen corpus* - a deliberately designed text that guarantees every Kannada vowel, every consonant × matra combination, all common conjuncts, and historical vocabulary all appear in training:
 
 ```bash
 # Generate specimen text (outputs corpus/kan_specimen.txt)
 python3 corpus/generate-specimen.py
 
-# Append to existing corpus (recommended — keeps prose + adds systematic coverage)
+# Append to existing corpus (recommended - keeps prose + adds systematic coverage)
 python3 corpus/generate-specimen.py --merge
 
 # Use specimen as the sole corpus (useful for testing coverage)
@@ -292,17 +292,17 @@ The specimen covers 268 training lines:
 - 60 sentences in 19th-century Kannada prose style
 - Shuffled dense syllable sequences for maximum character diversity
 
-Because the same text is rendered across every font variant, this also makes it possible to directly compare how each font renders the same character — useful for font analysis alongside OCR training.
+Because the same text is rendered across every font variant, this also makes it possible to directly compare how each font renders the same character - useful for font analysis alongside OCR training.
 
 **Output:** `corpus/kan_corpus.txt` (~5,000+ lines)
 
 ---
 
-### Step 3 — Render training images
+### Step 3 - Render training images
 
-Two rendering paths are available and complementary — run both for maximum training data.
+Two rendering paths are available and complementary - run both for maximum training data.
 
-#### 3a — Line-level images (standard)
+#### 3a - Line-level images (standard)
 
 ```bash
 python3 corpus/render-corpus.py
@@ -314,7 +314,7 @@ For each corpus line × each font style, renders a 150 DPI PNG image with matchi
 
 **To include real scanned pages:** place `page.png` (or `.tif`) + `page.gt.txt` in `scan-input/`. They will be picked up in the next step.
 
-#### 3b — A5 page images from classical corpus
+#### 3b - A5 page images from classical corpus
 
 ```bash
 python3 corpus/render-a5-pages.py \
@@ -323,7 +323,7 @@ python3 corpus/render-a5-pages.py \
 
 Renders the full classical Kannada corpus as A5-sized page images (875 × 1241 px, 150 DPI) using headless Chrome. Each page contains a chunk of source text wrapped to page width; the matching `.gt.txt` holds that text verbatim.
 
-**Why browser rendering?** Historical Sanchaya fonts (GMP, WMP, GTN TTFs) rely on the OS text stack for Kannada conjunct shaping — their OpenType GSUB tables are incomplete. The browser (CoreText on macOS, HarfBuzz+Pango on Linux) applies the same shaping as `fonts.sanchaya.net`, producing correct conjuncts for all fonts. Python HarfBuzz alone cannot do this for these fonts.
+**Why browser rendering?** Historical Sanchaya fonts (GMP, WMP, GTN TTFs) rely on the OS text stack for Kannada conjunct shaping - their OpenType GSUB tables are incomplete. The browser (CoreText on macOS, HarfBuzz+Pango on Linux) applies the same shaping as `fonts.sanchaya.net`, producing correct conjuncts for all fonts. Python HarfBuzz alone cannot do this for these fonts.
 
 **Output:** `<corpus-dir>/a5-pages/<title>/<font_tag>/page<N>.png` + `.gt.txt`
 
@@ -360,13 +360,13 @@ python3 corpus/render-a5-pages.py \
     --concurrency 2
 ```
 
-The script is **resume-safe** — already-rendered PNG+gt.txt pairs are skipped. Ctrl-C at any time and re-run to continue.
+The script is **resume-safe** - already-rendered PNG+gt.txt pairs are skipped. Ctrl-C at any time and re-run to continue.
 
 **Prerequisites:** Node.js + Chrome must be available. If Chrome is not installed, run `npx puppeteer browsers install chrome` inside the repo root first.
 
 ---
 
-### Step 4 — Generate lstmf files
+### Step 4 - Generate lstmf files
 
 ```bash
 ./scripts/02-make-lstmf.sh
@@ -387,7 +387,7 @@ The script walks every `<title>/<font_tag>/` leaf directory under `CLASSICAL_A5_
 
 ---
 
-### Step 5 — Train
+### Step 5 - Train
 
 ```bash
 # Recommended: background process with caffeinate (macOS)
@@ -406,13 +406,13 @@ Fine-tunes `kan.lstm` for up to 500,000 iterations (default) at learning rate 0.
 | 5,000–20,000 | 1–5% | Rate of improvement slows |
 | 20,000+ | Plateau | Stop when no new best for ~10,000 iterations |
 
-**Safe to stop at any time** with Ctrl+C. Resume by re-running `03-train.sh` — it automatically picks up from the rolling checkpoint (`output/kan_hist_checkpoint`), which preserves optimizer state for a clean continuation.
+**Safe to stop at any time** with Ctrl+C. Resume by re-running `03-train.sh` - it automatically picks up from the rolling checkpoint (`output/kan_hist_checkpoint`), which preserves optimizer state for a clean continuation.
 
 **Checkpoint priority order** (automatic):
-1. `CONTINUE_FROM` env var — explicit override
-2. `output/kan_hist_checkpoint` — rolling checkpoint, always preferred
+1. `CONTINUE_FROM` env var - explicit override
+2. `output/kan_hist_checkpoint` - rolling checkpoint, always preferred
 3. Highest-iteration named `.checkpoint` file
-4. `output/kan.lstm` — fresh start from base model
+4. `output/kan.lstm` - fresh start from base model
 
 > **`--max_iterations` is absolute, not relative.** Resuming from iteration 183,000 with `--max_iterations 200,000` runs only 17,000 more iterations. The default of 500,000 is set high enough that multiple resumptions do not exit prematurely.
 
@@ -427,7 +427,7 @@ CONTINUE_FROM=output/kan_hist_2.1_50000.checkpoint ./scripts/03-train.sh
 
 ---
 
-### Step 6 — Package
+### Step 6 - Package
 
 ```bash
 ./scripts/04-package.sh
@@ -439,7 +439,7 @@ Selects the checkpoint with the lowest BCER, exports it using `lstmtraining --st
 
 ---
 
-### Step 7 — Test
+### Step 7 - Test
 
 ```bash
 ./scripts/05-test.sh test-images/your_scan.tif
@@ -460,39 +460,39 @@ node server.js
 
 ### Tabs
 
-**Dashboard** — pipeline status for each step, run buttons, live training indicator, and summary statistics (images rendered, corpus lines, best BCER).
+**Dashboard** - pipeline status for each step, run buttons, live training indicator, and summary statistics (images rendered, corpus lines, best BCER).
 
-**OCR test** — three modes, all running in-browser via Tesseract.js with no server round-trip:
+**OCR test** - three modes, all running in-browser via Tesseract.js with no server round-trip:
 
-- **Single image** — drop any Kannada scan; `kan` and `kan_hist` results appear side by side; paste ground-truth text for live CER/WER; export as `.txt`.
-- **Batch** — select multiple images and run OCR on all at once; results in a table; export as CSV.
-- **Wikisource** — fetch a proofread page from kn.wikisource.org by URL, run OCR, and compare output against the human-verified text.
+- **Single image** - drop any Kannada scan; `kan` and `kan_hist` results appear side by side; paste ground-truth text for live CER/WER; export as `.txt`.
+- **Batch** - select multiple images and run OCR on all at once; results in a table; export as CSV.
+- **Wikisource** - fetch a proofread page from kn.wikisource.org by URL, run OCR, and compare output against the human-verified text.
 
-**Kannada Unicode Reference** (bottom of OCR tab) — per-font character testing panel with three sub-features:
+**Kannada Unicode Reference** (bottom of OCR tab) - per-font character testing panel with three sub-features:
 
-- **Live preview** — select a font family (GTN, GMP, WMP, Kittel) and a TTF or OTF variant from the dropdown; characters are rendered live in the browser using the actual font file served from `/fonts/` via CSS `@font-face`. No server round-trip — switch fonts and variants instantly to compare glyph shapes.
-- **Generated PNGs** — click *Generate images* to run `scripts/gen-char-images.py` (Pillow) which writes one PNG per character to `test-images/<font>/<variant>/`. Switch to PNG view to see the actual rasterised pixels Tesseract will process.
-- **1:1 OCR test** — runs Tesseract.js on every character PNG and marks each cell ✓ green (correct) or ✗ red (shows what was returned instead). Pinpoints exactly which characters or conjuncts need more training data. Results export as CSV per variant.
+- **Live preview** - select a font family (GTN, GMP, WMP, Kittel) and a TTF or OTF variant from the dropdown; characters are rendered live in the browser using the actual font file served from `/fonts/` via CSS `@font-face`. No server round-trip - switch fonts and variants instantly to compare glyph shapes.
+- **Generated PNGs** - click *Generate images* to run `scripts/gen-char-images.py` (Pillow) which writes one PNG per character to `test-images/<font>/<variant>/`. Switch to PNG view to see the actual rasterised pixels Tesseract will process.
+- **1:1 OCR test** - runs Tesseract.js on every character PNG and marks each cell ✓ green (correct) or ✗ red (shows what was returned instead). Pinpoints exactly which characters or conjuncts need more training data. Results export as CSV per variant.
 
 The panel covers 86 characters: 15 vowels, 35 consonants, 24 conjuncts (virama combinations), and 12 Kannada digits.
 
-**Scan upload** — drag-and-drop real scanned pages and paste ground-truth text. Files are saved to `scan-input/` and included automatically in the next make-lstmf run.
+**Scan upload** - drag-and-drop real scanned pages and paste ground-truth text. Files are saved to `scan-input/` and included automatically in the next make-lstmf run.
 
-**Fonts** — font registry from `fonts.yml`, showing clone status and rendered image count per font.
+**Fonts** - font registry from `fonts.yml`, showing clone status and rendered image count per font.
 
-**Training** — BCER chart (Chart.js), corpus statistics (Unicode coverage, character frequency), and checkpoint browser. Any checkpoint can be packaged directly from this tab.
+**Training** - BCER chart (Chart.js), corpus statistics (Unicode coverage, character frequency), and checkpoint browser. Any checkpoint can be packaged directly from this tab.
 
-**Live log** — streaming tail of `training.log` with colour-coded BCER, checkpoint, and error lines.
+**Live log** - streaming tail of `training.log` with colour-coded BCER, checkpoint, and error lines.
 
-**Images** — sampled gallery of rendered training images.
+**Images** - sampled gallery of rendered training images.
 
-**Shareable report** — click "Report" in the header to download a self-contained HTML file with the BCER curve, pipeline status, and sample images, suitable for sharing without running the server.
+**Shareable report** - click "Report" in the header to download a self-contained HTML file with the BCER curve, pipeline status, and sample images, suitable for sharing without running the server.
 
 ---
 
 ## Deploying
 
-`deploy/deploy.sh` runs on your laptop and deploys the working tree to an Ubuntu/Debian server over SSH. It needs an SSH user with passwordless `sudo` and, for HTTPS, DNS for the domain already pointing at the server. nginx may already be serving other sites — the script only adds a `trainocr` site.
+`deploy/deploy.sh` runs on your laptop and deploys the working tree to an Ubuntu/Debian server over SSH. It needs an SSH user with passwordless `sudo` and, for HTTPS, DNS for the domain already pointing at the server. nginx may already be serving other sites - the script only adds a `trainocr` site.
 
 ```bash
 cp deploy/deploy.env.example deploy/deploy.env
@@ -532,7 +532,7 @@ Full guide: [`deploy/DEPLOY.md`](deploy/DEPLOY.md).
   max_pages: 600
 ```
 
-The server's `scanFontDir()` and `gen-char-images.py` both walk the font directory automatically — if both a `.ttf` and `.otf` exist with the same stem, they are registered as separate variants (`<Stem>-ttf` and `<Stem>-otf`) and each gets its own set of training images and Unicode test images.
+The server's `scanFontDir()` and `gen-char-images.py` both walk the font directory automatically - if both a `.ttf` and `.otf` exist with the same stem, they are registered as separate variants (`<Stem>-ttf` and `<Stem>-otf`) and each gets its own set of training images and Unicode test images.
 
 2. Re-run the affected steps:
 
@@ -564,7 +564,7 @@ tesseract scan.tif out_hist -l kan_hist
 diff out_base.txt out_hist.txt
 ```
 
-Use `kan_hist` for scanned historical Kannada material printed with letterpress typefaces — mission press books, newspapers, government records (roughly pre-1960).
+Use `kan_hist` for scanned historical Kannada material printed with letterpress typefaces - mission press books, newspapers, government records (roughly pre-1960).
 
 Use `kan` for modern digital or typeset Kannada text.
 
@@ -576,9 +576,9 @@ Use `kan` for modern digital or typeset Kannada text.
 Tesseract training tools are not installed. On macOS: `brew install tesseract-training-tools`. On Ubuntu: `apt install libtesseract-dev`.
 
 **`Can't encode transcription: '...' in language ''`**
-The ground-truth text contains a character absent from the unicharset. The base `kan.traineddata` (140 entries) is missing four characters: `ಋ ಙ ಝ ಱ`. Note: `ಞ` is **present** — it was previously listed here in error.
+The ground-truth text contains a character absent from the unicharset. The base `kan.traineddata` (140 entries) is missing four characters: `ಋ ಙ ಝ ಱ`. Note: `ಞ` is **present** - it was previously listed here in error.
 
-When Tesseract hits the first missing character in a line, it aborts encoding for the entire line and reports every subsequent byte as a failure — so 20+ characters in the error message does not mean 20+ chars are missing; it is typically one bad character cascading.
+When Tesseract hits the first missing character in a line, it aborts encoding for the entire line and reports every subsequent byte as a failure - so 20+ characters in the error message does not mean 20+ chars are missing; it is typically one bad character cascading.
 
 **Fix:** run `./scripts/00c-expand-unicharset.sh` (or click **Expand chars** in the portal) to add the four missing characters, then re-run Make lstmf and Train.
 
@@ -601,7 +601,7 @@ Two common causes:
 
 1. **`--max_iterations` is absolute.** If the rolling checkpoint is already at iteration 183,000 and `--max_iterations` is 100,000, training exits at the first step. Fix: raise `MAX_ITERATIONS` above the current iteration count, or use the default (400,000).
 
-2. **Wrong checkpoint selected.** If `sort -t_ -k3 -n` was used instead of `-k4`, the sort was on the BCER field (e.g. `72.433`) instead of the iteration field — picking the worst checkpoint rather than the latest. The script now uses `-k4` and always prefers the rolling `kan_hist_checkpoint`.
+2. **Wrong checkpoint selected.** If `sort -t_ -k3 -n` was used instead of `-k4`, the sort was on the BCER field (e.g. `72.433`) instead of the iteration field - picking the worst checkpoint rather than the latest. The script now uses `-k4` and always prefers the rolling `kan_hist_checkpoint`.
 
 **Tesseract renders blank or crashes on a font**
 The font may not contain the required Unicode codepoints. Check: `fc-query fonts/<id>/font.ttf | grep -i kannada`. If coverage is missing, set `max_pages` lower or remove that font file from `font_files` in `fonts.yml`.
@@ -610,7 +610,7 @@ The font may not contain the required Unicode codepoints. Check: `fc-query fonts
 Likely causes: corpus too short, all images look identical, or the base `kan.lstm` is not the right starting point. Try reducing `--learning_rate` to `0.0001` in `03-train.sh` and checking that `lstmf/list.txt` has at least 1,000 entries.
 
 **1:1 character image OCR test shows poor results**
-Testing individual character images with Tesseract gives unreliable results. Tesseract is a *line-level* model — it expects a full line of text as context, not an isolated glyph. Character-level tests will always show more errors than the model actually makes on real line images. Use the Wikisource or full-page OCR test for a meaningful accuracy measurement.
+Testing individual character images with Tesseract gives unreliable results. Tesseract is a *line-level* model - it expects a full line of text as context, not an isolated glyph. Character-level tests will always show more errors than the model actually makes on real line images. Use the Wikisource or full-page OCR test for a meaningful accuracy measurement.
 
 **Portal: `kan_hist` OCR returns "Model not available yet"**
 Complete the packaging step (Dashboard → ⑥ Package) first. The portal serves `kan_hist.traineddata` from `best/` over HTTP for Tesseract.js.
@@ -633,7 +633,7 @@ macOS system integrity protection can prevent deleting files in certain director
 | `ಝ` | U+0C9D | Kannada Letter JHA | Run `00c-expand-unicharset.sh` to add |
 | `ಱ` | U+0CB1 | Kannada Letter RRA | Run `00c-expand-unicharset.sh` to add |
 
-`ಞ` (U+0C9E, NYA) **is present** — it was previously listed here in error. The conjunct `ಜ್ಞ` (jña, as in ಜ್ಞಾನ) also works correctly.
+`ಞ` (U+0C9E, NYA) **is present** - it was previously listed here in error. The conjunct `ಜ್ಞ` (jña, as in ಜ್ಞಾನ) also works correctly.
 
 Without running step 0c, the pipeline filters these four characters from ground-truth files automatically so training is not blocked. After running step 0c, the filter is lifted and the model learns to recognise them.
 
@@ -643,7 +643,7 @@ BCER is measured on synthetic training images. Real-world CER on degraded histor
 
 ### 1:1 character testing
 
-Tesseract is a line-level model. Running it on single-character images produces unreliable results — the model lacks the surrounding context it relies on. Use full-line or full-page OCR tests to measure real accuracy.
+Tesseract is a line-level model. Running it on single-character images produces unreliable results - the model lacks the surrounding context it relies on. Use full-line or full-page OCR tests to measure real accuracy.
 
 ---
 
@@ -651,9 +651,9 @@ Tesseract is a line-level model. Running it on single-character images produces 
 
 See [`docs/TRAINING.md`](docs/TRAINING.md) for detail on training parameters, BCER interpretation, and how to tune the model. See [`docs/PORTAL.md`](docs/PORTAL.md) for the portal's REST API reference.
 
-See [`docs/IMAGE_GENERATION.md`](docs/IMAGE_GENERATION.md) for how every PNG in the project is produced — the four render paths, the shared HarfBuzz + FreeType shaping method, per-font `aalt` handling, and what the `degrade:` flag actually does.
+See [`docs/IMAGE_GENERATION.md`](docs/IMAGE_GENERATION.md) for how every PNG in the project is produced - the four render paths, the shared HarfBuzz + FreeType shaping method, per-font `aalt` handling, and what the `degrade:` flag actually does.
 
-See [`docs/AUDIT_2026-08.md`](docs/AUDIT_2026-08.md) for the August 2026 audit — ten defects found across rendering, the font registry and the portal, with root causes and verification. Start here if conjuncts look wrong, a newly-added font isn't appearing, or the portal reports training that isn't running.
+See [`docs/AUDIT_2026-08.md`](docs/AUDIT_2026-08.md) for the August 2026 audit - ten defects found across rendering, the font registry and the portal, with root causes and verification. Start here if conjuncts look wrong, a newly-added font isn't appearing, or the portal reports training that isn't running.
 
 ---
 
@@ -671,7 +671,7 @@ See [`docs/AUDIT_2026-08.md`](docs/AUDIT_2026-08.md) for the August 2026 audit �
 
 | Component | License |
 |---|---|
-| Code — scripts, server, portal, corpus tools | **[Apache 2.0](LICENSE)** |
+| Code - scripts, server, portal, corpus tools | **[Apache 2.0](LICENSE)** |
 | Karnata fonts | [SIL Open Font License 1.1](https://fonts.sanchaya.net) |
 | Base model (`kan.traineddata`) | Apache 2.0 (Google / Tesseract project) |
 | Trained model (`kan_hist.traineddata`) | Apache 2.0 |

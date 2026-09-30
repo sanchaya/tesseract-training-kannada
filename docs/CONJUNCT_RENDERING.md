@@ -1,12 +1,12 @@
-# Conjunct (ottu) Rendering Investigation — Historical Karnata Fonts
+# Conjunct (ottu) Rendering Investigation - Historical Karnata Fonts
 
-**Project:** `kan_hist.traineddata` — fine-tuned Tesseract 5 LSTM model for 19th-century Kannada letterpress typefaces  
+**Project:** `kan_hist.traineddata` - fine-tuned Tesseract 5 LSTM model for 19th-century Kannada letterpress typefaces  
 **Date:** August 2026  
-**Status:** ⚠ **Superseded — see §10.** `aalt` has been REMOVED from every font. It was
+**Status:** ⚠ **Superseded - see §10.** `aalt` has been REMOVED from every font. It was
 compensating for a different bug (a forced Indic feature list handed to the shaper); with that fixed,
 `aalt` renders running text with a halant on nearly every consonant. Sections 1–8 record the original
 investigation and remain useful for method, but their conclusion is wrong.  
-**Fonts affected:** Karnata GTN (6 weights), Karnata German Mission Press (GMP), Karnata Wesleyan Mission Press (WMP) — the Sanchaya historical revivals  
+**Fonts affected:** Karnata GTN (6 weights), Karnata German Mission Press (GMP), Karnata Wesleyan Mission Press (WMP) - the Sanchaya historical revivals  
 **Reference (correct) font:** Karnata F Kittel
 
 ---
@@ -31,9 +31,9 @@ Three render paths exist; the **browser path is authoritative** for the training
 
 Key facts:
 
-- `corpus/browser_render.js` sets **no** `font-feature-settings` — rendering relies entirely on Chrome's default Indic shaping.
+- `corpus/browser_render.js` sets **no** `font-feature-settings` - rendering relies entirely on Chrome's default Indic shaping.
 - `corpus/shaping_render.py` passes an explicit `_KANNADA_FEATURES` dict to HarfBuzz (`nukt akhn rphf pref blwf half pstf vatu cjct pres abvs blws psts haln dist abvm blwm …`) that does **not** include `aalt`.
-- The Sanchaya reference site (`fonts.sanchaya.net/css/fonts.css`) is only `@font-face` declarations — no `font-feature-settings` anywhere. So the reference site relies on browser defaults too, and would show the same broken conjuncts.
+- The Sanchaya reference site (`fonts.sanchaya.net/css/fonts.css`) is only `@font-face` declarations - no `font-feature-settings` anywhere. So the reference site relies on browser defaults too, and would show the same broken conjuncts.
 
 ---
 
@@ -41,9 +41,9 @@ Key facts:
 
 The `data:text/html` Puppeteer tests from earlier sessions **silently fell back to the system font** (opaque origin blocked the `file://` fonts), invalidating all their "identical" measurements. The reliable harnesses are:
 
-1. **Glyph-level shaping** via `uharfbuzz` (the same shaping engine Chrome uses) — shows exactly which GIDs are produced per input string. `tmp/shapecheck.py`, `tmp/gidmap.py`.
-2. **Headless Chrome + connected-component analysis** — counts ink components and merges x-overlapping clusters to distinguish "fused" (one box) from "detached" (two boxes). `tmp/cc_analyze.js`.
-3. **ASCII-art pixel rendering** — renders glyphs as `#` blocks so shapes can be compared without an image viewer. `tmp/ascii_render.js`.
+1. **Glyph-level shaping** via `uharfbuzz` (the same shaping engine Chrome uses) - shows exactly which GIDs are produced per input string. `tmp/shapecheck.py`, `tmp/gidmap.py`.
+2. **Headless Chrome + connected-component analysis** - counts ink components and merges x-overlapping clusters to distinguish "fused" (one box) from "detached" (two boxes). `tmp/cc_analyze.js`.
+3. **ASCII-art pixel rendering** - renders glyphs as `#` blocks so shapes can be compared without an image viewer. `tmp/ascii_render.js`.
 4. **Ink-width / blob-count measurement** on real browser output. `test_lang2.js`, `test_aalt6.js`.
 
 All browser measurements use an HTML file written to disk and loaded via `page.goto(file://…)` (never `data:`), with the `@font-face` referencing the font via `file://` URL.
@@ -81,7 +81,7 @@ uni0C97      → kn_g_v
 
 1. Chrome's Indic shaper (HarfBuzz) enables the *base* conjunct features (`blwf`, `blws`, `haln`, `psts`, …) but **not** `aalt`.
 2. For **GTN and WMP**, the correct conjunct forms live only in `aalt`. Without it, the default base features produce a **detached ottu**: `ರ್ಕ` renders as two separated full-width ink boxes instead of a fused `ಕ` with the `ರ್` ottu below it.
-3. For **GMP**, the correct forms live in the **base** features. GMP renders `ರ್ಕ` correctly by default — and enabling `aalt` *breaks* it (produces two boxes).
+3. For **GMP**, the correct forms live in the **base** features. GMP renders `ರ್ಕ` correctly by default - and enabling `aalt` *breaks* it (produces two boxes).
 4. **Kittel** has no `aalt` at all; its conjuncts are direct `blwf`/`haln` substitutions already enabled by default, which is why Kittel is correct.
 
 The three Sanchaya fonts contradict each other: GTN/WMP store correct forms in `aalt`; GMP stores correct forms in the base Indic features.
@@ -110,10 +110,10 @@ For GMP `ರ್ಕ`:
 
 | Font | `ರ್ಕ` default | `ರ್ಕ` with `aalt` 1 |
 |---|---|---|
-| GTN | 2 separate boxes (`w48/w47`) — **broken** | 1 fused box (`w65`) — **fixed** |
-| WMP | 2 separate boxes (`w46/w51`) — **broken** | 1 fused box (`w64`) — **fixed** |
-| GMP | 1 fused box (`w30`+ottu `w20` below) — **correct** | 2 boxes — **broken** |
-| Kittel | 1 fused box (`w51`) — correct | n/a (no `aalt` in font) |
+| GTN | 2 separate boxes (`w48/w47`) - **broken** | 1 fused box (`w65`) - **fixed** |
+| WMP | 2 separate boxes (`w46/w51`) - **broken** | 1 fused box (`w64`) - **fixed** |
+| GMP | 1 fused box (`w30`+ottu `w20` below) - **correct** | 2 boxes - **broken** |
+| Kittel | 1 fused box (`w51`) - correct | n/a (no `aalt` in font) |
 
 ### 6.3 Why earlier "aalt breaks everything" tests were wrong
 
@@ -122,12 +122,12 @@ An early test applied a **full 24-feature string** (`kern liga calt clig akhn rp
 - fixes `ರ್ಕ` / `ಕರ್ಣ` for GTN and WMP (fused), and
 - leaves other conjuncts (`ಕ್ಷ ಶ್ರ ತ್ರ ಪ್ರ ನ್ನ ಸ್ಥ ದ್ದ ಜ್ಞ`) and plain Kannada text structurally unchanged.
 
-Verified with both connected-component counts and ASCII rendering on `ಕನ್ನಡ`, `ಸಂಸ್ಕೃತಿ`, and the full conjunct set. Note: WMP's `aalt` does produce slightly more components on some plain text (its `*_v` base-letter alternates differ more from the base glyphs than GTN's do) — worth a visual spot-check before shipping.
+Verified with both connected-component counts and ASCII rendering on `ಕನ್ನಡ`, `ಸಂಸ್ಕೃತಿ`, and the full conjunct set. Note: WMP's `aalt` does produce slightly more components on some plain text (its `*_v` base-letter alternates differ more from the base glyphs than GTN's do) - worth a visual spot-check before shipping.
 
 ### 6.4 Non-factors ruled out
 
 - `lang="kn"` on `<html>`/text: **no effect** on shaping (tested).
-- Changing Tesseract's compiled box buffer size: rejected — the fix for long GT box files is chunking in `02-make-lstmf.sh` (documented separately in `TRAINING.md`).
+- Changing Tesseract's compiled box buffer size: rejected - the fix for long GT box files is chunking in `02-make-lstmf.sh` (documented separately in `TRAINING.md`).
 - `data:` HTML pages: invalid for measurements (silent system-font fallback).
 
 ---
@@ -136,16 +136,16 @@ Verified with both connected-component counts and ASCII rendering on `ಕನ್�
 
 Apply `aalt` **per font**, only to GTN and WMP:
 
-1. **`fonts.yml`** — add a per-font flag, e.g. `features: "aalt" 1` on the `kan_gtn` and `kan_wmp` entries (leave `kan_gmp` and `kan_kittel` without it).
-2. **`corpus/render-a5-pages.py`** — carry the flag into each job dict.
-3. **`corpus/browser_render.js`** — `buildHtml()` accepts an optional `featureSettings` and injects `font-feature-settings: <value>;` into the `#t` style when present.
-4. **`corpus/shaping_render.py`** — append `"aalt": True` to `_KANNADA_FEATURES` only for GTN/WMP (or make it a parameter).
-5. **Portal preview** (`server.js` `tryBrowser()` and `public/index.html` live view) — same treatment so the user-facing Unicode reference matches the training images.
+1. **`fonts.yml`** - add a per-font flag, e.g. `features: "aalt" 1` on the `kan_gtn` and `kan_wmp` entries (leave `kan_gmp` and `kan_kittel` without it).
+2. **`corpus/render-a5-pages.py`** - carry the flag into each job dict.
+3. **`corpus/browser_render.js`** - `buildHtml()` accepts an optional `featureSettings` and injects `font-feature-settings: <value>;` into the `#t` style when present.
+4. **`corpus/shaping_render.py`** - append `"aalt": True` to `_KANNADA_FEATURES` only for GTN/WMP (or make it a parameter).
+5. **Portal preview** (`server.js` `tryBrowser()` and `public/index.html` live view) - same treatment so the user-facing Unicode reference matches the training images.
 6. **Re-render** affected font pages → regenerate `.lstmf` → resume training.
 
 ### Correct feature string
 
-Use `font-feature-settings: "aalt" 1;` **alone**. Do **not** use the full 24-feature string — it overrides Chrome's native Indic shaping and breaks other conjuncts.
+Use `font-feature-settings: "aalt" 1;` **alone**. Do **not** use the full 24-feature string - it overrides Chrome's native Indic shaping and breaks other conjuncts.
 
 ---
 
@@ -160,21 +160,21 @@ Use `font-feature-settings: "aalt" 1;` **alone**. Do **not** use the full 24-fea
 
 ---
 
-## 9. Second root cause — forced Indic features in the Python path (Aug 2026)
+## 9. Second root cause - forced Indic features in the Python path (Aug 2026)
 
 `aalt` was necessary but **not sufficient**. After the per-font `aalt` plumbing landed, ~21 conjuncts
-were still rendering wrong in GTN, GMP and WMP — `ತ್ತ ದ್ದ ನ್ನ ಮ್ಮ ಲ್ಲ ಸ್ತ ಪ್ರ ಗ್ರ ತ್ರ ಶ್ರ ಸ್ವ ರ್ಕ ಕ್ಕ ಬ್ಬ ಷ್ಟ ಕ್ತ ನ್ಮ ಧ್ವ ಸ್ಪ ನ್ದ`,
-plus `ಕ್ಷ` in GMP — while Kittel remained correct.
+were still rendering wrong in GTN, GMP and WMP - `ತ್ತ ದ್ದ ನ್ನ ಮ್ಮ ಲ್ಲ ಸ್ತ ಪ್ರ ಗ್ರ ತ್ರ ಶ್ರ ಸ್ವ ರ್ಕ ಕ್ಕ ಬ್ಬ ಷ್ಟ ಕ್ತ ನ್ಮ ಧ್ವ ಸ್ಪ ನ್ದ`,
+plus `ಕ್ಷ` in GMP - while Kittel remained correct.
 
 ### The finding
 
 §7 of this document already stated the rule for Chrome:
 
-> Use `font-feature-settings: "aalt" 1;` **alone**. Do **not** use the full 24-feature string — it
+> Use `font-feature-settings: "aalt" 1;` **alone**. Do **not** use the full 24-feature string - it
 > overrides Chrome's native Indic shaping and breaks other conjuncts.
 
 That rule was applied to `browser_render.js` but **never to `corpus/shaping_render.py`**, which kept
-passing a 23-tag `_KANNADA_FEATURES` dict to `hb.shape()` — including the Indic tags `blwf half pref
+passing a 23-tag `_KANNADA_FEATURES` dict to `hb.shape()` - including the Indic tags `blwf half pref
 pstf vatu cjct rphf`.
 
 HarfBuzz's Indic shaper applies those features itself, per glyph, using internal masks: `blwf` only on
@@ -182,17 +182,17 @@ the consonant that must take the below-base (ottu) form, `half` only on the one 
 Passing them in the feature dict enables them globally across the run, so below-base substitution also
 hits the base consonant. The cluster then reorders and the ottu is emitted **before** its base.
 
-### Evidence — `ತ್ತ` under four feature settings
+### Evidence - `ತ್ತ` under four feature settings
 
 | Setting | GTN | Verdict |
 |---|---|---|
-| A — no features | `uni0CA4 + kn_t_ottu` | ✅ base, then ottu |
-| B — all Indic tags (was production) | `kn_t_ottu + uni0CA4` | ❌ reversed |
-| C — all Indic tags + `aalt` | `kn_t_ottu + kn_t_v` | ❌ reversed |
-| D — `aalt` only | `kn_t_v + kn_t_ottu` | ✅ base, then ottu |
+| A - no features | `uni0CA4 + kn_t_ottu` | ✅ base, then ottu |
+| B - all Indic tags (was production) | `kn_t_ottu + uni0CA4` | ❌ reversed |
+| C - all Indic tags + `aalt` | `kn_t_ottu + kn_t_v` | ❌ reversed |
+| D - `aalt` only | `kn_t_v + kn_t_ottu` | ✅ base, then ottu |
 
-GMP under setting B shaped `ಕ್ಷ` to `uni0C95.below + uni0CB7` — below-form of *ka* plus full *ssa*,
-both wrong — instead of the correct `uni0C95 + uni0CB7.below`.
+GMP under setting B shaped `ಕ್ಷ` to `uni0C95.below + uni0CB7` - below-form of *ka* plus full *ssa*,
+both wrong - instead of the correct `uni0C95 + uni0CB7.below`.
 
 **Kittel was immune under all four settings** (byte-identical output). Its GSUB carries only
 `blwf/blws/haln/psts` with no reordering triggers, so forcing tags changes nothing. This is why it read
@@ -201,7 +201,7 @@ as "the font that works" and masked the defect in every earlier comparison.
 ### Why glyph count is a false test
 
 An earlier verification used glyph count (`3 = unshaped`). That is wrong for Kannada: **2 glyphs is the
-correct result** for most conjuncts — base plus a separate ottu glyph drawn below-left within its own
+correct result** for most conjuncts - base plus a separate ottu glyph drawn below-left within its own
 small advance. All four fonts returned 2 for `ತ್ತ` both before and after the fix. Only akhand ligatures
 such as `ಕ್ಷ` in GTN/WMP collapse to 1 glyph.
 
@@ -212,7 +212,7 @@ such as `ಕ್ಷ` in GTN/WMP collapse to 1 glyph.
 `_KANNADA_FEATURES = {}` in `corpus/shaping_render.py`. `aalt` remains the only explicitly-passed
 feature, still per font from `fonts.yml`. Verified across 21 clusters × 4 fonts: zero reversed.
 
-None of the fonts required changes. The GSUB tables were correct throughout — the shaping *call* was
+None of the fonts required changes. The GSUB tables were correct throughout - the shaping *call* was
 not.
 
 ### Blast radius
@@ -228,7 +228,7 @@ which never forced features, and was unaffected.
 
 ---
 
-## 10. Correction — `aalt` removed from all fonts (Aug 2026)
+## 10. Correction - `aalt` removed from all fonts (Aug 2026)
 
 The conclusion of §5–§7 was wrong, and this section supersedes it.
 
@@ -242,7 +242,7 @@ Rendering ordinary running text with the production settings:
 
 | Font | Setting | Result |
 |---|---|---|
-| GTN | `aalt` ON *(was production)* | ✗ vowel signs dropped — `ವದ್ಯಥ್ರಗಳಿಗ` |
+| GTN | `aalt` ON *(was production)* | ✗ vowel signs dropped - `ವದ್ಯಥ್ರಗಳಿಗ` |
 | GTN | `aalt` OFF | ✓ correct |
 | WMP | `aalt` ON *(was production)* | ✗ halant on nearly every consonant |
 | WMP | `aalt` OFF | ✓ correct |
@@ -250,7 +250,7 @@ Rendering ordinary running text with the production settings:
 
 ### Why
 
-`aalt` is "access all alternates" — designed for a user picking one alternate glyph, not for
+`aalt` is "access all alternates" - designed for a user picking one alternate glyph, not for
 global application. In GTN and WMP it maps base consonants to their `*_v` alternate forms. Applied
 across a whole run it therefore replaces *every* consonant with a form that carries a halant and
 does not accept vowel signs. It looked correct on isolated conjuncts, which is all §6 tested.
@@ -258,8 +258,8 @@ does not accept vowel signs. It looked correct on isolated conjuncts, which is a
 ### Why it appeared to help originally
 
 The original investigation ran against `shaping_render.py` while it was still passing HarfBuzz a
-forced list of Indic features (`blwf`, `half`, `cjct` …). That broke conjuncts on its own — see
-§9 — and enabling `aalt` masked some of the damage. With the forced features removed, the shaper
+forced list of Indic features (`blwf`, `half`, `cjct` …). That broke conjuncts on its own - see
+§9 - and enabling `aalt` masked some of the damage. With the forced features removed, the shaper
 produces correct conjuncts unaided:
 
 ```
@@ -272,7 +272,7 @@ Two bugs, one masking the other. Fixing the first made the second visible.
 ### Consequence for training data
 
 Every image rendered for **GTN (6 weights)** and **WMP** while `aalt` was enabled shows halant-laden
-consonants and missing vowel signs — in `rendered/`, `inventory/`, the classical A5 set, and the
+consonants and missing vowel signs - in `rendered/`, `inventory/`, the classical A5 set, and the
 gallery. Those fonts must be re-rendered before their data is trained on. GMP and Kittel are
 unaffected.
 

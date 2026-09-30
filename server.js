@@ -1,9 +1,9 @@
 /**
- * server.js — TrainOCR by Sanchaya
+ * server.js - TrainOCR by Sanchaya
  *
  * Node.js / Express backend for the kan_hist Tesseract training portal.
  * Serves the frontend from public/ and exposes a REST API for all pipeline
- * operations. Tesseract.js OCR runs in the browser — this server just
+ * operations. Tesseract.js OCR runs in the browser - this server just
  * serves the traineddata files and the static UI.
  *
  * Usage:
@@ -91,7 +91,7 @@ function rotateLogIfNeeded() {
 // ── Middleware ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "50mb" }));
 // no-store on the dashboard itself. It is a single 158KB inline-script page,
-// so a cached copy means new buttons exist in the file and not in the browser —
+// so a cached copy means new buttons exist in the file and not in the browser -
 // clicking them calls a function the loaded page has never heard of, and the
 // only symptom is that nothing happens.
 app.use((req, res, next) => {
@@ -108,7 +108,7 @@ app.use("/classical-pages", express.static(P.classicalA5,
   { setHeaders: (res) => res.setHeader("Access-Control-Allow-Origin", "*") }));
 
 // ── Serve traineddata for Tesseract.js in-browser testing ─────────────────
-// Tesseract.js v5 always fetches <lang>.traineddata.gz first — serve gzipped on the fly
+// Tesseract.js v5 always fetches <lang>.traineddata.gz first - serve gzipped on the fly
 app.get("/traineddata/:filename", (req, res) => {
   const fn      = req.params.filename;
   const wantsGz = fn.endsWith('.traineddata.gz');
@@ -142,7 +142,7 @@ function loadFonts() {
   return yaml.load(fs.readFileSync(P.fontsYml, "utf8")).fonts || [];
 }
 
-// Font family ids come from fonts.yml — never hardcode a family list, or newly
+// Font family ids come from fonts.yml - never hardcode a family list, or newly
 // registered fonts silently vanish from the gallery / OCR test pages.
 function fontFamilyIds() {
   return loadFonts().map(f => f.id).filter(Boolean);
@@ -206,14 +206,14 @@ function lineCount(file) {
 // Count PNG files under the classical A5 tree.
 //
 // This tree is BIG: line-mode rendering produces roughly 15 line images per page
-// across ~28.5K pages per font family — 1.4M+ files in practice. The original
+// across ~28.5K pages per font family - 1.4M+ files in practice. The original
 // implementation walked it synchronously with a statSync per entry on every
 // cache miss, which blocked /api/status for minutes. Since the dashboard polls
 // status every few seconds, the whole portal appeared dead.
 //
 // Two changes:
-//   • withFileTypes — one syscall per directory instead of one per entry
-//   • stale-while-revalidate — never block a request. Return the last known
+//   • withFileTypes - one syscall per directory instead of one per entry
+//   • stale-while-revalidate - never block a request. Return the last known
 //     count immediately and refresh in the background.
 //
 // `count` is null until the first walk finishes; callers render that as
@@ -257,7 +257,7 @@ async function refreshClassicalCount() {
 
 function classicalImgCount() {
   if (Date.now() - _classicalCache.ts > CLASSICAL_TTL) refreshClassicalCount();
-  return _classicalCache.count;      // may be null on first call — never blocks
+  return _classicalCache.count;      // may be null on first call - never blocks
 }
 
 // Warm the cache at boot so the first dashboard load already has a number.
@@ -277,7 +277,7 @@ function lstmfBreakdown() {
   return { total: lines.length, ...buckets };
 }
 
-// Sample a handful of classical A5 page image paths (not base64 — served via /classical-pages/).
+// Sample a handful of classical A5 page image paths (not base64 - served via /classical-pages/).
 function sampleClassicalImages(n = 6) {
   if (!fs.existsSync(P.classicalA5)) return [];
   const results = [];
@@ -403,7 +403,7 @@ function corpusStats() {
   }
 
   // Classical rendered image count. null while the background count is still
-  // running — surfaced as 0 here so downstream arithmetic stays safe.
+  // running - surfaced as 0 here so downstream arithmetic stays safe.
   const classicalPages = classicalImgCount() ?? 0;
 
   return {
@@ -515,8 +515,8 @@ app.get("/api/corpus/sources", (req, res) => {
         key:    "wikisource",
         name:   "Kannada Wikisource (preferred)",
         detail: ws.exists
-          ? `Dump cached — ${(ws.size/1e6).toFixed(1)} MB — last updated ${new Date(ws.mtime).toLocaleDateString()}`
-          : "Not downloaded yet — proofread historical Kannada pages",
+          ? `Dump cached - ${(ws.size/1e6).toFixed(1)} MB - last updated ${new Date(ws.mtime).toLocaleDateString()}`
+          : "Not downloaded yet - proofread historical Kannada pages",
         ready:       ws.exists,
         downloading: false,
         lines:       ws.exists ? rawLines : 0,
@@ -526,8 +526,8 @@ app.get("/api/corpus/sources", (req, res) => {
         key:    "wikipedia",
         name:   "Kannada Wikipedia (supplement)",
         detail: wk.exists
-          ? `Dump cached — ${(wk.size/1e6).toFixed(1)} MB — last updated ${new Date(wk.mtime).toLocaleDateString()}`
-          : "Not downloaded yet — modern Kannada prose + glyph coverage",
+          ? `Dump cached - ${(wk.size/1e6).toFixed(1)} MB - last updated ${new Date(wk.mtime).toLocaleDateString()}`
+          : "Not downloaded yet - modern Kannada prose + glyph coverage",
         ready:       wk.exists,
         downloading: false,
         lines:       0,
@@ -611,15 +611,15 @@ app.get("/api/syscheck", async (req, res) => {
       { name: "Tesseract OCR",       key: "tesseract",       ver: tessVer,
         ok: !!tessVer && /tesseract\s+5\./i.test(tessVer||""),
         warn: !!tessVer && /tesseract\s+4\./i.test(tessVer||""),
-        need: "5.x required — macOS: brew install tesseract  |  Ubuntu: ppa:alex-p/tesseract-ocr5" },
+        need: "5.x required - macOS: brew install tesseract  |  Ubuntu: ppa:alex-p/tesseract-ocr5" },
       { name: "lstmtraining",        key: "lstmtraining",    ver: lstmVer,    ok: !!lstmVer,    need: "bundled with Tesseract" },
       { name: "combine_tessdata",    key: "combine_tessdata",ver: combineVer, ok: !!combineVer, need: "bundled with Tesseract" },
       { name: "Python 3",            key: "python3",         ver: py3Ver,     ok: !!py3Ver,     need: "3.8+" },
       { name: "Pillow (PIL)",        key: "pillow",          ver: pillowVer,  ok: !!pillowVer,  need: "pip install Pillow" },
       { name: "uharfbuzz",           key: "uharfbuzz",       ver: uharfbuzzVer, ok: !!uharfbuzzVer,
-        need: "pip install uharfbuzz — required for correct Kannada conjunct rendering" },
+        need: "pip install uharfbuzz - required for correct Kannada conjunct rendering" },
       { name: "freetype-py",         key: "freetype",        ver: freetypeVer,  ok: !!freetypeVer,
-        need: "pip install freetype-py — required for glyph rasterisation" },
+        need: "pip install freetype-py - required for glyph rasterisation" },
       { name: "Node.js",             key: "node",            ver: node,       ok: !!node,       need: "18+" },
     ],
     data: [
@@ -637,8 +637,8 @@ app.get("/api/syscheck", async (req, res) => {
 app.get("/api/status", (req, res) => {
   const fonts      = loadFonts();
   // Count families that actually have font files on disk. (Previously this
-  // tested for a .git dir, which broke for fonts installed without cloning —
-  // e.g. Google Fonts downloads — and after the fonts/ folder was cleaned.)
+  // tested for a .git dir, which broke for fonts installed without cloning -
+  // e.g. Google Fonts downloads - and after the fonts/ folder was cleaned.)
   const cloned     = fonts.filter(f => hasFontFiles(f.id)).length;
   const rendered   = globCount(P.rendered, ".png");
   const classical  = classicalImgCount();
@@ -652,7 +652,7 @@ app.get("/api/status", (req, res) => {
   // The portal showed a phantom "Training is running" banner because the UI
   // trusts (_training || _runningStep === 'train'), and runningStep could get
   // stuck: training is launched detached via caffeinate, so if the wrapper is
-  // killed — or the portal is restarted while a run is in flight — the 'exit'
+  // killed - or the portal is restarted while a run is in flight - the 'exit'
   // handler that clears it may never fire. The OS process table is the source
   // of truth, so clear the stale flag whenever no live lstmtraining exists.
   const livePids  = trainingPids();
@@ -676,7 +676,7 @@ app.get("/api/status", (req, res) => {
   ].filter(Boolean).join(" · ") || "No images yet";
 
   res.json({
-    "00_unichar": { label: "Expand unicharset", done: fs.existsSync(path.join(ROOT, "tessdata_expanded", "kan.traineddata")), detail: fs.existsSync(path.join(ROOT, "tessdata_expanded", "kan.traineddata")) ? "Expanded (ಋ ಙ ಝ ಱ added)" : "Not done — ಋ ಙ ಝ ಱ missing" },
+    "00_unichar": { label: "Expand unicharset", done: fs.existsSync(path.join(ROOT, "tessdata_expanded", "kan.traineddata")), detail: fs.existsSync(path.join(ROOT, "tessdata_expanded", "kan.traineddata")) ? "Expanded (ಋ ಙ ಝ ಱ added)" : "Not done - ಋ ಙ ಝ ಱ missing" },
     "01_prep":   { label: "1. Prep base",      done: fs.existsSync(path.join(P.tessdataDir, "kan.traineddata")) && cloned === fonts.length, detail: `kan.traineddata ${fs.existsSync(path.join(P.tessdataDir,"kan.traineddata"))?"✓":"✗"}  fonts ${cloned}/${fonts.length}` },
     "02_corpus": { label: "2. Corpus",         done: corpN > 0,      detail: `${corpN.toLocaleString()} lines` },
     "03_render": { label: "3. Render images",  done: rendered > 0 || (classical || 0) > 0, detail: renderDetail },
@@ -701,7 +701,7 @@ app.get("/api/fonts", (req, res) => {
 
   // Per-font rendered counts. Rendered files are named "<id>_<fontstem>_lineNNNN.png",
   // so bucket by the leading font id. (This column previously reported
-  // globCount(rendered/) — the folder total — so every font showed the same
+  // globCount(rendered/) - the folder total - so every font showed the same
   // number regardless of how many images it actually contributed.)
   const counts = Object.create(null);
   if (fs.existsSync(P.rendered)) {
@@ -725,7 +725,7 @@ app.get("/api/fonts", (req, res) => {
     // the value was always empty and the preview showed detached ottus for
     // exactly the fonts the fix was written for.
     font_features: f.font_features || "",
-    // Presence of font files, not a .git dir — fonts installed by download
+    // Presence of font files, not a .git dir - fonts installed by download
     // (Google Fonts) are legitimately present without ever being cloned.
     cloned:   hasFontFiles(f.id),
     rendered: counts[f.id] || 0,
@@ -762,7 +762,7 @@ app.get("/api/images", (req, res) => {
 });
 
 // ── API: classical corpus samples ─────────────────────────────────────────
-// Returns URL references (not base64) — images served via /classical-pages/
+// Returns URL references (not base64) - images served via /classical-pages/
 app.get("/api/classical-samples", (req, res) => {
   const n = parseInt(req.query.n) || 6;
   res.json(sampleClassicalImages(n));
@@ -790,7 +790,7 @@ app.post("/api/scans/upload", upload.single("image"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No image file" });
   const gt  = (req.body.gt || "").trim();
   const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
-  // Sanitize filename — replace spaces/special chars, keep ASCII+extension
+  // Sanitize filename - replace spaces/special chars, keep ASCII+extension
   const rawStem = path.basename(req.file.originalname, path.extname(req.file.originalname));
   const stem    = rawStem.replace(/[^\w\-]/g, '_').replace(/_+/g, '_').slice(0, 80);
   const name    = stem + ext;
@@ -844,7 +844,7 @@ app.get("/api/log/tail", (req, res) => {
     const { execFileSync } = require("child_process");
     const out   = execFileSync("tail", ["-n", String(n), P.logFile], { encoding: "utf8", maxBuffer: 10 * 1024 * 1024 });
     const lines = out.split("\n").filter((_, i, a) => i < a.length - 1 || a[i] !== "");
-    // Total line count via wc -l (cheap — just reads inode metadata path)
+    // Total line count via wc -l (cheap - just reads inode metadata path)
     let total = 0;
     try {
       const wc = execFileSync("wc", ["-l", P.logFile], { encoding: "utf8" });
@@ -885,7 +885,7 @@ app.get("/api/log/stream", (req, res) => {
 // ── API: run step ──────────────────────────────────────────────────────────
 // What is running, how far along, and what it last said.
 //
-// The portal previously had no answer to "is this still going?" — the only
+// The portal previously had no answer to "is this still going?" - the only
 // signal was the log, and a step that prints nothing for ten minutes was
 // indistinguishable from one that had died.
 // Triage results, so the dashboard can show what was found and offer the
@@ -946,7 +946,7 @@ app.post("/api/job/stop", (req, res) => {
     if (!activeJob()) { clearLock(); runningStep = null; }
   }, 3000);
   const l = fs.openSync(P.logFile, "a");
-  fs.writeSync(l, `\n[trainocr] ${job.step} — stopped by user\n`);
+  fs.writeSync(l, `\n[trainocr] ${job.step} - stopped by user\n`);
   fs.closeSync(l);
   res.json({ ok: killed, step: job.step, pid: job.pid });
 });
@@ -959,7 +959,7 @@ app.post("/api/run/:step", (req, res) => {
     specimen:      ["python3", [path.join(P.corpus,  "generate-specimen.py"), "--merge"]],
     render:        ["python3", [path.join(P.corpus,  "render-corpus.py")]],
     inventory:     ["python3", [path.join(P.corpus,  "generate-inventory.py")]],
-    // Coverage analysis — must run BEFORE expandunichar, since it produces the
+    // Coverage analysis - must run BEFORE expandunichar, since it produces the
     // word list that 00c turns into unicharset units.
     // Measured per-grapheme recognition: runs the packaged model over the
     // inventory (a labelled enumeration of the whole script) and scores each
@@ -996,7 +996,7 @@ app.post("/api/run/:step", (req, res) => {
   // means one adopts the other's half-written file as finished input, and the
   // result is corrupt training data that nothing downstream flags.
   //
-  // The rule is deliberately blunt — one job, no exceptions, no queue. Every
+  // The rule is deliberately blunt - one job, no exceptions, no queue. Every
   // step here reads or writes the same handful of directories, so there is no
   // useful safe-pairs list to maintain.
   const busy = activeJob();
@@ -1019,7 +1019,7 @@ app.post("/api/run/:step", (req, res) => {
     const stats = corpusStats();
     if (stats && stats.total_lines > 0) {
       return res.json({ ok: true, step, skipped: true,
-        reason: `Corpus already downloaded — ${stats.total_lines.toLocaleString()} lines. Use ?force=1 to re-download.` });
+        reason: `Corpus already downloaded - ${stats.total_lines.toLocaleString()} lines. Use ?force=1 to re-download.` });
     }
   }
 
@@ -1028,7 +1028,7 @@ app.post("/api/run/:step", (req, res) => {
   if (step === 'expandunichar' && force) runArgs.push('--force');
 
   // render-corpus.py skips images that already exist. --force overwrites them
-  // in place, which is what you want after a shaping or font change — no need
+  // in place, which is what you want after a shaping or font change - no need
   // to delete rendered/ first.
   if (step === 'render' && force) runArgs.push('--force');
 
@@ -1036,7 +1036,7 @@ app.post("/api/run/:step", (req, res) => {
   // ?all_fonts=1 widens it to every .ttf/.otf on disk.
   if (step === 'inventory' && req.query.all_fonts === '1') runArgs.push('--all-fonts');
 
-  // Pipeline options — surfaced as checkboxes rather than remembered flags.
+  // Pipeline options - surfaced as checkboxes rather than remembered flags.
   if (step === 'remediate') {
     if (req.query.generate === '1') runArgs.push('--generate');
     if (req.query.render   === '1') runArgs.push('--render');
@@ -1051,7 +1051,7 @@ app.post("/api/run/:step", (req, res) => {
   }
 
   // Coverage inventory: the complete orthographic set (enumerated + attested).
-  // ?attested=1 keeps only conjuncts real text uses — recommended for training
+  // ?attested=1 keeps only conjuncts real text uses - recommended for training
   // images, since the full conjunct grid enlarges the LSTM output layer with
   // combinations that never occur.
   if (step === 'inventory' && req.query.complete === '1') {
@@ -1088,13 +1088,13 @@ app.post("/api/run/:step", (req, res) => {
       runOpts.env = { ...runOpts.env, CLASSICAL_A5_DIR: found };
       console.log(`  [lstmf] CLASSICAL_A5_DIR auto-detected: ${found}`);
     } else {
-      console.log(`  [lstmf] No a5-pages directory found — classical corpus will be skipped`);
+      console.log(`  [lstmf] No a5-pages directory found - classical corpus will be skipped`);
     }
   }
 
   // Same treatment for the character inventory. 02-make-lstmf.sh only includes
   // inventory/ when INVENTORY_DIR is set, so without this the portal silently
-  // built a training set with NO character baselines — the inventory-first
+  // built a training set with NO character baselines - the inventory-first
   // strategy simply didn't happen for portal-driven runs.
   if (step === 'lstmf') {
     const invDir = path.join(ROOT, 'inventory');
@@ -1115,7 +1115,7 @@ app.post("/api/run/:step", (req, res) => {
       runOpts.env = { ...runOpts.env, INVENTORY_DIR: invDir };
       console.log(`  [lstmf] INVENTORY_DIR set: ${invDir}`);
     } else {
-      console.log(`  [lstmf] inventory/ empty or missing — run the Inventory step first`);
+      console.log(`  [lstmf] inventory/ empty or missing - run the Inventory step first`);
     }
   }
 
@@ -1126,16 +1126,16 @@ app.post("/api/run/:step", (req, res) => {
 /// ── A5 render process tracking ────────────────────────────────────────────
 let _a5Proc       = null;   // currently running child process
 let _a5Stopped    = false;  // true if explicitly stopped by user (vs completed)
-let _a5CorpusPath = '';     // last corpus dir used — passed to 02-make-lstmf.sh
+let _a5CorpusPath = '';     // last corpus dir used - passed to 02-make-lstmf.sh
 
 // ── API: render A5 corpus pages (browser rendering) ───────────────────────
 // Runs corpus/render-a5-pages.py which uses browser_render.js --batch to
 // produce correctly-shaped training images for historical fonts.
 app.post("/api/render-a5-pages", express.json(), (req, res) => {
-  if (_a5Proc) return res.status(409).json({ error: "Already running — stop it first" });
+  if (_a5Proc) return res.status(409).json({ error: "Already running - stop it first" });
   // The A5 renderer has its own spawn path, so it needs the same guard as
   // /api/run/:step. It writes into classical-corpus-kannada/a5-pages/, which
-  // 02-make-lstmf.sh reads — running both at once means lstmf consumes
+  // 02-make-lstmf.sh reads - running both at once means lstmf consumes
   // half-written PNGs and caches them as valid.
   {
     const busy = activeJob();
@@ -1145,7 +1145,7 @@ app.post("/api/render-a5-pages", express.json(), (req, res) => {
   }
 
   // `lines` defaults to TRUE: page-mode output cannot be used for LSTM training
-  // (a full page paired with the whole page's text is CTC-infeasible — see
+  // (a full page paired with the whole page's text is CTC-infeasible - see
   // docs/IMAGE_GENERATION.md §8). Pass lines:false only to produce page images
   // for visual inspection.
   const { corpus_dir, font_size = 32, workers = 1, concurrency = 2,
@@ -1157,17 +1157,17 @@ app.post("/api/render-a5-pages", express.json(), (req, res) => {
   const candidate = path.isAbsolute(rawPath) ? rawPath : path.join(ROOT, rawPath);
   let corpusPath  = candidate;
   try { corpusPath = fs.realpathSync(candidate); } catch (_) {
-    // realpathSync fails on broken symlinks — try statSync on the candidate anyway
+    // realpathSync fails on broken symlinks - try statSync on the candidate anyway
   }
   // Skip validation entirely: let Python report the error with full context.
   // Just log what we're passing so the server terminal shows it.
   console.log(`  [a5] corpus_dir input: "${corpus_dir}"  →  "${corpusPath}"  (ROOT=${ROOT})`);
-  // Soft check only — warn but don't block
+  // Soft check only - warn but don't block
   try {
     const st = fs.statSync(corpusPath);
     if (!st.isDirectory()) console.warn(`  [a5] WARNING: ${corpusPath} is not a directory`);
   } catch (e) {
-    console.warn(`  [a5] WARNING: statSync failed: ${e.message} — passing path to Python anyway`);
+    console.warn(`  [a5] WARNING: statSync failed: ${e.message} - passing path to Python anyway`);
   }
 
   const script = path.join(ROOT, "corpus", "render-a5-pages.py");
@@ -1220,7 +1220,7 @@ app.post("/api/render-a5-pages", express.json(), (req, res) => {
   res.json({ ok: true, step: "render-a5-pages", corpus_dir: corpusPath });
 });
 
-// Stop the running A5 render (safe — resume picks up on next Start)
+// Stop the running A5 render (safe - resume picks up on next Start)
 app.post("/api/render-a5-pages/stop", (req, res) => {
   if (!_a5Proc) return res.json({ ok: true, message: "Not running" });
   _a5Stopped = true;
@@ -1291,7 +1291,7 @@ app.get("/api/font-images/compare", (req, res) => {
 //
 // fonts.yml is edited AS TEXT, not by loading and re-dumping via js-yaml.
 // A round-trip through yaml.dump() would silently discard every comment in the
-// file — and fonts.yml carries the per-font notes that explain the `aalt`
+// file - and fonts.yml carries the per-font notes that explain the `aalt`
 // asymmetry, the degrade flag, and the directory-naming rule. Those comments
 // are the main defence against repeating the bugs they document.
 
@@ -1348,7 +1348,7 @@ app.post("/api/fonts", express.json(), (req, res) => {
   const fonts = loadFonts();
   if (fonts.some(f => f.id === id)) return res.status(409).json({ error: `Font id '${id}' already exists` });
 
-  // The directory name MUST equal the id — every generator resolves fonts at
+  // The directory name MUST equal the id - every generator resolves fonts at
   // fonts/<id>/, and a mismatch makes the font silently render nothing.
   const base = path.join(ROOT, "fonts", id);
   if (!fs.existsSync(base)) {
@@ -1374,7 +1374,7 @@ app.post("/api/fonts", express.json(), (req, res) => {
     `    name: "${esc(name)}"`,
     description ? `    description: "${esc(description)}"` : null,
     repo        ? `    repo: ${repo}` : null,
-    clone === false ? `    clone: false          # not a git remote — download manually` : null,
+    clone === false ? `    clone: false          # not a git remote - download manually` : null,
     `    font_dir: ${font_dir}`,
     `    font_files:`,
     ...font_files.map(f => `      - ${f}`),
@@ -1405,13 +1405,13 @@ app.post("/api/fonts", express.json(), (req, res) => {
 // baselines, gallery images, lstmf, and classical page/line output.
 //
 // The source font files in fonts/<id>/ are deliberately NOT included. They are
-// the input, not a product of the pipeline — often hand-placed or downloaded,
+// the input, not a product of the pipeline - often hand-placed or downloaded,
 // and re-adding a font you removed by mistake should not mean re-downloading it.
 // Delete that folder by hand if you want the font gone from disk entirely.
 function fontFootprint(id) {
   const entry  = loadFonts().find(f => f.id === id);
   // inventory/ is keyed by FONT FILE STEM (e.g. "karnatagtn-regular"), not by
-  // font id — mapping through font_files is the only way to find those dirs.
+  // font id - mapping through font_files is the only way to find those dirs.
   const stems  = (entry?.font_files || []).map(f => f.replace(/\.[^.]+$/, "").toLowerCase());
 
   const dirs = [];
@@ -1474,14 +1474,14 @@ app.delete("/api/fonts/:id", (req, res) => {
   if (!fonts.some(f => f.id === id)) return res.status(404).json({ error: `No font with id '${id}'` });
 
   // Deleting lstmf/ or rendered/ files out from under a live run would corrupt
-  // it — lstmtraining reads its list lazily throughout training.
+  // it - lstmtraining reads its list lazily throughout training.
   if (purge && isTrainingRunning()) {
     return res.status(409).json({
       error: "Training is running. Stop it before purging font files "
            + "(lstmtraining reads its file list throughout the run): pkill lstmtraining" });
   }
 
-  // Compute the footprint BEFORE the registry entry is removed — font_files is
+  // Compute the footprint BEFORE the registry entry is removed - font_files is
   // needed to locate the inventory directories, and it lives in that entry.
   const fp = purge ? fontFootprint(id) : null;
 
@@ -1499,7 +1499,7 @@ app.delete("/api/fonts/:id", (req, res) => {
   while (start > 0 && /^\s*#/.test(lines[start - 1])) start--;
   while (start > 0 && lines[start - 1].trim() === "") start--;
 
-  // Scan forward from AFTER the id line — not from `start`, which sits inside
+  // Scan forward from AFTER the id line - not from `start`, which sits inside
   // the comment block. Starting at `start + 1` made the very first `- id:`
   // encountered be this font's own, so the loop exited immediately and deleted
   // only the comments, leaving the entry behind while reporting success.
@@ -1519,7 +1519,7 @@ app.delete("/api/fonts/:id", (req, res) => {
   try { parsed = yaml.load(updated); }
   catch (e) { return res.status(500).json({ error: `Edit would produce invalid YAML: ${e.message}` }); }
   if (!parsed?.fonts?.length) {
-    return res.status(400).json({ error: "Refusing to remove the last font — the registry would be empty." });
+    return res.status(400).json({ error: "Refusing to remove the last font - the registry would be empty." });
   }
   fs.writeFileSync(P.fontsYml, updated);
 
@@ -1535,7 +1535,7 @@ app.delete("/api/fonts/:id", (req, res) => {
       return r.startsWith(path.resolve(ROOT) + path.sep) && r !== path.resolve(ROOT);
     };
     for (const d of fp.dirs) {
-      if (!inside(d)) { failures.push(`${d} (outside project — skipped)`); continue; }
+      if (!inside(d)) { failures.push(`${d} (outside project - skipped)`); continue; }
       try { fs.rmSync(d, { recursive: true, force: true }); purged++; }
       catch (e) { failures.push(`${path.relative(ROOT, d)}: ${e.message}`); }
     }
@@ -1545,7 +1545,7 @@ app.delete("/api/fonts/:id", (req, res) => {
       catch (e) { failures.push(`${path.relative(ROOT, f)}: ${e.message}`); }
     }
 
-    // list.txt still references the deleted lstmf files — drop those lines so
+    // list.txt still references the deleted lstmf files - drop those lines so
     // training does not fail on missing paths before the next rebuild.
     try {
       if (fs.existsSync(P.lstmfList)) {
@@ -1578,12 +1578,12 @@ app.delete("/api/fonts/:id", (req, res) => {
 // where the model is least sure rather than to whatever happens to be first.
 //
 // Source matters:
-//   scan       real scanned pages — GT is human-made and may be wrong or absent.
+//   scan       real scanned pages - GT is human-made and may be wrong or absent.
 //              This is the only source where correction creates NEW information,
 //              and per docs/AUDIT it is the highest-value data the project can add.
 //   classical  synthetic renders; GT is generated from source text and is correct
 //              by construction. Low confidence here indicates a MODEL weakness,
-//              not a data error — useful for diagnosis, not for correction.
+//              not a data error - useful for diagnosis, not for correction.
 //
 // Tesseract's TSV output carries a per-word confidence; the mean over words is a
 // usable proxy for line quality.
@@ -1607,12 +1607,12 @@ function cerOf(ref, hyp) {
 //
 // Tesseract's per-word confidence comes from its `tsv` config, which is NOT
 // present in this project's tessdata dir (only lstm.train is), so asking for it
-// silently returns plain text instead — every item then scored 0.0 confidence
+// silently returns plain text instead - every item then scored 0.0 confidence
 // and the ranking was meaningless.
 //
 // Disagreement with the existing ground truth is a better signal anyway: it is
 // always available, and it points at the pairs where model and GT actually
-// conflict — which is exactly where a human should look. Confidence is still
+// conflict - which is exactly where a human should look. Confidence is still
 // reported when the tsv config happens to be available.
 function ocrWithConfidence(imgPath, tessdataDir, lang, psm, gtText) {
   const cp = require("child_process");
@@ -1636,7 +1636,7 @@ function ocrWithConfidence(imgPath, tessdataDir, lang, psm, gtText) {
     text = words.join(" ");
     confidence = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : 0;
   } else {
-    // tsv unavailable — the same invocation without it returns plain text.
+    // tsv unavailable - the same invocation without it returns plain text.
     const plain = cp.spawnSync("tesseract",
       [imgPath, "stdout", "--tessdata-dir", tessdataDir, "-l", lang, "--psm", String(psm)],
       { encoding: "utf8", timeout: 60_000 });
@@ -1700,7 +1700,7 @@ app.get("/api/review/queue", (req, res) => {
   }
   if (!pairs.length) {
     return res.json({ source, items: [], note: source === "scan"
-      ? "No image + .gt.txt pairs in scan-input/. Add real scans there — they are the highest-value training data."
+      ? "No image + .gt.txt pairs in scan-input/. Add real scans there - they are the highest-value training data."
       : `No pairs found for source '${source}'.` });
   }
 
@@ -1842,7 +1842,7 @@ app.get("/api/ocr-quality", async (req, res) => {
 
 // ── Font registry: scans actual files + merges manifest data ──────────────
 function scanFontDir(fontId) {
-  // Mirror of Python scan_font_dir — finds all TTF+OTF, both formats when both exist
+  // Mirror of Python scan_font_dir - finds all TTF+OTF, both formats when both exist
   const fontRoot = path.join(ROOT, "fonts", fontId);
   if (!fs.existsSync(fontRoot)) return {};
   const SKIP_DIRS  = new Set(["webfonts", "Source", "source"]);
@@ -1962,7 +1962,7 @@ app.get("/api/test-images/:fontId/:variant", (req, res) => {
 // ── Serve tessdata for Tesseract.js ────────────────────────────────────────
 // Tesseract.js v5 asks for <lang>.traineddata.gz FIRST and only falls back to
 // the uncompressed name. This route rejected the .gz form with 403, so every
-// model load took the fallback path — and, worse, a 403 is a cacheable response
+// model load took the fallback path - and, worse, a 403 is a cacheable response
 // in some browsers.
 //
 // Freshness matters here more than bandwidth: this endpoint exists to test a
@@ -2043,7 +2043,7 @@ app.get("/report", (req, res) => {
   })()).map(s => `<tr><td>${s.done?"✅":"⏳"}</td><td>${s.label}</td></tr>`).join("");
 
   const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
-<title>TrainOCR Report — ${now}</title>
+<title>TrainOCR Report - ${now}</title>
 <style>body{font-family:system-ui,sans-serif;max-width:900px;margin:40px auto;padding:0 20px;color:#1e1b4b}
 h1{color:#5b21b6;display:flex;align-items:center;gap:12px}
 h1 img{height:36px}
@@ -2053,7 +2053,7 @@ th{background:#f5f3ff}.imgs{display:flex;flex-wrap:wrap;gap:10px}
 .img-c{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;max-width:180px}
 .img-c img{width:100%}.gt{font-size:.7em;color:#6b7280;padding:4px}</style>
 </head><body>
-<h1><img src="https://pada.sanchaya.net/images/sanchaya-logo.png" alt="Sanchaya">TrainOCR — kan_hist Report</h1>
+<h1><img src="https://pada.sanchaya.net/images/sanchaya-logo.png" alt="Sanchaya">TrainOCR - kan_hist Report</h1>
 <p>Generated ${now}${bestBcer ? ` &nbsp;|&nbsp; Best BCER: <strong>${bestBcer}%</strong>` : ""}</p>
 <h2>Pipeline status</h2>
 <table><tr><th></th><th>Step</th></tr>${stepsHtml}</table>
@@ -2136,7 +2136,7 @@ app.delete("/api/rendered", (req, res) => {
     const full = path.join(dir, entry);
     const stat = fs.statSync(full);
     if (stat.isDirectory()) {
-      // Subdirs like font-test/ — wipe entirely
+      // Subdirs like font-test/ - wipe entirely
       fs.rmSync(full, { recursive: true, force: true });
     } else if (entry.endsWith(".png"))    { fs.unlinkSync(full); pngs++; }
       else if (entry.endsWith(".gt.txt")) { fs.unlinkSync(full); txts++; }
@@ -2223,8 +2223,8 @@ let completedSteps = {};    // stepId → { code, ts }
 //
 // The lock file exists because the portal is restarted often and jobs outlive
 // it. Without one, a restart forgets a four-hour render is in flight and
-// cheerfully starts another. It stores the PID so a stale lock — process gone,
-// file left behind by a crash — can be told from a live one.
+// cheerfully starts another. It stores the PID so a stale lock - process gone,
+// file left behind by a crash - can be told from a live one.
 const JOB_LOCK = path.join(ROOT, "output", ".job.lock");
 let currentJob = null;   // { step, pid, child, startedAt, argv }
 
@@ -2351,12 +2351,12 @@ app.post("/api/char-train/start", express.json(), (req, res) => {
   const jobId = Date.now().toString();
   charTrainJob = { id: jobId, running: true, phase: "lstmf", log: [], error: null, done: false, fontId, variant };
 
-  // Run async — client polls /api/char-train/status
+  // Run async - client polls /api/char-train/status
   (async () => {
     const addLog = msg => { charTrainJob.log.push(msg); };
     try {
       // ── Phase 1: generate lstmf from line + sentence images ──
-      addLog("Phase 1/2 — Generating .lstmf training files…");
+      addLog("Phase 1/2 - Generating .lstmf training files…");
       const pngs = fs.readdirSync(varDir)
         .filter(f => /^(line_|sentence_)/.test(f) && f.endsWith(".png"))
         .sort();
@@ -2445,8 +2445,8 @@ app.post("/api/char-train/start", express.json(), (req, res) => {
       // Remapping needs the EXACT traineddata the checkpoint was built with.
       // `00c-expand-unicharset.sh --force` overwrites tessdata_expanded in
       // place, so after a unicharset change that file is gone and older
-      // checkpoints cannot be remapped at all. (00c now archives it — see
-      // output/tessdata_archive/ — but archives only exist from this point on.)
+      // checkpoints cannot be remapped at all. (00c now archives it - see
+      // output/tessdata_archive/ - but archives only exist from this point on.)
       //
       // Heuristic: a checkpoint written AFTER the current traineddata was built
       // used the current recoder and is safe to continue from. Anything older
@@ -2464,7 +2464,7 @@ app.post("/api/char-train/start", express.json(), (req, res) => {
       } else {
         // Base LSTM weights extracted from tessdata_best (140 codes). Continuing
         // from these into an expanded unicharset requires --old_traineddata so
-        // lstmtraining can remap the output layer — the same thing
+        // lstmtraining can remap the output layer - the same thing
         // 03-train.sh does for TRAIN_MODE=expand.
         startModel = path.join(outputDir, "kan.lstm");
         const baseTd = path.join(P.tessdataDir, "kan.traineddata");
@@ -2472,7 +2472,7 @@ app.post("/api/char-train/start", express.json(), (req, res) => {
           oldTdArg = ["--old_traineddata", baseTd];
         }
         if (bestCheckpoint) {
-          addLog(`⚠  ${bestCheckpoint} predates the current unicharset — it cannot be`);
+          addLog(`⚠  ${bestCheckpoint} predates the current unicharset - it cannot be`);
           addLog(`   continued from (code range mismatch, and the traineddata it was`);
           addLog(`   built with no longer exists).`);
           addLog(`   Starting from base weights instead: kan.lstm${oldTdArg.length ? " (+ --old_traineddata)" : ""}`);
@@ -2640,7 +2640,7 @@ app.get("/api/preflight", (req, res) => {
     ? fs.readdirSync(rendDir).filter(f => f.endsWith(".png")).length : 0;
   const kanExists = fs.existsSync(path.join(ROOT, "tessdata_best", "kan.traineddata"));
 
-  // A5 classical pages — check multiple candidate locations.
+  // A5 classical pages - check multiple candidate locations.
   // Priority: last-used session path → conventional name → scan all ROOT subdirs.
   // Also check lstmf/classical/ which is the definitive indicator that the
   // lstmf step already processed classical pages (survives server restarts).
@@ -2671,7 +2671,7 @@ app.get("/api/preflight", (req, res) => {
     } catch (_) {}
   }
   // If we couldn't find the a5-pages dir but lstmf/classical/ exists, the
-  // pages were rendered and converted — report via the lstmf count instead.
+  // pages were rendered and converted - report via the lstmf count instead.
   if (!a5Count && lstmfClassicalExists) {
     try {
       const { execSync } = require("child_process");
@@ -2745,7 +2745,7 @@ app.get("/api/renderer-info", (req, res) => {
   });
 });
 
-// ── Browser (Puppeteer) instance — shared, lazy-initialised ───────────────
+// ── Browser (Puppeteer) instance - shared, lazy-initialised ───────────────
 // We keep one browser open so successive preview requests don't pay Chrome
 // startup cost every time.  The browser is launched on the first preview
 // request and reused until the server exits.
@@ -2790,7 +2790,7 @@ async function getBrowser() {
     const candidates = [
       process.env.PUPPETEER_EXECUTABLE_PATH,
       process.env.CHROME_PATH,
-      // System Chrome first — avoids stale Puppeteer-cache versions (e.g. Chrome 119 with Puppeteer v25)
+      // System Chrome first - avoids stale Puppeteer-cache versions (e.g. Chrome 119 with Puppeteer v25)
       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
       "/Applications/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
       "/usr/bin/google-chrome-stable",
@@ -2834,7 +2834,7 @@ app.post("/api/render-preview", express.json(), async (req, res) => {
   const size = Math.min(200, Math.max(8, parseInt(font_size) || 48));
 
   // Per-font OpenType feature settings (e.g. "'aalt' 1" for GTN/WMP, whose
-  // correct conjunct forms live in the aalt GSUB feature — Chrome does not
+  // correct conjunct forms live in the aalt GSUB feature - Chrome does not
   // enable aalt by default). See docs/CONJUNCT_RENDERING.md.
   const fontId = String(font_path).split("/")[1] || "";
   const fonts  = loadFonts();
@@ -2849,7 +2849,7 @@ app.post("/api/render-preview", express.json(), async (req, res) => {
 
     // Write HTML to a temp file and navigate via file://.
     // Avoids setContent()'s about:blank origin which blocks HTTP font loading.
-    // Font referenced via file:// URL — Chrome loads it from disk directly,
+    // Font referenced via file:// URL - Chrome loads it from disk directly,
     // caches it, and applies the full OS text-shaping stack (CoreText on macOS).
     const ext     = path.extname(abs).toLowerCase();
     const fmt     = ext === ".otf" ? "opentype" : "truetype";
@@ -2868,7 +2868,7 @@ app.post("/api/render-preview", express.json(), async (req, res) => {
     try {
       await page.setViewport({ width: 2400, height: 600, deviceScaleFactor: 1 });
       await page.goto(`file://${tmpFile}`, { waitUntil: "load" });
-      // Explicitly trigger font load and wait — fonts are lazy in @font-face
+      // Explicitly trigger font load and wait - fonts are lazy in @font-face
       await page.evaluate(() => Promise.race([
         document.fonts.ready,
         new Promise(r => setTimeout(r, 8000)),
@@ -2913,7 +2913,7 @@ app.post("/api/render-preview", express.json(), async (req, res) => {
     const png = await tryBrowser();
     res.json({ png, shaped: true, renderer: "browser" });
   } catch (browserErr) {
-    console.error("  [preview] Browser failed:", browserErr.message, "— falling back to Python");
+    console.error("  [preview] Browser failed:", browserErr.message, "- falling back to Python");
     try {
       const png = await tryPython();
       res.json({ png, shaped: true, renderer: "python", warning: browserErr.message });
@@ -2937,8 +2937,8 @@ const server = app.listen(PORT, process.env.HOST, () => {
   console.log(`${"━".repeat(52)}\n`);
 });
 
-// A port clash is a routine situation — usually a portal left running from an
-// earlier session — and does not deserve an unhandled 'error' event and a
+// A port clash is a routine situation - usually a portal left running from an
+// earlier session - and does not deserve an unhandled 'error' event and a
 // twenty-line stack trace that says nothing about how to fix it.
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
@@ -2947,11 +2947,11 @@ server.on("error", (err) => {
     console.error(`      lsof -ti:${PORT} | xargs kill -9\n`);
     console.error(`    or start this one on a different port:`);
     // Number(): PORT comes from the environment as a string, so `PORT + 1`
-    // concatenates — "3001" + 1 = "30011", suggesting an invalid port.
+    // concatenates - "3001" + 1 = "30011", suggesting an invalid port.
     console.error(`      PORT=${Number(PORT) + 1} node server.js\n`);
   } else if (err.code === "EACCES") {
     console.error(`\n  ✗ Not permitted to bind port ${PORT}.`);
-    console.error(`    Ports below 1024 need elevated privileges — use PORT=3001 or similar.\n`);
+    console.error(`    Ports below 1024 need elevated privileges - use PORT=3001 or similar.\n`);
   } else {
     console.error(`\n  ✗ Server failed to start: ${err.message}\n`);
   }
